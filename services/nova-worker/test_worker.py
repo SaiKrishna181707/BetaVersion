@@ -65,6 +65,34 @@ class WorkerContractTests(unittest.TestCase):
         with self.assertRaises(PlanError):
             validate_plan(raw)
 
+    def test_rejects_private_or_local_cloud_targets(self):
+        for target in (
+            "https://127.0.0.1",
+            "https://10.0.0.5",
+            "https://169.254.169.254/latest/meta-data",
+            "https://localhost",
+            "https://service.internal",
+        ):
+            raw = plan()
+            raw["target_url"] = target
+            raw["allowed_origins"] = [target]
+            with self.subTest(target=target):
+                with self.assertRaises(PlanError):
+                    validate_plan(raw)
+
+    def test_rejects_unsafe_identifiers(self):
+        for key in ("run_id", "session_id"):
+            raw = plan()
+            raw[key] = "../escape"
+            with self.subTest(key=key):
+                with self.assertRaises(PlanError):
+                    validate_plan(raw)
+
+        raw = plan()
+        raw["persona"]["persona_id"] = "../../persona"
+        with self.assertRaises(PlanError):
+            validate_plan(raw)
+
     def test_rejects_credentials_in_url(self):
         raw = plan()
         raw["target_url"] = "https://user:pass@staging.example.test"
