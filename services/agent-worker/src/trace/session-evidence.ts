@@ -56,6 +56,7 @@ export function buildSessionEvidence(input: BuildSessionEvidenceInput): SessionE
     failure_class: failureClass,
     failure_summary: summarize({
       record,
+      attempts: record.attempts ?? 1,
       lastCheckpoint,
       unreached,
       lastEvent,
@@ -68,6 +69,7 @@ export function buildSessionEvidence(input: BuildSessionEvidenceInput): SessionE
     pointers,
     screenshots,
     action_count: record.action_count,
+    attempts: record.attempts ?? 1,
     retries: events.filter(event => event.agent_reason_code === 'RETRYING').length,
     elapsed_ms: record.elapsed_ms,
     replay_ref: record.replay_ref,
@@ -138,6 +140,7 @@ function classify(
 
 interface SummaryInput {
   record: SessionRecord;
+  attempts: number;
   lastCheckpoint: string | null;
   unreached: string | null;
   lastEvent: BehaviorEvent | null;
@@ -149,6 +152,7 @@ interface SummaryInput {
 function summarize(input: SummaryInput): string {
   const clauses: string[] = [];
   clauses.push(`Session ended ${input.record.status}`);
+  if (input.attempts > 1) clauses.push(`on attempt ${input.attempts}`);
   if (input.record.action_count > 0) clauses.push(`after ${input.record.action_count} recorded actions`);
   clauses.push(`over ${Math.round(input.record.elapsed_ms / 100) / 10}s`);
   if (input.lastCheckpoint !== null) clauses.push(`having reached "${input.lastCheckpoint}"`);

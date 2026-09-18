@@ -171,3 +171,14 @@ test('bounds how many actions it cites', () => {
   assert.equal(evidence.pointers.length, 3);
   assert.equal(evidence.pointers.every((pointer, index, all) => index === 0 || pointer.elapsed_ms >= (all[index - 1]?.elapsed_ms ?? 0)), true);
 });
+test('says when a session had to be re-attempted after an infrastructure fault', () => {
+  const trace = makeTrace([
+    sessionStart(),
+    navigation('http://localhost:4174/#/', '/', 0.1),
+    sessionEnd(2, { status: 'FAILED', finish_reason: 'TECHNICAL_ERROR' }),
+  ]);
+  const evidence = evidenceFor(trace, { status: 'FAILED', attempts: 2 });
+  assert.equal(evidence.attempts, 2);
+  assert.match(evidence.failure_summary, /on attempt 2/);
+  assert.equal(evidenceFor(trace).attempts, 1);
+});

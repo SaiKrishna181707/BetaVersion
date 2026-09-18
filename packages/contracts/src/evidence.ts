@@ -53,6 +53,8 @@ export interface SessionEvidence {
   pointers: EvidencePointer[];
   screenshots: EvidenceCapture[];
   action_count: number;
+  /** How many times the executor attempted this session. Bounded by the retry ceiling. */
+  attempts: number;
   retries: number;
   elapsed_ms: number;
   replay_ref: string | null;
