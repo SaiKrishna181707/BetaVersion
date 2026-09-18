@@ -38,10 +38,13 @@ AWS run proves it.
 ## Repository quality
 
 - [x] CI runs Node lint, tests, typecheck and production build.
-- [x] CI runs Python worker compile and contract tests without requiring cloud credentials.
-- [x] Submission PR is green (Node quality gate + Nova worker contract tests).
-- [x] Submission branch is merged to main only after the required checks pass.
-- [ ] Main push workflow is green after the final merge.
+- [x] CI runs Python worker compile and contract/adversarial tests without requiring cloud credentials.
+- [x] CI audits Node dependencies at high severity and audits the pinned Python worker requirements.
+- [x] CI imports the installed AWS SDKs and verifies the AgentCore Browser/Nova Act call surface used by the worker.
+- [x] Permanent stress invariants cover cost monotonicity, URL attacks, artifact traversal, persona determinism and evidence integrity.
+- [x] Release-hardening PR is green (Node quality gate + Nova worker SDK/contract gate).
+- [x] Release-hardening branch is merged to main only after the required checks pass.
+- [x] Main push workflow for the release-hardening merge is green.
 
 ## Demo
 
