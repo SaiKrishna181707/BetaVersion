@@ -52,6 +52,23 @@ function isAuthorized(url: string, allowed: readonly string[]): boolean {
   return allowed.some(entry => entry.trim().toLowerCase() === host);
 }
 
+function safeUrlForEvidence(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
+function safeRouteForEvidence(route: string): string {
+  return route.split(/[?#]/, 1)[0]?.slice(0, 240) || '/';
+}
+
 function actionTypeOf(action: AgentAction): BehaviorEvent['action_type'] {
   return action.type;
 }
@@ -85,6 +102,10 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
       session_id: plan.session_id,
       persona_id: plan.persona.persona_id,
       ...event,
+      url: safeUrlForEvidence(event.url),
+      route: safeRouteForEvidence(event.route),
+      page_title: event.page_title.slice(0, 240),
+      target_descriptor: event.target_descriptor?.slice(0, 240) ?? null,
     });
     lastEventIndex = events.length - 1;
   };
