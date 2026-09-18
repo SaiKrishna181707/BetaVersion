@@ -4,7 +4,6 @@ import {
   GUARDRAILS,
   estimateCost,
   validateRunConfiguration,
-  type RunConfiguration,
   type SessionPlan,
 } from '@synthetic-beta/contracts';
 import { buildCohort } from '@synthetic-beta/population';
