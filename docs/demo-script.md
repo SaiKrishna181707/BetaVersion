@@ -1,104 +1,114 @@
-# Demo script
+# Three-minute demo script
 
-The judge experience is **create → watch → inspect → replay → report**. This script is honest about which step
-is live today and which arrives with the execution phase, so nothing on screen has to be walked back.
+The judge experience is **define → deploy → watch → evidence → report**. Do not spend the video explaining
+repository structure.
 
-## Prerequisite
+## 0:00–0:25 — Problem
 
-Two terminals:
+> Beta cohorts are expensive and slow to recruit. Synthetic Beta gives a web product its first behavioral test
+> before real users are spent: autonomous synthetic users actually use the product, and every metric is tied
+> back to recorded evidence.
 
-```bash
-npm install
-npm run dev:demo   # authorized demo target on http://127.0.0.1:4174
-npm run dev        # workspace on http://127.0.0.1:5173
+State the boundary once: synthetic users are simulated agents, not replacements for real-user validation.
+
+## 0:25–0:50 — Define the run
+
+Open the hosted Synthetic Beta frontend.
+
+Show:
+
+- authorized staging URL,
+- target audience,
+- one concrete objective,
+- population size,
+- session/batch limits,
+- estimated cost and hard cap,
+- authorization acknowledgement.
+
+Do not demo every validation error. One quick guardrail is enough.
+
+## 0:50–1:25 — Prove the agent is real
+
+Start or show a small AWS run.
+
+Open Amazon Bedrock AgentCore Browser **Live View** for one active synthetic user and show it making its own
+navigation decisions. The key visual is that the agent is operating the real site, not printing a survey answer.
+
+Say:
+
+> This user has a persona and an objective. It is not following a Selenium click script; Nova Act is deciding how
+> to operate the product in an isolated AgentCore browser.
+
+If a live run is risky during recording, start it before the recording and cut to the already-active Live View.
+
+## 1:25–1:45 — Scale
+
+Show the run dashboard or stored completed run:
+
+```text
+Synthetic users     100
+Completed             …
+Abandoned             …
+Technical failures    …
+Median time-to-value  …
 ```
 
-## 1. Frame the problem (30 seconds)
+The final demo run can be five controlled batches of 20. "100 synthetic users" describes the tested
+population, not simultaneous browser startup.
 
-> Recruiting 100 beta users is slow and expensive, and by the time feedback arrives you have already burned the
-> cohort. Synthetic Beta deploys synthetic users first, so you find the obvious breakage before you spend the
-> real audience.
+## 1:45–2:20 — Evidence
 
-State the boundary plainly: these are simulated agents, not real people, and they run only against a product
-you are authorized to test.
+Open the largest friction point, then one supporting session.
 
-## 2. Define the run — **live today**
+Show:
 
-On the landing page, point out that the headline is the claim and the session observer is labelled
-`ILLUSTRATIVE PREVIEW`. It is a design fixture, not recorded activity.
+- the action/session identifier,
+- where the user stopped or retried,
+- screenshot/recording evidence,
+- the corresponding funnel/friction metric.
 
-Open **New run** (`#/new`) and fill the form against the demo target:
+Emphasize that the metric is computed in code from evidence; the agent/model did not calculate the percentage.
 
-- Target URL: `http://localhost:4174` (the suggested placeholder)
-- Product description: a project tool for small teams
-- Target audience: early-stage founders trying a project tool for the first time
-- One objective: *Create a project and invite a teammate to collaborate.*
-- Synthetic users: 1, then show the ladder to 5, 20, 100
+## 2:20–2:45 — Report
 
-Then demonstrate the guardrails rather than describing them:
+Show the final Synthetic Beta report:
 
-- Paste `http://localhost:4174/?session=abc` and show that query parameters are rejected.
-- Paste `https://example.com` and show that an unauthorized host is rejected.
-- Set the hard budget cap to `0.50` and show the estimate exceed the cap.
-- Clear the authorization checkbox and show that review is blocked.
+- objective completion,
+- largest funnel drop,
+- technical failures,
+- friction/retries,
+- cohort differences,
+- limitations.
 
-Open **How this estimate works** in the cost panel. Every rate shown is read from the dated cost model, and the
-arithmetic is in `docs/cost-model.md`. Then press **Review run** and save the draft — the disclosure states that
-no browser starts and no AWS charges are incurred.
+A finding should link back to real session evidence.
 
-## 3. Population — **next phase**
+## 2:45–3:00 — AWS / close
 
-The cohort is already computed deterministically today: `POST /runs/:id/population-preview` returns seeded
-personas and a trait profile, covered by tests. The screen that renders it is registered in the route table as
-`PLANNED`, so visiting `#/runs/example/population` shows an honest placeholder instead of a fabricated table.
+Show one architecture frame:
 
-## 4. Watch, inspect, replay — **live locally, not on AWS**
-
-Starting a run through the API returns `501 EXECUTION_NOT_CONFIGURED` by design. The browser session itself can
-be demonstrated today with a local adapter: keep `npm run dev:demo` running and use a second terminal.
-
-```bash
-npm run l1:run                 # one persona, headless
-L1_HEADLESS=0 npm run l1:run   # same session in a visible window
+```text
+Amplify → control plane → Nova Act → AgentCore Browser
+                             ↓
+                        evidence
+                             ↓
+                    deterministic analytics
 ```
 
-The runner prints the persona, the objective, the outcome, the actions taken, the checkpoints reached, and the
-deterministic metrics computed from the log, then names the session directory it wrote under `.artifacts/`.
-Open `events.json` beside the screenshots to walk a judge through "what did this synthetic user actually do".
-Say plainly that this is a local adapter: no Step Functions, no AgentCore Browser, no AWS spend.
+Close:
 
-The demo target already contains the friction these steps surface, and `demo-target/README.md` documents each
-trap:
+> Synthetic Beta does not predict whether a startup will win. It shows where autonomous users actually struggled
+> before you recruit your real beta cohort.
 
-- The invite control is hidden behind the project overflow menu, not the Team tab.
-- The invite form clears the email field when it fails validation.
-- The members list loads slowly, pushing the invite control down the page.
+## Pre-recording release gate
 
-Planned sequence once the AWS executor lands: watch sessions advance state by state on the Live Run screen, open
-the session that hit the retry trap, and replay its recorded actions with screenshots beside the timeline. The
-event log and the screenshots the replay needs already come out of L1.
+Do not record the final demo until:
 
-## 5. Report — **next phase**
+- CI is green,
+- the deployed frontend is from `main`,
+- one real Nova Act + AgentCore Browser run has been captured,
+- the demo uses only owned/authorized targets,
+- the 100-user result shown in the video came from actual executed sessions,
+- any feature not working is removed from the demo rather than described as if it worked.
 
-`buildSyntheticBetaReport` already produces findings from metrics with evidence pointers, and its output is
-covered by tests. The narrative stays `null` unless a narrator is configured, so the report can be shown with
-its interpretation layer switched off. The Run Report screen is registered as `PLANNED`.
-
-## 6. Close on the guarantee (30 seconds)
-
-The strongest claim is the one that can be checked:
-
-- Every rate carries its numerator, denominator, and the session ids behind it.
-- An empty denominator reports `null`, never `0%`.
-- A report states how many session records and events it was computed from.
-- The cost panel reads its rates from the same model the arithmetic uses.
-- Unbuilt surfaces say so, and the unavailable executor throws instead of inventing behaviour.
-
-Point at `npm test`: 98 tests, no network, no AWS, and the numbers in this script are asserted in them.
-
-## Recovery notes
-
-- **Port 4174 already in use**: stop the other process, or edit the target URL — `demo-target/serve.mjs` takes
-  a `PORT` environment variable.
-- **Nothing renders at `#/new`**: the front end is hash-routed; confirm the URL ends in `#/new`.
-- **Draft looks stale**: the New Run page warns when a saved draft is restored, and Reset form clears it.
+For local fallback only, `npm run l1:run` still proves the event/analytics pipeline, but it must not be presented
+as the AWS execution path.
