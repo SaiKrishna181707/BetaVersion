@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { computeRunMetrics } from '@synthetic-beta/analytics';
 import { buildCohort } from '@synthetic-beta/population';
-import { isAgentAction, type RunConfiguration, type RunMetrics, type SessionPlan, type SessionRecord } from '@synthetic-beta/contracts';
+import { DEFAULT_CHECKPOINT_PLAN, isAgentAction, type RunConfiguration, type RunMetrics, type SessionPlan, type SessionRecord } from '@synthetic-beta/contracts';
 import { writeSessionArtifacts } from './artifacts/session-log';
 import { createLocalBrowserSessionExecutor, defaultSandboxAccount } from './browser/local-executor';
 
@@ -15,7 +15,7 @@ import { createLocalBrowserSessionExecutor, defaultSandboxAccount } from './brow
  * This is a local adapter for the AWS executor, not a replacement for it.
  */
 
-const CHECKPOINT_PLAN = ['OPEN_APP', 'CREATE_PROJECT', 'INVITE_TEAMMATE'] as const;
+const CHECKPOINT_PLAN = DEFAULT_CHECKPOINT_PLAN;
 const OBJECTIVE = 'Create a project and invite a teammate to collaborate.';
 
 function configFromEnvironment(): {

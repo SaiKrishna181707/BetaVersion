@@ -14,6 +14,14 @@ export const GUARDRAILS = {
   MAX_RUN_TIMEOUT_MS: 45 * 60 * 1000,
 } as const;
 
+/**
+ * The workflow the bundled demo target declares, in order. A checkpoint is a screen the
+ * target claims with `data-synthetic-checkpoint` (see demo-target/README.md), so the plan is
+ * a property of the target under test, not of the analytics. Operators running against a
+ * different target pass their own plan.
+ */
+export const DEFAULT_CHECKPOINT_PLAN: readonly string[] = ['OPEN_APP', 'CREATE_PROJECT', 'INVITE_TEAMMATE'];
+
 export const SESSION_STATUSES = [
   'QUEUED', 'PROVISIONING', 'ACTIVE', 'COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED',
 ] as const;

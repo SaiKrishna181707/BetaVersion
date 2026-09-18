@@ -1,7 +1,9 @@
-import type { RunConfiguration, SessionRecord, SyntheticPersona } from './model';
+import type { BehaviorEvent, RunConfiguration, SessionRecord, SyntheticPersona } from './model';
+import type { TraceEntry } from './trace';
 import type { RunMetrics } from './metrics';
 import type { SyntheticBetaReport } from './report';
 import type { SessionEvidence } from './evidence';
+import type { RunStorePort } from './execution';
 
 /** Where a run executes. `LOCAL` is this machine's browser; `AWS` is AgentCore Browser. */
 export type ExecutionMode = 'LOCAL' | 'AWS';
@@ -55,4 +57,39 @@ export interface RunExecutionLimits {
   max_session_attempts: number;
   run_budget_cents: number;
   run_timeout_ms: number;
+}
+
+/** Everything the control plane needs to accept a run. */
+export interface RunStartInput {
+  run_id: string;
+  configuration: RunConfiguration;
+  personas: readonly SyntheticPersona[];
+  checkpoint_plan: readonly string[];
+  allowed_origins: readonly string[];
+  account_refs?: readonly string[];
+}
+
+/**
+ * The control-plane boundary. `LOCAL` runs the orchestrator in this process; `AWS` starts a
+ * Step Functions execution and returns. Nothing above this port knows which one it has, so
+ * the front end reads the same records either way.
+ */
+export interface RunRuntimePort {
+  readonly mode: ExecutionMode;
+  /** False when no executor is configured: the API must then refuse to start a run. */
+  readonly available: boolean;
+  /** Accepts a run and returns as soon as it is accepted, not when it finishes. */
+  start(input: RunStartInput): Promise<RunStartResponse>;
+  readonly store: RunStorePort;
+}
+
+/** One session with everything needed to review or replay it. */
+export interface RunSessionDetail {
+  session: SessionRecord;
+  persona: SyntheticPersona | null;
+  evidence: SessionEvidence | null;
+  events: BehaviorEvent[];
+  /** The recorded trace, entry by entry, so a reviewer can see the raw facts. */
+  trace_entries: TraceEntry[];
+  trace_ref: string | null;
 }

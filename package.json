@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "check": "npm run lint && npm run test && npm run build",
     "preview": "npm run preview --workspace @synthetic-beta/web",
-    "dev:demo": "node demo-target/serve.mjs",
+    "dev:api": "tsx services/agent-worker/src/local-server.ts",
     "l1:run": "tsx services/agent-worker/src/l1-run.ts",
     "l2:run": "tsx services/agent-worker/src/l2-run.ts",
     "l3:run": "tsx services/agent-worker/src/l2-run.ts --users 20 --batch 5"

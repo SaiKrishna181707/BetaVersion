@@ -74,7 +74,9 @@ export type RunArtifactKind =
   | 'SESSION_LOG'
   | 'EVIDENCE'
   | 'REPORT'
-  | 'METRICS';
+  | 'METRICS'
+  /** The cohort a run actually used, stored so the report can show who was tested. */
+  | 'POPULATION';
 
 /**
  * Persistence for a run: control-plane records, per-session events, and raw traces.

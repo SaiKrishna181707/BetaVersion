@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { GUARDRAILS, isAgentAction, type RunConfiguration, type RunMetrics } from '@synthetic-beta/contracts';
+import { DEFAULT_CHECKPOINT_PLAN, GUARDRAILS, isAgentAction, type RunConfiguration, type RunMetrics } from '@synthetic-beta/contracts';
 import { buildCohort } from '@synthetic-beta/population';
 import { createLocalBrowserSessionExecutor, defaultSandboxAccount } from './browser/local-executor';
 import { executeRunPlan } from './run-orchestrator';
@@ -16,7 +16,7 @@ import { createFileRunStore } from './store/file-run-store';
  * the same trace schema, the same analytics, and the same report. Nothing here calls AWS.
  */
 
-const CHECKPOINT_PLAN = ['OPEN_APP', 'CREATE_PROJECT', 'INVITE_TEAMMATE'] as const;
+const CHECKPOINT_PLAN = DEFAULT_CHECKPOINT_PLAN;
 const OBJECTIVE = 'Create a project and invite a teammate to collaborate.';
 
 interface RunnerOptions {
