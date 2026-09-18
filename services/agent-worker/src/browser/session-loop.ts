@@ -52,6 +52,23 @@ function isAuthorized(url: string, allowed: readonly string[]): boolean {
   return allowed.some(entry => entry.trim().toLowerCase() === host);
 }
 
+function safeUrlForEvidence(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
+function safeRouteForEvidence(route: string): string {
+  return route.split(/[?#]/, 1)[0]?.slice(0, 240) || '/';
+}
+
 function actionTypeOf(action: AgentAction): BehaviorEvent['action_type'] {
   return action.type;
 }
@@ -85,6 +102,10 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
       session_id: plan.session_id,
       persona_id: plan.persona.persona_id,
       ...event,
+      url: safeUrlForEvidence(event.url),
+      route: safeRouteForEvidence(event.route),
+      page_title: event.page_title.slice(0, 240),
+      target_descriptor: event.target_descriptor?.slice(0, 240) ?? null,
     });
     lastEventIndex = events.length - 1;
   };
@@ -237,14 +258,21 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
       break;
     }
 
-    for (const checkpoint of observation.checkpoints) {
-      if (!plan.checkpoint_plan.includes(checkpoint) || reached.has(checkpoint)) continue;
-      reached.add(checkpoint);
+    const newlyReached = observation.checkpoints
+      .filter(checkpoint => plan.checkpoint_plan.includes(checkpoint) && !reached.has(checkpoint))
+      .sort((a, b) => plan.checkpoint_plan.indexOf(a) - plan.checkpoint_plan.indexOf(b));
+
+    for (const checkpoint of newlyReached) reached.add(checkpoint);
+
+    // BehaviorEvent stores one checkpoint, so when a render exposes several milestones
+    // at once, persist the furthest one. Analytics then infers all prior funnel stages.
+    const furthestNew = newlyReached.at(-1);
+    if (furthestNew !== undefined) {
       const target = events[lastEventIndex];
-      if (target !== undefined) target.task_checkpoint = checkpoint;
+      if (target !== undefined) target.task_checkpoint = furthestNew;
       if (options.captureScreenshots) {
         try {
-          const ref = await options.page.screenshot(`checkpoint-${checkpoint}`);
+          const ref = await options.page.screenshot(`checkpoint-${furthestNew}`);
           if (target !== undefined && ref !== null) target.screenshot_ref = ref;
         } catch { /* A missing screenshot must not fail a session. */ }
       }

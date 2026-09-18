@@ -15,11 +15,14 @@ export function estimateCost(
   config: Pick<RunConfiguration, 'user_count' | 'max_session_seconds' | 'run_hard_cap_usd'>,
   model: Readonly<CostModel> = HANDOFF_COST_MODEL,
 ): CostEstimate {
+  const runCapCents = Math.round(config.run_hard_cap_usd * 100);
+  const centExact = Number.isFinite(config.run_hard_cap_usd)
+    && Math.abs(config.run_hard_cap_usd * 100 - runCapCents) < 1e-7;
   if (!Number.isInteger(config.user_count) || config.user_count < 1 || config.user_count > GUARDRAILS.MAX_USERS
     || !Number.isInteger(config.max_session_seconds) || config.max_session_seconds < 30
     || config.max_session_seconds > GUARDRAILS.MAX_SESSION_SECONDS
-    || !Number.isFinite(config.run_hard_cap_usd) || config.run_hard_cap_usd <= 0) {
-    throw new Error('Cost estimate requires valid user count, session duration, and budget.');
+    || !centExact || runCapCents < 1 || runCapCents > GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100) {
+    throw new Error('Cost estimate requires valid user count, session duration, and a whole-cent budget.');
   }
   const rates = [model.nova_act_hour_microusd, model.browser_minute_microusd, model.persona_allowance_microusd, model.run_allowance_microusd, model.contingency_percent];
   if (rates.some(rate => !Number.isSafeInteger(rate) || rate < 0)) throw new Error('Invalid cost model.');
@@ -36,7 +39,7 @@ export function estimateCost(
     browser_minutes,
     max_actions,
     total_cents,
-    exceeds_run_cap: total_cents > Math.floor(config.run_hard_cap_usd * 100),
+    exceeds_run_cap: total_cents > runCapCents,
     exceeds_global_ceiling: total_cents > GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100,
   };
 }

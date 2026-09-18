@@ -33,6 +33,18 @@ test('scales with the number of synthetic users', () => {
   assert.ok(double.total_cents > single.total_cents);
 });
 
+test('uses exact integer cents for awkward decimal run caps', () => {
+  const below = estimateCost({ user_count: 1, max_session_seconds: 180, run_hard_cap_usd: 0.42 });
+  const exact = estimateCost({ user_count: 1, max_session_seconds: 180, run_hard_cap_usd: 0.43 });
+  assert.equal(below.total_cents, 43);
+  assert.equal(below.exceeds_run_cap, true);
+  assert.equal(exact.exceeds_run_cap, false);
+  assert.throws(
+    () => estimateCost({ user_count: 1, max_session_seconds: 180, run_hard_cap_usd: 1.005 }),
+    /whole-cent budget/,
+  );
+});
+
 test('flags an estimate above the run cap', () => {
   const estimate = estimateCost({ ...validConfiguration, run_hard_cap_usd: 1 });
   assert.equal(estimate.exceeds_run_cap, true);

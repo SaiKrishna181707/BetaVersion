@@ -26,6 +26,19 @@ function firstLine(error: unknown): string {
   return message.split('\n')[0] ?? message;
 }
 
+function safeRequestUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
 /** Uses the browser this machine already has; a missing browser is an error, never a workaround. */
 async function launchLocalBrowser(options: PlaywrightPageOptions): Promise<Browser> {
   if (options.executable_path !== undefined) {
@@ -70,7 +83,9 @@ export class PlaywrightPage implements BrowserPagePort {
     });
     this.page.on('pageerror', error => this.pendingConsole.push(String(error.message).slice(0, 300)));
     this.page.on('requestfailed', request => {
-      this.pendingNetwork.push(`${request.method()} ${request.url().slice(0, 200)} ${request.failure()?.errorText ?? ''}`.trim());
+      this.pendingNetwork.push(
+        `${request.method()} ${safeRequestUrl(request.url()).slice(0, 200)} ${request.failure()?.errorText ?? ''}`.trim(),
+      );
     });
   }
 
@@ -79,6 +94,7 @@ export class PlaywrightPage implements BrowserPagePort {
     const context = await browser.newContext({
       viewport: options.viewport ?? { width: 1280, height: 800 },
       deviceScaleFactor: 1,
+      acceptDownloads: false,
     });
     context.setDefaultTimeout(5_000);
     context.setDefaultNavigationTimeout(10_000);

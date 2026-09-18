@@ -61,6 +61,22 @@ test('previews a deterministic population', async () => {
   assert.deepEqual(parse<unknown>(second), parse<unknown>(first));
 });
 
+test('rejects unsupported or invalid population mix values', async () => {
+  const unknown = await send('POST', '/runs/run-1/population-preview', {
+    ...populationSpec,
+    device_class_mix: { TOASTER: 1 },
+  });
+  assert.equal(unknown.statusCode, 400);
+  assert.match(parse<{ message: string }>(unknown).message, /unsupported value/);
+
+  const invalidWeight = await send('POST', '/runs/run-1/population-preview', {
+    ...populationSpec,
+    patience_mix: { LOW: -1 },
+  });
+  assert.equal(invalidWeight.statusCode, 400);
+  assert.match(parse<{ message: string }>(invalidWeight).message, /positive finite/);
+});
+
 test('rejects an out-of-range population spec with a reason', async () => {
   const response = await send('POST', '/runs/run-1/population-preview', { ...populationSpec, size: 0 });
   assert.equal(response.statusCode, 400);
@@ -95,6 +111,15 @@ test('rejects malformed JSON and oversized payloads', async () => {
   });
   assert.equal(oversized.statusCode, 413);
   assert.equal(parse<{ code: string }>(oversized).code, 'PAYLOAD_TOO_LARGE');
+
+  const unicodeOversized = await handler({
+    httpMethod: 'POST',
+    path: '/runs/run-1/estimate-cost',
+    body: JSON.stringify({ value: '😀'.repeat(5_000) }),
+  });
+  assert.ok(unicodeOversized.body.length < 16_384, 'fixture must be smaller in JS code units');
+  assert.equal(unicodeOversized.statusCode, 413);
+  assert.equal(parse<{ code: string }>(unicodeOversized).code, 'PAYLOAD_TOO_LARGE');
 });
 
 test('returns 404 for unknown routes and mismatched methods', async () => {

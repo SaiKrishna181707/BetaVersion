@@ -57,6 +57,15 @@ test('bounds every numeric field', () => {
   assert.match(String(errors.run_hard_cap_usd), /0\.01 and \$250/);
 });
 
+test('requires run caps to be exact whole cents', () => {
+  expectValid(validateRunConfiguration({ ...validConfiguration, run_hard_cap_usd: 0.29 }, AUTHORIZED_DOMAINS));
+  const errors = expectInvalid(validateRunConfiguration(
+    { ...validConfiguration, run_hard_cap_usd: 1.005 },
+    AUTHORIZED_DOMAINS,
+  ));
+  assert.match(String(errors.run_hard_cap_usd), /whole cents/);
+});
+
 test('requires an explicit authorization acknowledgement', () => {
   const errors = expectInvalid(validateRunConfiguration(
     { ...validConfiguration, authorization_acknowledged: false },

@@ -57,9 +57,20 @@ test('counts retries and friction signals separately', () => {
 test('builds a funnel step for every planned checkpoint', () => {
   const result = metrics();
   assert.deepEqual(result.funnel.map(step => step.checkpoint), [...CHECKPOINT_PLAN]);
-  assert.deepEqual(result.funnel.map(step => step.reached), [3, 0, 1]);
-  assert.deepEqual(result.funnel.map(step => step.reached_percentage), [75, 0, 25]);
+  assert.deepEqual(result.funnel.map(step => step.reached), [3, 1, 1]);
+  assert.deepEqual(result.funnel.map(step => step.reached_percentage), [75, 25, 25]);
   assert.deepEqual(result.funnel[0]?.supporting_session_ids, ['s1', 's2', 's3']);
+});
+
+test('funnel never increases when only a later checkpoint was recorded', () => {
+  const result = metrics();
+  for (let index = 1; index < result.funnel.length; index += 1) {
+    assert.ok(
+      (result.funnel[index]?.reached ?? 0) <= (result.funnel[index - 1]?.reached ?? 0),
+      'ordered funnel counts must be monotonic',
+    );
+  }
+  assert.deepEqual(result.funnel[1]?.supporting_session_ids, ['s1']);
 });
 
 test('compares cohorts against each other', () => {
@@ -76,6 +87,58 @@ test('compares cohorts against each other', () => {
 test('orders outcomes deterministically', () => {
   assert.deepEqual(metrics().outcomes.map(outcome => outcome.session_id), ['s1', 's2', 's3', 's4']);
   assert.deepEqual(metrics(), metrics());
+});
+
+test('rejects duplicate sessions instead of double-counting them', () => {
+  const { personas, sessions, events } = runFixture();
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions: [...sessions, sessions[0]!],
+      events,
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /duplicate session ID/,
+  );
+});
+
+test('rejects orphan and cross-run events instead of contaminating metrics', () => {
+  const { personas, sessions, events } = runFixture();
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions,
+      events: [...events, { ...events[0]!, session_id: 'unknown-session' }],
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /unknown session/,
+  );
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions,
+      events: [{ ...events[0]!, run_id: 'run-other' }],
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /another run/,
+  );
+});
+
+test('rejects persona mismatches in recorded evidence', () => {
+  const { personas, sessions, events } = runFixture();
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions,
+      events: [{ ...events[0]!, persona_id: 'seed-a-002' }],
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /persona does not match/,
+  );
 });
 
 test('reports null instead of 0% when nothing was recorded', () => {
