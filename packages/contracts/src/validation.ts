@@ -43,8 +43,11 @@ export function validateRunConfiguration(input: unknown, authorizedDomains: read
     run_hard_cap_usd: typeof data.run_hard_cap_usd === 'number' ? data.run_hard_cap_usd : 0,
     authorization_acknowledged: data.authorization_acknowledged === true,
   };
-  if (!Number.isFinite(value.run_hard_cap_usd) || value.run_hard_cap_usd < 0.01 || value.run_hard_cap_usd > GUARDRAILS.GLOBAL_SPEND_CEILING_USD) {
-    errors.run_hard_cap_usd = `Set a run cap between $0.01 and $${GUARDRAILS.GLOBAL_SPEND_CEILING_USD}.`;
+  const budgetCents = Math.round(value.run_hard_cap_usd * 100);
+  const centExact = Number.isFinite(value.run_hard_cap_usd)
+    && Math.abs(value.run_hard_cap_usd * 100 - budgetCents) < 1e-7;
+  if (!centExact || budgetCents < 1 || budgetCents > GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100) {
+    errors.run_hard_cap_usd = `Set a run cap between $0.01 and ${GUARDRAILS.GLOBAL_SPEND_CEILING_USD}, using whole cents.`;
   }
   if (!value.authorization_acknowledged) errors.authorization_acknowledged = 'Confirm that you own or are authorized to test this target.';
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, value };
