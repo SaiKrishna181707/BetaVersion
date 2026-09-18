@@ -87,6 +87,9 @@ export function reviewSessionPlan(plan: SessionPlan): string[] {
     if (target.username !== '' || target.password !== '') {
       reasons.push('Credentials must never appear in the target URL.');
     }
+    if (target.search !== '' || target.hash !== '') {
+      reasons.push('Query parameters and fragments are not allowed in the starting target URL.');
+    }
     const authorized = plan.allowed_origins.some(origin => origin.trim().toLowerCase() === target.hostname.toLowerCase());
     if (!authorized) {
       reasons.push(`${target.hostname} is not in the authorized origin allowlist.`);
