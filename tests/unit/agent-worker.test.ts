@@ -73,6 +73,13 @@ test('rejects a target outside the authorized origins', () => {
   assert.match(String(reasons[0]), /example\.com is not in the authorized origin allowlist/);
 });
 
+test('rejects query strings and fragments in the starting target URL', () => {
+  for (const target_url of ['http://localhost:4174/?token=abc', 'http://localhost:4174/#secret']) {
+    const reasons = reviewSessionPlan(planFixture({ target_url }));
+    assert.ok(reasons.some(reason => reason.includes('Query parameters and fragments')));
+  }
+});
+
 test('rejects credentials embedded in the target URL', () => {
   const reasons = reviewSessionPlan(planFixture({ target_url: 'https://user:pass@localhost/' }));
   assert.equal(reasons.length, 1);
