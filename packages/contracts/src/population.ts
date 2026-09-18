@@ -23,3 +23,12 @@ export interface PopulationSpec {
   technical_ability_mix?: TraitMix<TechnicalAbility>;
   patience_mix?: TraitMix<PatienceLevel>;
 }
+
+/** Counts traits across a built cohort. Computed by the population service, rendered by the UI. */
+export interface CohortProfile {
+  cohort: string;
+  size: number;
+  technical_ability: Record<TechnicalAbility, number>;
+  patience: Record<PatienceLevel, number>;
+  device_class: Record<DeviceClass, number>;
+}

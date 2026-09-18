@@ -1,7 +1,7 @@
 /**
- * The route table for the workspace. Landing and New run are implemented; the remaining
- * product surfaces are registered now so navigation has one source of truth, and are
- * reported honestly as PLANNED until the execution phase wires them up.
+ * The route table for the workspace. Every surface except cost settings is wired to the
+ * control plane; the remaining one stays PLANNED so navigation never offers a screen that
+ * does not exist yet.
  */
 export type RouteId =
   | 'home'
@@ -25,10 +25,10 @@ export interface RouteDefinition {
 export const ROUTES: readonly RouteDefinition[] = [
   { id: 'home', pattern: '/', title: 'Synthetic Beta — Product testing, with evidence', status: 'READY' },
   { id: 'new-run', pattern: '/new', title: 'New run — Synthetic Beta', status: 'READY' },
-  { id: 'population-preview', pattern: '/runs/:runId/population', title: 'Population preview', status: 'PLANNED' },
-  { id: 'live-run', pattern: '/runs/:runId/live', title: 'Live run', status: 'PLANNED' },
-  { id: 'session-detail', pattern: '/runs/:runId/sessions/:sessionId', title: 'Session detail', status: 'PLANNED' },
-  { id: 'run-report', pattern: '/runs/:runId/report', title: 'Run report', status: 'PLANNED' },
+  { id: 'population-preview', pattern: '/runs/:runId/population', title: 'Population preview', status: 'READY' },
+  { id: 'live-run', pattern: '/runs/:runId/live', title: 'Live run', status: 'READY' },
+  { id: 'session-detail', pattern: '/runs/:runId/sessions/:sessionId', title: 'Session detail', status: 'READY' },
+  { id: 'run-report', pattern: '/runs/:runId/report', title: 'Run report', status: 'READY' },
   { id: 'settings', pattern: '/settings', title: 'Cost and settings', status: 'PLANNED' },
 ];
 

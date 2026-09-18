@@ -27,10 +27,13 @@ test('reports an unknown route without inventing a match', () => {
   assert.equal(parseRoute('#/runs/abc').definition, null);
 });
 
-test('registers future surfaces as planned', () => {
+test('registers the run surfaces as ready and cost settings as planned', () => {
   const planned = ROUTES.filter(route => route.status === 'PLANNED').map(route => route.id);
-  assert.deepEqual(planned, ['population-preview', 'live-run', 'session-detail', 'run-report', 'settings']);
+  assert.deepEqual(planned, ['settings']);
   assert.equal(parseRoute('#/settings').definition?.status, 'PLANNED');
+  for (const hash of ['#/runs/r1/live', '#/runs/r1/report', '#/runs/r1/population', '#/runs/r1/sessions/s1']) {
+    assert.equal(parseRoute(hash).definition?.status, 'READY', hash);
+  }
 });
 
 test('uses the product title only for ready surfaces', () => {

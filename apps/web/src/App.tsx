@@ -2,6 +2,10 @@ import { Component, useEffect, useSyncExternalStore, type ReactNode } from 'reac
 import { Brand, Button } from '@synthetic-beta/ui';
 import { LandingPage } from './pages/LandingPage';
 import { NewRunPage } from './pages/NewRunPage';
+import { PopulationPreviewPage } from './pages/PopulationPreviewPage';
+import { RunPage } from './pages/RunPage';
+import { RunReportPage } from './pages/RunReportPage';
+import { SessionDetailPage } from './pages/SessionDetailPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { parseRoute, titleFor, type RouteMatch } from './router';
 
@@ -39,7 +43,16 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 }
 
 function RouteSurface({ match }: { match: RouteMatch }) {
+  const { runId, sessionId } = match.params;
   if (match.definition?.id === 'new-run') return <NewRunPage />;
+  if (match.definition?.id === 'live-run' && runId !== undefined) return <RunPage runId={runId} />;
+  if (match.definition?.id === 'session-detail' && runId !== undefined && sessionId !== undefined) {
+    return <SessionDetailPage runId={runId} sessionId={sessionId} />;
+  }
+  if (match.definition?.id === 'run-report' && runId !== undefined) return <RunReportPage runId={runId} />;
+  if (match.definition?.id === 'population-preview' && runId !== undefined) {
+    return <PopulationPreviewPage runId={runId} />;
+  }
   if (match.definition?.status === 'READY') return <LandingPage />;
   return <NotFoundPage requested={match.requested} planned={match.definition} />;
 }

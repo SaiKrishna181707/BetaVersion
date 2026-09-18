@@ -14,7 +14,7 @@ export function NotFoundPage({ requested, planned }: { requested: string; planne
       <h1 tabIndex={-1}>{planned ? 'This screen is registered, not built.' : 'That route does not exist.'}</h1>
       <p className="hero-description">
         {planned
-          ? <>The route table reserves <span className="mono">{planned.pattern}</span> for this surface. It arrives with the execution phase; the current foundation ships the overview and New run.</>
+          ? <>The route table reserves <span className="mono">{planned.pattern}</span> for this surface. Nothing is wired to it yet, so it is not offered as a working screen.</>
           : <>Nothing is registered for <span className="mono">{requested}</span>. Check the address, or start from the overview.</>}
       </p>
       <div className="hero-actions">

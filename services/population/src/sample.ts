@@ -1,5 +1,6 @@
 import {
   GUARDRAILS,
+  type CohortProfile,
   type DeviceClass,
   type PatienceLevel,
   type PopulationSpec,
@@ -90,13 +91,6 @@ export function buildCohort(spec: PopulationSpec): SyntheticPersona[] {
   }));
 }
 
-export interface CohortProfile {
-  cohort: string;
-  size: number;
-  technical_ability: Record<TechnicalAbility, number>;
-  patience: Record<PatienceLevel, number>;
-  device_class: Record<DeviceClass, number>;
-}
 
 /** Counts traits across a built cohort. Used by the population preview surface. */
 export function profileCohort(personas: readonly SyntheticPersona[]): CohortProfile {

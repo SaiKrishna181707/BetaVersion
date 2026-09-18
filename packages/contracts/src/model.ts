@@ -1,3 +1,9 @@
+import type { CohortProfile, PopulationSpec } from './population';
+import type { RunMetrics } from './metrics';
+import type { RunEvidenceIndex } from './evidence';
+import type { SyntheticBetaReport } from './report';
+import type { RunSessionDetail, RunStartResponse, RunStatusView } from './run';
+
 export const GUARDRAILS = {
   GLOBAL_SPEND_CEILING_USD: 250,
   DEFAULT_RUN_HARD_CAP_USD: 45,
@@ -152,7 +158,39 @@ export interface EvidenceRate {
   supporting_session_ids: string[];
 }
 
+/** Whether a gateway can reach a control plane that can actually open browsers. */
+export interface RunGatewayCapabilities {
+  mode: 'LOCAL' | 'AWS' | 'FOUNDATION';
+  /**
+   * False until a runtime answers. The interface must not claim execution is available while
+   * this is false, and must not offer to start a run it cannot run.
+   */
+  execution_available: boolean;
+}
+
+/** Everything the control plane needs to accept a run from the front end. */
+export interface RunGatewayStartRequest {
+  configuration: RunConfiguration;
+  run_id?: string;
+  population_seed?: string;
+  /** Overrides the checkpoints the target declares, for a target other than the demo workflow. */
+  checkpoint_plan?: readonly string[];
+}
+
+/**
+ * The boundary the front end uses for drafts and, when a control plane is reachable, for
+ * execution. Draft methods are always present; the execution methods are optional so a
+ * foundation-only build cannot pretend to start a run.
+ */
 export interface RunGateway {
   saveReviewedDraft(configuration: RunConfiguration): Promise<RunDraft>;
   loadDraft(): Promise<RunDraft | null>;
+  capabilities?(): Promise<RunGatewayCapabilities>;
+  previewPopulation?(spec: PopulationSpec): Promise<{ personas: SyntheticPersona[]; profile: CohortProfile }>;
+  startRun?(request: RunGatewayStartRequest): Promise<RunStartResponse>;
+  fetchRun?(run_id: string): Promise<RunStatusView>;
+  fetchSession?(run_id: string, session_id: string): Promise<RunSessionDetail>;
+  fetchMetrics?(run_id: string): Promise<RunMetrics>;
+  fetchReport?(run_id: string): Promise<SyntheticBetaReport>;
+  fetchEvidence?(run_id: string): Promise<RunEvidenceIndex>;
 }
