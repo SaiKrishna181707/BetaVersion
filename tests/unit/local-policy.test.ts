@@ -186,3 +186,14 @@ test('composes placeholder text only from the goal it was given', () => {
   const empty = personaFixture('seed-a-002', 'COHORT_A', { goal_context: 'a to be' });
   assert.equal(composeTextInput('Project name', empty, 'of the', null), 'Launch plan');
 });
+
+test('labels a continued attempt on the same unchanged screen as RETRYING', async () => {
+  const elements = [element({ ref: 'e1', role: 'button', name: 'Invite teammate' })];
+  const decision = await policy('retry-seed').decide(decisionInput({
+    repeats_on_state: 1,
+    attempt_index: 2,
+    observation: observation({ elements }),
+  }));
+  assert.equal(decision.action.type, 'click');
+  assert.equal(decision.reason_code, 'RETRYING');
+});
