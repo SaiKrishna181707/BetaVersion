@@ -40,7 +40,7 @@ test('rejects a plan that exceeds the action, duration, or budget limits', () =>
   assert.equal(reasons.length, 3);
   assert.ok(reasons.some(reason => reason.includes('Action budget')));
   assert.ok(reasons.some(reason => reason.includes('Session duration')));
-  assert.ok(reasons.some(reason => reason.includes('remaining run budget')));
+  assert.ok(reasons.some(reason => reason.includes('Remaining run budget')));
 });
 
 test('rejects path-traversal identifiers before artifact paths are built', () => {
