@@ -199,6 +199,46 @@ test('classifies an abandoned session separately from a failure', async () => {
   assert.equal(page.actions.length, 0, 'abandoning must not fire a browser action');
 });
 
+test('redacts query strings and fragments from persisted evidence URLs', async () => {
+  const leaked = state(
+    '/projects?token=route-secret',
+    'OPEN_APP',
+    'http://localhost:4174/projects?token=url-secret#/projects',
+  );
+  const page = new ScriptedPage({ states: [leaked] });
+  const result = await runSessionLoop(plan(), { page, policy: giveUp(), now: () => START });
+
+  assert.ok(result.events.length > 0);
+  for (const event of result.events) {
+    assert.ok(!event.url.includes('url-secret'));
+    assert.ok(!event.url.includes('?'));
+    assert.ok(!event.url.includes('#'));
+    assert.ok(!event.route.includes('route-secret'));
+  }
+});
+
+test('when several checkpoints appear together, records only the furthest milestone', async () => {
+  const combined = {
+    ...state('/projects/p-1/team'),
+    checkpoints: ['OPEN_APP', 'CREATE_PROJECT', 'INVITE_TEAMMATE'],
+  };
+  const page = new ScriptedPage({ states: [combined] });
+  const result = await runSessionLoop(plan(), {
+    page,
+    policy: clicker(),
+    captureScreenshots: true,
+    now: () => START,
+  });
+
+  assert.equal(result.status, 'COMPLETED');
+  assert.deepEqual(
+    result.events.map(event => event.task_checkpoint).filter(value => value !== null),
+    ['INVITE_TEAMMATE'],
+  );
+  assert.ok(page.screenshots.includes('checkpoint-INVITE_TEAMMATE'));
+  assert.ok(!page.screenshots.includes('checkpoint-OPEN_APP'));
+});
+
 test('stops the session if the browser leaves the authorized origin', async () => {
   const page = new ScriptedPage({
     states: [state('/projects', 'OPEN_APP'), state('/checkout', undefined, 'https://evil.example/checkout')],
