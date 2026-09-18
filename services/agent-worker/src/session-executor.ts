@@ -25,6 +25,9 @@ export class SessionPlanRejectedError extends Error {
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const SAFE_CHECKPOINT = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const SAFE_HOST = /^[A-Za-z0-9.-]{1,253}$/;
+const MAX_ALLOWED_ORIGINS = 8;
+const MAX_CHECKPOINTS = 32;
 
 function parseTarget(targetUrl: string): URL | null {
   try {
@@ -59,14 +62,21 @@ export function reviewSessionPlan(plan: SessionPlan): string[] {
     || plan.max_session_seconds > GUARDRAILS.MAX_SESSION_SECONDS) {
     reasons.push(`Session duration must be a whole number of seconds from 30 to ${GUARDRAILS.MAX_SESSION_SECONDS}.`);
   }
-  if (!Number.isSafeInteger(plan.remaining_budget_cents) || plan.remaining_budget_cents < 1) {
-    reasons.push('A session cannot start without a positive whole-cent remaining run budget.');
+  if (!Number.isSafeInteger(plan.remaining_budget_cents)
+    || plan.remaining_budget_cents < 1
+    || plan.remaining_budget_cents > GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100) {
+    reasons.push(
+      `Remaining run budget must be a whole-cent value from 1 to ${GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100} cents.`,
+    );
   }
-  if (plan.allowed_origins.length === 0) {
-    reasons.push('An allowlist of authorized origins is required.');
+  if (plan.allowed_origins.length === 0 || plan.allowed_origins.length > MAX_ALLOWED_ORIGINS) {
+    reasons.push(`An allowlist of 1–${MAX_ALLOWED_ORIGINS} authorized origins is required.`);
   }
-  if (plan.checkpoint_plan.length === 0) {
-    reasons.push('At least one task checkpoint is required to measure progress.');
+  if (plan.allowed_origins.some(origin => !SAFE_HOST.test(origin))) {
+    reasons.push('Authorized origins must be hostname-only ASCII values without schemes, paths, ports, or wildcards.');
+  }
+  if (plan.checkpoint_plan.length === 0 || plan.checkpoint_plan.length > MAX_CHECKPOINTS) {
+    reasons.push(`A checkpoint plan must contain 1–${MAX_CHECKPOINTS} ordered milestones.`);
   } else {
     if (plan.checkpoint_plan.some(checkpoint => !SAFE_CHECKPOINT.test(checkpoint))) {
       reasons.push('Checkpoint names must use 1–64 ASCII letters, numbers, underscores, or hyphens.');
