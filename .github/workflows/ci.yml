@@ -42,6 +42,8 @@ jobs:
           cache-dependency-path: services/nova-worker/requirements.txt
       - run: python -m pip install --disable-pip-version-check -r services/nova-worker/requirements.txt
       - run: python -m pip check
+      - run: python -m pip install --disable-pip-version-check pip-audit==2.10.1
+      - run: python -m pip_audit -r services/nova-worker/requirements.txt
       - run: python -m compileall services/nova-worker
       - name: Verify pinned AWS SDK surface
         run: |
@@ -51,14 +53,28 @@ jobs:
           from nova_act import GuardrailDecision, NovaAct, Workflow
 
           start = inspect.signature(BrowserClient.start)
-          if "session_timeout_seconds" not in start.parameters:
-              raise SystemExit("BrowserClient.start lacks session_timeout_seconds")
+          for parameter in ("identifier", "session_timeout_seconds"):
+              if parameter not in start.parameters:
+                  raise SystemExit(f"BrowserClient.start lacks {parameter}")
+          for method in ("generate_ws_headers", "stop"):
+              if not hasattr(BrowserClient, method):
+                  raise SystemExit(f"BrowserClient lacks {method}")
 
           nova = inspect.signature(NovaAct)
-          if "state_guardrail" not in nova.parameters:
-              raise SystemExit("NovaAct lacks state_guardrail")
+          for parameter in (
+              "cdp_endpoint_url",
+              "cdp_headers",
+              "starting_page",
+              "workflow",
+              "state_guardrail",
+              "headless",
+              "tty",
+          ):
+              if parameter not in nova.parameters:
+                  raise SystemExit(f"NovaAct lacks {parameter}")
 
           assert GuardrailDecision.PASS is not None
+          assert GuardrailDecision.BLOCK is not None
           assert Workflow is not None
           PY
       - run: python -m unittest discover -s services/nova-worker -p "test_*.py"
