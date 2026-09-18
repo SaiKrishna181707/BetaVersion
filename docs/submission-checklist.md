@@ -39,9 +39,9 @@ AWS run proves it.
 
 - [x] CI runs Node lint, tests, typecheck and production build.
 - [x] CI runs Python worker compile and contract tests without requiring cloud credentials.
-- [ ] Submission PR is green.
-- [ ] Submission branch is merged to main only after the required checks pass.
-- [ ] Main build is green after merge.
+- [x] Submission PR is green (Node quality gate + Nova worker contract tests).
+- [x] Submission branch is merged to main only after the required checks pass.
+- [ ] Main push workflow is green after the final merge.
 
 ## Demo
 

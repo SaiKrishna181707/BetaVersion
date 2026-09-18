@@ -51,7 +51,7 @@ The LLM/agent decides how to use the product. Code computes the numbers.
 - Deterministic completion, abandonment, timeout, technical-failure, funnel, friction and cohort metrics.
 - Evidence-grounded report assembly with session/action pointers.
 - Owned `demo-target/` with deliberate UX friction.
-- 99 Node unit/integration tests.
+- 101 Node unit/integration tests.
 
 ### Real AWS execution adapter implemented
 
@@ -191,8 +191,8 @@ GitHub Actions runs:
 - Python compile,
 - Nova worker contract tests.
 
-`amplify.yml` contains the AWS Amplify Hosting build specification for `apps/web`. The repository should be
-merged to `main` only after CI is green.
+`amplify.yml` contains the AWS Amplify Hosting build specification for `apps/web`. Submission changes reach
+`main` only through CI-green pull requests.
 
 ## Documentation
 
