@@ -22,6 +22,13 @@ export interface BuildReportInput {
 
 const DEFAULT_MAX_EVIDENCE = 6;
 
+function isRetryEvidence(event: BehaviorEvent): boolean {
+  return event.agent_reason_code === 'RETRYING'
+    || event.agent_reason_code === 'BACKTRACKING'
+    || event.result === 'NO_CHANGE'
+    || event.result === 'VALIDATION_FAILURE';
+}
+
 export const REPORT_LIMITATIONS: readonly string[] = [
   'Synthetic users are simulated agents. They are not real beta users and do not represent market demand or purchasing intent.',
   'Every number here is computed from recorded session events. Interpretation is labelled and never replaces the evidence.',
@@ -154,22 +161,18 @@ function retryFinding(
   limit: number,
 ): ReportFinding | null {
   if (metrics.retry.sessions_with_retry === 0) return null;
-  const retrySessionIds = [...bySession.entries()]
-    .filter(([, events]) => events.some(event => event.agent_reason_code === 'RETRYING'))
-    .map(([sessionId]) => sessionId)
-    .sort((a, b) => a.localeCompare(b));
   return {
     finding_id: 'retry-friction',
     kind: 'FRICTION',
-    title: `${metrics.retry.sessions_with_retry} sessions retried in the same state`,
+    title: `${metrics.retry.sessions_with_retry} sessions showed retry or recovery behavior`,
     detail: `${metrics.retry.total_retries} retries and ${metrics.friction.total_signals} friction signals were recorded `
       + `across ${metrics.friction.sessions_with_friction} sessions. `
-      + 'Each pointer below is the first recorded retry in a session.',
+      + 'Each pointer below is the first recorded retry/recovery signal in a session.',
     metric_refs: ['retry.sessions_with_retry', 'retry.total_retries', 'friction.total_signals'],
     evidence: firstMatchingEvidence(
-      retrySessionIds,
+      metrics.funnel.flatMap(step => step.supporting_session_ids).concat(metrics.outcomes.map(o => o.session_id)),
       bySession,
-      event => event.agent_reason_code === 'RETRYING',
+      event => isRetryEvidence(event),
       limit,
     ),
     interpretation: null,
