@@ -42,6 +42,57 @@ export function median(values: readonly number[]): number | null {
   return Math.round((lower + upper) / 2);
 }
 
+function assertMetricInputIntegrity(input: ComputeRunMetricsInput): void {
+  const checkpointSet = new Set(input.checkpoint_plan);
+  if (checkpointSet.size !== input.checkpoint_plan.length) {
+    throw new Error('Metric input rejected: checkpoint plan contains duplicates.');
+  }
+
+  const sessionIds = new Set<string>();
+  const personaIds = new Set<string>();
+  for (const persona of input.personas) {
+    if (personaIds.has(persona.persona_id)) {
+      throw new Error(`Metric input rejected: duplicate persona ID ${persona.persona_id}.`);
+    }
+    personaIds.add(persona.persona_id);
+  }
+
+  const sessionById = new Map<string, SessionRecord>();
+  for (const session of input.sessions) {
+    if (session.run_id !== input.run_id) {
+      throw new Error(`Metric input rejected: session ${session.session_id} belongs to another run.`);
+    }
+    if (sessionIds.has(session.session_id)) {
+      throw new Error(`Metric input rejected: duplicate session ID ${session.session_id}.`);
+    }
+    if (!personaIds.has(session.persona_id)) {
+      throw new Error(`Metric input rejected: session ${session.session_id} references an unknown persona.`);
+    }
+    if (!Number.isSafeInteger(session.action_count) || session.action_count < 0
+      || !Number.isSafeInteger(session.elapsed_ms) || session.elapsed_ms < 0) {
+      throw new Error(`Metric input rejected: session ${session.session_id} has invalid counters.`);
+    }
+    sessionIds.add(session.session_id);
+    sessionById.set(session.session_id, session);
+  }
+
+  for (const event of input.events) {
+    const session = sessionById.get(event.session_id);
+    if (session === undefined) {
+      throw new Error(`Metric input rejected: event references unknown session ${event.session_id}.`);
+    }
+    if (event.run_id !== input.run_id) {
+      throw new Error(`Metric input rejected: event for ${event.session_id} belongs to another run.`);
+    }
+    if (event.persona_id !== session.persona_id) {
+      throw new Error(`Metric input rejected: event persona does not match session ${event.session_id}.`);
+    }
+    if (!Number.isFinite(event.elapsed_ms) || event.elapsed_ms < 0) {
+      throw new Error(`Metric input rejected: event for ${event.session_id} has invalid elapsed time.`);
+    }
+  }
+}
+
 function hasTechnicalFailure(event: BehaviorEvent): boolean {
   return event.result === 'ERROR' || event.console_error !== null || event.network_error !== null;
 }
@@ -85,6 +136,7 @@ function furthestCheckpointIndex(
  * model output, and no interpolation: an empty denominator reports null, not 0%.
  */
 export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
+  assertMetricInputIntegrity(input);
   const eventsBySession = new Map<string, BehaviorEvent[]>();
   for (const event of input.events) {
     const bucket = eventsBySession.get(event.session_id);
