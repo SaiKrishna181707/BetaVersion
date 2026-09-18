@@ -1,80 +1,92 @@
 # Infrastructure
 
-**Status: intended topology and boundaries only.** There is no CDK application and no policy document in this
-repository yet, and that is deliberate.
+## Current status
 
-The project targets AWS, but this phase must not invent AWS APIs or SDK usage. Writing a stack against
-remembered service action names would produce code that typechecks and then fails on deploy, and it would hide
-which permissions the design actually needs. So this directory records the topology and the least-privilege
-boundaries, and `infra/cdk` lands when each service surface can be verified against current AWS documentation.
+The repository now contains a real Nova Act + AgentCore Browser execution worker in
+`services/nova-worker/` and an Amplify Hosting build specification. Full control-plane infrastructure
+(Step Functions/DynamoDB/S3/CDK) is still a release gate rather than something the repository pretends is
+already deployed.
 
-## Intended topology
+## Submission topology
 
 | Layer | Service | Purpose |
 | --- | --- | --- |
-| Delivery | CloudFront + S3 | Serves the built front end from `apps/web` |
-| Control plane | API Gateway + Lambda | Validation, cost estimation, run creation, status |
-| Orchestration | Step Functions | Batches sessions, enforces the run cap between batches |
-| Execution | Lambda + browser runtime | Runs one synthetic session per isolated browser context |
-| Interpretation | Amazon Bedrock (Nova) | Clusters behaviour and writes narrative only |
-| Metadata | DynamoDB | Runs, sessions, events, metrics |
-| Evidence | S3 | Screenshots, recordings, event logs, generated reports |
-| Observability | CloudWatch | Logs, metrics, alarms, cost anomaly detection |
+| Delivery | AWS Amplify Hosting | Builds and serves `apps/web` from `main` |
+| Agent reasoning | Amazon Nova Act | Chooses browser actions from persona + objective |
+| Browser | Amazon Bedrock AgentCore Browser | Isolated managed browser, Live View/recording |
+| Control plane | API Gateway + Lambda (target) | Run validation, creation, status |
+| Orchestration | Step Functions (target) | Controlled 1 → 5 → 20 → 100 session dispatch |
+| Metadata | DynamoDB (target) | Runs, sessions, events, metrics |
+| Evidence | S3 (target) | Screenshots, recordings, event logs, reports |
+| Observability | CloudWatch | Logs, alarms and cost controls |
 
-`amazon-nova-act` and AgentCore Browser are the intended execution runtime. The interface they must satisfy is
-already fixed in `packages/contracts/src/execution.ts` (`SessionExecutorPort`), so the runtime choice stays
-behind a port and does not leak into analytics or reporting.
+## Real execution today
 
-## Data flow
+`services/nova-worker/worker.py`:
 
-```
-Browser ──▶ CloudFront ──▶ S3 (static build)
-   │
-   └─▶ API Gateway ──▶ control-plane Lambda ──▶ DynamoDB (runs)
-                                  │
-                                  └─▶ Step Functions ──▶ batch dispatch
-                                                             │
-                                          session Lambda ──▶ browser runtime
-                                                             │
-                                                     S3 (evidence) + DynamoDB (events)
-                                                             │
-                              analytics ──▶ DynamoDB (metrics) ──▶ report ──▶ S3
+1. validates one session plan,
+2. rejects unsafe/non-authorized targets before cloud execution,
+3. enters a Nova Act IAM workflow,
+4. creates an AgentCore Browser session,
+5. connects Nova Act to the browser over CDP,
+6. executes the goal with max-step/time limits,
+7. returns an explicit result or explicit failure.
+
+This is the first production-shaped AWS path. The next infrastructure milestone is persistence/orchestration,
+not another local browser implementation.
+
+## Target data flow
+
+```text
+Amplify frontend
+      ↓
+API Gateway
+      ↓
+control Lambda ── run/session metadata ── DynamoDB
+      ↓
+Step Functions
+      ↓ controlled batches
+Nova Act workflow
+      ↓
+AgentCore Browser
+      ↓
+trace / recording / screenshots
+      ↓
+S3 + event adapter
+      ↓
+deterministic analytics
+      ↓
+report
 ```
 
 ## IAM boundaries
 
-One role per service. No shared role. No `*` in an `Action`, and resources scoped by ARN to the specific table,
-bucket prefix, state machine, or model.
+Use separate roles for the control plane, session worker, analytics and report paths. Session execution should
+have only the Nova Act/AgentCore permissions and resources needed for its own run. Do not use wildcard
+administrative policies in the submitted architecture.
 
-| Role | May | Must not |
-| --- | --- | --- |
-| Control plane | Read/write the runs table; start the named state machine | Invoke Bedrock, read evidence objects |
-| Session worker | Write events and evidence under its own run prefix; read its own session plan | Read other runs' artefacts, start executions |
-| Analytics | Read events and sessions; write metrics | Write evidence, start executions |
-| Report | Read metrics; write reports; invoke the narrator model only | Read raw evidence beyond cited pointers, write metrics |
-| Orchestrator | Invoke the session worker, read the runs table | Invoke Bedrock |
-
-`infra/policies/README.md` records the authoring rules those documents must follow.
+The real worker uses AWS IAM workflow authentication; it intentionally does not depend on a Nova Act API key.
 
 ## Guardrails as infrastructure controls
 
 | Guardrail | Control |
 | --- | --- |
-| `GLOBAL_SPEND_CEILING_USD` | Account-level budget and CloudWatch cost alarm; control plane refuses a run that would cross it |
-| `DEFAULT_RUN_HARD_CAP_USD` | Persisted on the run; re-read before each batch dispatch |
-| `DEFAULT/MAX_SESSION_SECONDS` | Passed in the session plan and enforced with a hard runtime timeout |
-| `DEFAULT/MAX_BATCH_SIZE` | Maximum `Map` concurrency in the Step Functions state machine |
-| `MAX_ACTIONS` | Session plan ceiling; the worker stops the session when reached |
-| `MAX_RETRIES_SAME_STATE` | Enforced inside the session loop, not by Step Functions retries |
-| Authorized domains only | Validated at the API boundary and re-checked in `reviewSessionPlan` |
+| Global spend ceiling | AWS Budget/alert plus control-plane admission check |
+| Per-run hard cap | Persisted run value, checked before every batch |
+| Session maximum | Worker/agent timeout |
+| Batch maximum | Step Functions Map/concurrency configuration |
+| Action maximum | Nova Act `max_steps` |
+| Authorized targets | API validation plus worker-side host allowlist |
+| Destructive actions | Agent prompt/policy boundary plus staging-account design |
 
-## Before implementing, verify against current AWS documentation
+## Deployment order
 
-1. The exact service action namespace and resource ARNs for the browser runtime (Nova Act and AgentCore Browser).
-2. Whether Bedrock model invocation needs a provisioned throughput or a cross-region inference profile ARN, and
-   how that is expressed in a policy resource.
-3. Current DynamoDB and S3 pricing, plus Nova Act metering, to replace the placeholder rates in
-   `HANDOFF_COST_MODEL` (`docs/cost-model.md` explains the arithmetic).
-4. Whether Step Functions or the worker owns the session timeout, and how a cancelled execution terminates a
-   live browser session.
-5. Bedrock data-retention and logging behaviour, given the rule that no secrets may reach a prompt or a log.
+1. Merge only green CI into `main`.
+2. Connect `main` to Amplify as a monorepo app at `apps/web`.
+3. Configure/verify the Nova Act workflow definition in `us-east-1`.
+4. Execute one owned HTTPS staging target through AgentCore Browser.
+5. Capture Live View/recording evidence.
+6. Add persistence and batch orchestration only after one real session works.
+7. Scale 1 → 5 → 20 → 100.
+
+See `docs/aws-execution.md` and `docs/submission-checklist.md`.
