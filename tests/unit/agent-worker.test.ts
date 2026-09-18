@@ -43,6 +43,30 @@ test('rejects a plan that exceeds the action, duration, or budget limits', () =>
   assert.ok(reasons.some(reason => reason.includes('remaining run budget')));
 });
 
+test('rejects path-traversal identifiers before artifact paths are built', () => {
+  const reasons = reviewSessionPlan(planFixture({
+    run_id: '../escape',
+    session_id: 'session/../../escape',
+    persona: personaFixture('../persona', 'COHORT_A'),
+  }));
+  assert.ok(reasons.some(reason => reason.includes('Run ID')));
+  assert.ok(reasons.some(reason => reason.includes('Session ID')));
+  assert.ok(reasons.some(reason => reason.includes('Persona ID')));
+});
+
+test('rejects unsafe or duplicate checkpoint names', () => {
+  const unsafe = reviewSessionPlan(planFixture({ checkpoint_plan: ['OPEN_APP', '../../escape'] }));
+  assert.ok(unsafe.some(reason => reason.includes('Checkpoint names')));
+
+  const duplicate = reviewSessionPlan(planFixture({ checkpoint_plan: ['OPEN_APP', 'OPEN_APP'] }));
+  assert.ok(duplicate.some(reason => reason.includes('unique and ordered')));
+});
+
+test('rejects fractional remaining budget cents', () => {
+  const reasons = reviewSessionPlan(planFixture({ remaining_budget_cents: 1.5 }));
+  assert.ok(reasons.some(reason => reason.includes('whole-cent')));
+});
+
 test('rejects a target outside the authorized origins', () => {
   const reasons = reviewSessionPlan(planFixture({ target_url: 'https://example.com/' }));
   assert.equal(reasons.length, 1);
