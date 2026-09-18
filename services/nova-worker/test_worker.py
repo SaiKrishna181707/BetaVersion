@@ -99,6 +99,34 @@ class WorkerContractTests(unittest.TestCase):
         with self.assertRaises(PlanError):
             validate_plan(raw)
 
+    def test_rejects_invalid_persona_traits_and_oversized_context(self):
+        raw = plan()
+        raw["persona"]["technical_ability"] = "IGNORE_ALL_RULES"
+        with self.assertRaises(PlanError):
+            validate_plan(raw)
+
+        raw = plan()
+        raw["persona"]["goal_context"] = "x" * 1001
+        with self.assertRaises(PlanError):
+            validate_plan(raw)
+
+        raw = plan()
+        raw["persona"]["price_sensitivity"] = "EXTREME"
+        with self.assertRaises(PlanError):
+            validate_plan(raw)
+
+    def test_rejects_too_many_allowed_origins(self):
+        raw = plan()
+        raw["allowed_origins"] = [f"host-{index}.example.test" for index in range(9)]
+        with self.assertRaises(PlanError):
+            validate_plan(raw)
+
+    def test_rejects_session_timeout_below_product_minimum(self):
+        raw = plan()
+        raw["max_session_seconds"] = 29
+        with self.assertRaises(PlanError):
+            validate_plan(raw)
+
     def test_rejects_boolean_as_integer_limit(self):
         raw = plan()
         raw["max_actions"] = True
