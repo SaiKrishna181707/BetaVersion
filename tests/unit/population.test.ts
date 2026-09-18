@@ -43,6 +43,15 @@ test('honours an explicit trait mix', () => {
   assert.ok(personas.every(persona => persona.technical_ability === 'LOW'));
 });
 
+test('handles extreme finite trait weights without numeric overflow', () => {
+  const personas = buildCohort({
+    ...spec,
+    technical_ability_mix: { LOW: Number.MAX_VALUE, MEDIUM: Number.MAX_VALUE, HIGH: Number.MAX_VALUE },
+  });
+  assert.equal(personas.length, spec.size);
+  assert.ok(personas.every(persona => ['LOW', 'MEDIUM', 'HIGH'].includes(persona.technical_ability)));
+});
+
 test('refuses to build an out-of-range population', () => {
   assert.throws(() => buildCohort({ ...spec, size: 0 }), /1 to 100/);
   assert.throws(() => buildCohort({ ...spec, size: 101 }), /1 to 100/);
