@@ -65,10 +65,15 @@ export function buildCohort(spec: PopulationSpec): SyntheticPersona[] {
     throw new Error(`A population needs a whole number of synthetic users from 1 to ${GUARDRAILS.MAX_USERS}.`);
   }
   const seed = spec.population_seed.trim();
-  if (seed.length < 3) throw new Error('A population seed of at least 3 characters is required.');
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/.test(seed)) {
+    throw new Error('Population seed must be 3–64 ASCII letters, numbers, underscores, or hyphens.');
+  }
   const cohort = spec.cohort.trim();
-  if (cohort.length === 0) throw new Error('A cohort label is required.');
+  if (cohort.length === 0 || cohort.length > 80) throw new Error('A cohort label of 1–80 characters is required.');
   const goal_context = spec.goal_context.trim();
+  if (goal_context.length < 3 || goal_context.length > 1000) {
+    throw new Error('Goal context must be 3–1000 characters.');
+  }
 
   const random = createRandom(hashSeed(seed));
   const width = Math.max(3, String(spec.size).length);
