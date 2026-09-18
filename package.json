@@ -1,0 +1,38 @@
+{
+  "name": "synthetic-beta",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @synthetic-beta/web",
+    "build": "npm run typecheck && npm run build --workspace @synthetic-beta/web",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/unit/*.test.ts tests/integration/*.test.ts",
+    "lint": "eslint .",
+    "check": "npm run lint && npm run test && npm run build",
+    "preview": "npm run preview --workspace @synthetic-beta/web",
+    "dev:demo": "node demo-target/serve.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^6.1.1",
+    "globals": "^15.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^7.1.0"
+  }
+}
