@@ -1,18 +1,21 @@
 import {
   GUARDRAILS,
+  SESSION_ACTION_COST_CENTS,
   observationStateKey,
+  type ActionResult,
   type AgentAction,
   type AgentPolicyPort,
-  type BehaviorEvent,
   type HistoryEntry,
+  type PageObservation,
   type SessionPlan,
   type SessionResult,
-  type PageObservation,
   type SessionStopReason,
-  type SessionStatus,
+  type TraceSource,
 } from '@synthetic-beta/contracts';
 import { assertSessionPlanWithinGuardrails } from '../session-executor';
 import type { BrowserPagePort } from './page-port';
+import { TraceRecorder } from '../trace/trace-recorder';
+import { interpretSessionTrace } from '../trace/trace-adapter';
 
 export interface SessionLoopOptions {
   page: BrowserPagePort;
@@ -22,9 +25,17 @@ export interface SessionLoopOptions {
   captureScreenshots?: boolean;
   /** Cancels the session at the next decision boundary. */
   signal?: AbortSignal;
+  /**
+   * Evidence stream to append to. The executor may pass the recorder it also gave the page,
+   * so browser-observed facts and agent-observed facts land in one ordered trace.
+   */
+  trace?: TraceRecorder;
+  trace_source?: TraceSource;
+  /** Replayable artefact for this session, recorded in the trace when the executor knows it. */
+  replay_ref?: string | null;
 }
 
-const STATUS_BY_REASON: Record<SessionStopReason, SessionStatus> = {
+const STATUS_BY_REASON: Record<SessionStopReason, 'COMPLETED' | 'ABANDONED' | 'TIMED_OUT' | 'FAILED' | 'CANCELLED'> = {
   OBJECTIVE_COMPLETE: 'COMPLETED',
   ABANDONED: 'ABANDONED',
   TIMED_OUT: 'TIMED_OUT',
@@ -35,8 +46,11 @@ const STATUS_BY_REASON: Record<SessionStopReason, SessionStatus> = {
   CANCELLED: 'CANCELLED',
 };
 
-/** Deterministic per-action spend. Real metering replaces this; the loop only needs a number. */
-const ACTION_COST_CENTS = 1;
+interface ActionOutcomeRecord {
+  result: ActionResult;
+  console_error: string | null;
+  network_error: string | null;
+}
 
 function originOf(url: string): string | null {
   try {
@@ -52,10 +66,6 @@ function isAuthorized(url: string, allowed: readonly string[]): boolean {
   return allowed.some(entry => entry.trim().toLowerCase() === host);
 }
 
-function actionTypeOf(action: AgentAction): BehaviorEvent['action_type'] {
-  return action.type;
-}
-
 function descriptorFor(action: AgentAction, lookup: Map<string, string | null>): string | null {
   if (action.type === 'click' || action.type === 'type') return lookup.get(action.ref) ?? null;
   return null;
@@ -64,113 +74,145 @@ function descriptorFor(action: AgentAction, lookup: Map<string, string | null>):
 /**
  * The deterministic half of a session: timers, action budget, telemetry, screenshots,
  * duplicate-state detection, origin safety, and outcome classification. Judgment is
- * delegated to the policy; nothing here invents behavior.
+ * delegated to the policy.
+ *
+ * The loop records evidence into a trace and nothing else: `BehaviorEvent[]` comes from
+ * `interpretSessionTrace` over that trace, so every reported event has a recorded browser
+ * fact behind it.
  */
 export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOptions): Promise<SessionResult> {
   assertSessionPlanWithinGuardrails(plan);
   const now = options.now ?? (() => Date.now());
+  const trace = options.trace ?? new TraceRecorder({
+    run_id: plan.run_id,
+    session_id: plan.session_id,
+    persona_id: plan.persona.persona_id,
+    source: options.trace_source ?? 'LOCAL_PLAYWRIGHT',
+    target_url: plan.target_url,
+    now,
+  });
   const startedAt = now();
-  const startedIso = new Date(startedAt).toISOString();
-  const events: BehaviorEvent[] = [];
   const history: HistoryEntry[] = [];
   const reached = new Set<string>();
   const spent = { cents: 0 };
   const deadline = startedAt + plan.max_session_seconds * 1000;
-  let lastEventIndex = -1;
+  let attempts = 0;
+  let sequence = 0;
   let stopReason: SessionStopReason | null = null;
+  let observedUrl: string | null = null;
 
-  const record = (event: Omit<BehaviorEvent, 'run_id' | 'session_id' | 'persona_id'>) => {
-    events.push({
-      run_id: plan.run_id,
+  const settle = (status: 'COMPLETED' | 'ABANDONED' | 'TIMED_OUT' | 'FAILED' | 'CANCELLED'): SessionResult => {
+    const interpretation = interpretSessionTrace(trace.snapshot());
+    return {
       session_id: plan.session_id,
-      persona_id: plan.persona.persona_id,
-      ...event,
-    });
-    lastEventIndex = events.length - 1;
+      status: interpretation.truncated ? status : interpretation.status,
+      finish_reason: interpretation.finish_reason,
+      finished_at: interpretation.finished_at,
+      events: interpretation.events,
+      replay_ref: interpretation.replay_ref,
+      trace_ref: null,
+    };
   };
 
-  /** One capture after the loop, taken while the browser is still open. */
-  const captureFinal = async (): Promise<void> => {
+  const finish = (): void => {
+    trace.record({
+      kind: 'SESSION_END',
+      status: STATUS_BY_REASON[stopReason ?? 'TECHNICAL_ERROR'],
+      finish_reason: stopReason ?? 'TECHNICAL_ERROR',
+      replay_ref: options.replay_ref ?? null,
+      note: null,
+    });
+  };
+
+  /** Records an attempt. Its outcome is a separate, correlated entry. */
+  const recordAttempt = (input: {
+    action_type: AgentAction['type'];
+    agent_reason_code: HistoryEntry['agent_reason_code'];
+    target_descriptor: string | null;
+    rationale: string | null;
+    sensitive_input?: boolean;
+  }): number => {
+    sequence += 1;
+    attempts += 1;
+    trace.record({
+      kind: 'ACTION',
+      seq: sequence,
+      action_type: input.action_type,
+      target_descriptor: input.target_descriptor,
+      agent_reason_code: input.agent_reason_code,
+      rationale: input.rationale,
+      sensitive_input: input.sensitive_input ?? false,
+    });
+    return sequence;
+  };
+
+  const recordOutcome = (seq: number, outcome: ActionOutcomeRecord, durationMs: number): void => {
+    trace.record({
+      kind: 'ACTION_RESULT',
+      seq,
+      result: outcome.result,
+      console_error: outcome.console_error,
+      network_error: outcome.network_error,
+      duration_ms: durationMs,
+    });
+    spent.cents += SESSION_ACTION_COST_CENTS;
+  };
+
+  /** Reads the page and records the navigation and screen it reported. */
+  const observe = async (): Promise<PageObservation> => {
+    const observation = await options.page.observe();
+    if (observation.url !== observedUrl) {
+      trace.record({
+        kind: 'NAVIGATION',
+        url: observation.url,
+        title: observation.page_title,
+        route: observation.route,
+        trigger: observedUrl === null ? 'OPEN' : 'ACTION',
+      });
+      observedUrl = observation.url;
+    }
+    trace.record({
+      kind: 'STATE',
+      url: observation.url,
+      title: observation.page_title,
+      route: observation.route,
+      state_key: observationStateKey(observation),
+    });
+    return observation;
+  };
+
+  /** Failure evidence: the capture is attached to the attempt that failed. */
+  const captureForAttempt = async (seq: number, name: string): Promise<void> => {
     if (!options.captureScreenshots) return;
     try {
-      await options.page.screenshot(`final-${events.length}`);
+      const ref = await options.page.screenshot(name);
+      if (ref !== null) trace.record({ kind: 'SCREENSHOT', name, ref, seq });
     } catch { /* A missing capture must not fail a session. */ }
   };
 
   /** Ending on one screen counts as abandonment, not as a technical failure. */
-  const recordAbandon = (observation: PageObservation, stateKey: string): void => {
-    record({
-      timestamp: new Date(now()).toISOString(),
-      elapsed_ms: Math.max(0, now() - startedAt),
-      url: observation.url,
-      page_title: observation.page_title,
-      route: observation.route,
+  const recordAbandon = async (reason: string): Promise<void> => {
+    const seq = recordAttempt({
       action_type: 'abandon',
-      target_descriptor: null,
-      result: 'SUCCESS',
-      screenshot_ref: null,
-      console_error: null,
-      network_error: null,
-      task_checkpoint: null,
       agent_reason_code: 'PATIENCE_EXHAUSTED',
-    });
-    history.push({
-      action_type: 'abandon',
       target_descriptor: null,
-      result: 'SUCCESS',
-      agent_reason_code: 'PATIENCE_EXHAUSTED',
-      state_key: stateKey,
-      task_checkpoint: null,
+      rationale: reason,
     });
+    recordOutcome(seq, { result: 'SUCCESS', console_error: null, network_error: null }, 0);
+    await captureForAttempt(seq, `abandon-${seq}`);
   };
 
   try {
     await options.page.open(plan.target_url);
   } catch (error) {
-    record({
-      timestamp: new Date(now()).toISOString(),
-      elapsed_ms: Math.max(0, now() - startedAt),
-      url: plan.target_url,
-      page_title: '',
-      route: '/',
-      action_type: 'navigate',
-      target_descriptor: null,
-      result: 'ERROR',
-      screenshot_ref: null,
-      console_error: error instanceof Error ? error.message : 'Failed to open the target.',
-      network_error: null,
-      task_checkpoint: null,
-      agent_reason_code: 'SAFETY_STOP',
+    trace.record({
+      kind: 'CONSOLE_ERROR',
+      message: error instanceof Error ? error.message : 'Failed to open the target.',
     });
-    return {
-      session_id: plan.session_id,
-      status: 'FAILED',
-      finish_reason: 'TECHNICAL_ERROR',
-      finished_at: new Date(now()).toISOString(),
-      events,
-      replay_ref: null,
-    };
+    stopReason = 'TECHNICAL_ERROR';
+    finish();
+    return settle('FAILED');
   }
-
-  record({
-    timestamp: startedIso,
-    elapsed_ms: 0,
-    url: plan.target_url,
-    page_title: '',
-    route: '/',
-    action_type: 'navigate',
-    target_descriptor: null,
-    result: 'SUCCESS',
-    screenshot_ref: null,
-    console_error: null,
-    network_error: null,
-    task_checkpoint: null,
-    agent_reason_code: 'EXPLORING',
-  });
-
-  let lastUrl = plan.target_url;
-  let lastRoute = '/';
-  let lastTitle = '';
 
   for (;;) {
     if (options.signal?.aborted === true) {
@@ -181,7 +223,7 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
       stopReason = 'TIMED_OUT';
       break;
     }
-    if (events.length - 1 >= plan.max_actions) {
+    if (attempts >= plan.max_actions) {
       stopReason = 'ACTION_LIMIT';
       break;
     }
@@ -190,49 +232,35 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
       break;
     }
 
-    let observation;
+    let observation: PageObservation;
     try {
-      observation = await options.page.observe();
+      observation = await observe();
     } catch (error) {
-      record({
-        timestamp: new Date(now()).toISOString(),
-        elapsed_ms: Math.max(0, now() - startedAt),
-        url: lastUrl,
-        page_title: lastTitle,
-        route: lastRoute,
+      const seq = recordAttempt({
         action_type: 'wait',
+        agent_reason_code: 'CONFUSED',
         target_descriptor: null,
+        rationale: 'the page could not be read',
+      });
+      recordOutcome(seq, {
         result: 'ERROR',
-        screenshot_ref: null,
         console_error: error instanceof Error ? error.message : 'Failed to read the page.',
         network_error: null,
-        task_checkpoint: null,
-        agent_reason_code: 'CONFUSED',
-      });
+      }, 0);
+      await captureForAttempt(seq, `observe-failed-${seq}`);
       stopReason = 'TECHNICAL_ERROR';
       break;
     }
 
-    lastUrl = observation.url;
-    lastRoute = observation.route;
-    lastTitle = observation.page_title;
-
     if (!isAuthorized(observation.url, plan.allowed_origins)) {
-      record({
-        timestamp: new Date(now()).toISOString(),
-        elapsed_ms: Math.max(0, now() - startedAt),
-        url: observation.url,
-        page_title: observation.page_title,
-        route: observation.route,
+      const seq = recordAttempt({
         action_type: 'wait',
-        target_descriptor: null,
-        result: 'BLOCKED',
-        screenshot_ref: null,
-        console_error: null,
-        network_error: null,
-        task_checkpoint: null,
         agent_reason_code: 'SAFETY_STOP',
+        target_descriptor: null,
+        rationale: 'the browser left the authorized origin',
       });
+      recordOutcome(seq, { result: 'BLOCKED', console_error: null, network_error: null }, 0);
+      await captureForAttempt(seq, `safety-stop-${seq}`);
       stopReason = 'SAFETY_STOP';
       break;
     }
@@ -240,14 +268,13 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
     for (const checkpoint of observation.checkpoints) {
       if (!plan.checkpoint_plan.includes(checkpoint) || reached.has(checkpoint)) continue;
       reached.add(checkpoint);
-      const target = events[lastEventIndex];
-      if (target !== undefined) target.task_checkpoint = checkpoint;
+      let screenshotRef: string | null = null;
       if (options.captureScreenshots) {
         try {
-          const ref = await options.page.screenshot(`checkpoint-${checkpoint}`);
-          if (target !== undefined && ref !== null) target.screenshot_ref = ref;
+          screenshotRef = await options.page.screenshot(`checkpoint-${checkpoint}`);
         } catch { /* A missing screenshot must not fail a session. */ }
       }
+      trace.record({ kind: 'CHECKPOINT', checkpoint, screenshot_ref: screenshotRef });
     }
 
     const finalCheckpoint = plan.checkpoint_plan.at(-1);
@@ -266,7 +293,7 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
     // A ceiling the persona cannot argue with: a session that repeats one screen more than the
     // handoff allows has stopped making progress, whatever the policy would try next.
     if (repeats >= GUARDRAILS.MAX_RETRIES_SAME_STATE) {
-      recordAbandon(observation, stateKey);
+      await recordAbandon('Repeated the same screen without making progress.');
       stopReason = 'ABANDONED';
       break;
     }
@@ -282,69 +309,61 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
     });
 
     if (decision.action.type === 'abandon') {
-      recordAbandon(observation, stateKey);
+      await recordAbandon(decision.action.reason);
       stopReason = 'ABANDONED';
       break;
     }
 
-    const beforeStateKey = stateKey;
-    const beforeUrl = observation.url;
-    let outcome;
+    const actionStartedAt = now();
+    const descriptor = descriptorFor(decision.action, byRef);
+    const seq = recordAttempt({
+      action_type: decision.action.type,
+      agent_reason_code: decision.reason_code,
+      target_descriptor: descriptor,
+      rationale: decision.rationale,
+      sensitive_input: decision.sensitive_input === true,
+    });
+
+    let outcome: ActionOutcomeRecord;
     try {
       outcome = await options.page.perform(decision.action);
     } catch (error) {
       outcome = {
-        result: 'ERROR' as const,
+        result: 'ERROR',
         console_error: error instanceof Error ? error.message : 'Action failed.',
         network_error: null,
       };
     }
 
-    spent.cents += ACTION_COST_CENTS;
     let result = outcome.result;
     if (result === 'SUCCESS' && decision.action.type === 'click') {
       try {
-        const after = await options.page.observe();
-        lastUrl = after.url;
-        lastRoute = after.route;
-        lastTitle = after.page_title;
-        if (observationStateKey(after) === beforeStateKey && after.url === beforeUrl) result = 'NO_CHANGE';
+        const after = await observe();
+        if (observationStateKey(after) === stateKey && after.url === observation.url) result = 'NO_CHANGE';
       } catch { /* A failed re-read is recorded as a plain success; the next loop reads again. */ }
     }
 
-    record({
-      timestamp: new Date(now()).toISOString(),
-      elapsed_ms: Math.max(0, now() - startedAt),
-      url: lastUrl,
-      page_title: lastTitle,
-      route: lastRoute,
-      action_type: actionTypeOf(decision.action),
-      target_descriptor: descriptorFor(decision.action, byRef),
-      result,
-      screenshot_ref: null,
-      console_error: outcome.console_error,
-      network_error: outcome.network_error,
-      task_checkpoint: null,
-      agent_reason_code: decision.reason_code,
-    });
+    recordOutcome(seq, { ...outcome, result }, Math.max(0, now() - actionStartedAt));
+    if (result === 'ERROR' || result === 'BLOCKED' || result === 'VALIDATION_FAILURE') {
+      await captureForAttempt(seq, `failure-${seq}`);
+    }
     history.push({
       action_type: decision.action.type,
-      target_descriptor: descriptorFor(decision.action, byRef),
+      target_descriptor: descriptor,
       result,
       agent_reason_code: decision.reason_code,
-      state_key: beforeStateKey,
+      state_key: stateKey,
       task_checkpoint: null,
     });
   }
 
-  await captureFinal();
-  const reason = stopReason ?? 'TECHNICAL_ERROR';
-  return {
-    session_id: plan.session_id,
-    status: STATUS_BY_REASON[reason],
-    finish_reason: reason,
-    finished_at: new Date(now()).toISOString(),
-    events,
-    replay_ref: null,
-  };
+  if (options.captureScreenshots) {
+    try {
+      const ref = await options.page.screenshot(`final-${attempts}`);
+      if (ref !== null) trace.record({ kind: 'SCREENSHOT', name: `final-${attempts}`, ref, seq: null });
+    } catch { /* A missing capture must not fail a session. */ }
+  }
+
+  finish();
+  return settle(STATUS_BY_REASON[stopReason ?? 'TECHNICAL_ERROR']);
 }

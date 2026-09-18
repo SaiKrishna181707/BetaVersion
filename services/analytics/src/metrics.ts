@@ -4,10 +4,20 @@ import {
   type EvidenceRate,
   type FunnelStep,
   type RunMetrics,
+  type SegmentDimension,
+  type SegmentMetrics,
   type SessionOutcome,
   type SessionRecord,
   type SyntheticPersona,
 } from '@synthetic-beta/contracts';
+
+/** Fixed order, so two runs with the same events always list their segments identically. */
+const SEGMENT_DIMENSIONS: readonly SegmentDimension[] = [
+  'technical_ability',
+  'product_familiarity',
+  'patience',
+  'device_class',
+];
 
 export interface ComputeRunMetricsInput {
   run_id: string;
@@ -99,6 +109,7 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
   const completed = idsWhere(outcome => outcome.status === 'COMPLETED');
   const abandoned = idsWhere(outcome => outcome.status === 'ABANDONED');
   const timedOut = idsWhere(outcome => outcome.status === 'TIMED_OUT');
+  const stopped = idsWhere(outcome => outcome.status === 'FAILED');
   const failed = idsWhere(outcome => outcome.status === 'FAILED' || outcome.technical_failures > 0);
 
   const timeToValue = outcomes
@@ -140,6 +151,8 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
     };
   });
 
+  const segments = segmentMetrics(outcomes, input.personas);
+
   return {
     run_id: input.run_id,
     session_count: total,
@@ -147,6 +160,7 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
     completion: ratio(completed.length, total, completed),
     abandonment: ratio(abandoned.length, total, abandoned),
     timeout: ratio(timedOut.length, total, timedOut),
+    failure: ratio(stopped.length, total, stopped),
     technical_failure: ratio(failed.length, total, failed),
     median_time_to_value_ms: median(timeToValue),
     time_to_value_sample_size: timeToValue.length,
@@ -160,6 +174,51 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
     },
     funnel,
     cohorts,
+    segments,
     outcomes,
   };
+}
+
+/**
+ * Splits the same outcomes by the persona traits the run actually varied. A trait that only
+ * ever took one value still produces one segment row, so "we only tested one kind of user"
+ * is visible rather than implied.
+ */
+function segmentMetrics(
+  outcomes: readonly SessionOutcome[],
+  personas: readonly SyntheticPersona[],
+): SegmentMetrics[] {
+  const personaById = new Map(personas.map(persona => [persona.persona_id, persona]));
+  const rows: SegmentMetrics[] = [];
+  for (const dimension of SEGMENT_DIMENSIONS) {
+    const members = new Map<string, SessionOutcome[]>();
+    for (const outcome of outcomes) {
+      const persona = personaById.get(outcome.persona_id);
+      const value = persona === undefined ? 'UNASSIGNED' : String(persona[dimension]);
+      const bucket = members.get(value);
+      if (bucket) bucket.push(outcome);
+      else members.set(value, [outcome]);
+    }
+    for (const [segment, group] of [...members].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const completedHere = group
+        .filter(outcome => outcome.status === 'COMPLETED')
+        .map(outcome => outcome.session_id);
+      const abandonedHere = group
+        .filter(outcome => outcome.status === 'ABANDONED')
+        .map(outcome => outcome.session_id);
+      const timedOutHere = group
+        .filter(outcome => outcome.status === 'TIMED_OUT')
+        .map(outcome => outcome.session_id);
+      rows.push({
+        dimension,
+        segment,
+        session_count: group.length,
+        completion: ratio(completedHere.length, group.length, completedHere),
+        abandonment: ratio(abandonedHere.length, group.length, abandonedHere),
+        timeout: ratio(timedOutHere.length, group.length, timedOutHere),
+        median_elapsed_ms: median(group.map(outcome => outcome.elapsed_ms)),
+      });
+    }
+  }
+  return rows;
 }

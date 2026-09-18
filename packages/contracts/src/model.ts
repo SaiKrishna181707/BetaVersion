@@ -8,13 +8,34 @@ export const GUARDRAILS = {
   MAX_ACTIONS: 40,
   MAX_RETRIES_SAME_STATE: 5,
   MAX_USERS: 100,
+  /** How many times one session may be re-attempted after a technical failure. */
+  MAX_SESSION_ATTEMPTS: 2,
+  /** Absolute ceiling for one run, however many batches and attempts it needs. */
+  MAX_RUN_TIMEOUT_MS: 45 * 60 * 1000,
 } as const;
 
 export const SESSION_STATUSES = [
   'QUEUED', 'PROVISIONING', 'ACTIVE', 'COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED',
 ] as const;
 export type SessionStatus = typeof SESSION_STATUSES[number];
-export type ActionType = 'click' | 'type' | 'scroll' | 'navigate' | 'back' | 'submit' | 'wait' | 'abandon';
+export type ActionType = 'click' | 'type' | 'scroll' | 'navigate' | 'back' | 'submit' | 'wait' | 'abandon'
+  /** One natural-language act() step executed by a model-driven agent such as Nova Act. */
+  | 'agent_act'
+  /**
+   * A screen the browser read that advanced a checkpoint, without actuating anything. It is
+   * recorded evidence of the product's state, so it carries a checkpoint into analytics, but
+   * it is not agent work: see `isAgentAction`.
+   */
+  | 'observe';
+
+/**
+ * True when an event is an action the agent took, as opposed to navigation or an observed
+ * screen. Action counts and spend follow agent work only, so an `observe` event can record a
+ * checkpoint without making a session look more expensive than it was.
+ */
+export function isAgentAction(action: ActionType): boolean {
+  return action !== 'navigate' && action !== 'observe';
+}
 export type AgentReasonCode = 'EXPLORING' | 'GOAL_PROGRESS' | 'RETRYING' | 'BACKTRACKING'
   | 'CONFUSED' | 'PATIENCE_EXHAUSTED' | 'SAFETY_STOP' | 'OBJECTIVE_COMPLETE' | 'LIMIT_REACHED';
 
@@ -77,6 +98,12 @@ export interface SessionRecord {
   elapsed_ms: number;
   event_log_ref: string | null;
   replay_ref: string | null;
+  /** Reference to the raw trace the events were adapted from. */
+  trace_ref?: string | null;
+  /** How many attempts this session took after a technical failure. */
+  attempts?: number;
+  /** Why the session stopped when the status alone does not say it. */
+  note?: string | null;
 }
 
 export interface RunDraft {

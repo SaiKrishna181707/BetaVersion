@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { computeRunMetrics } from '@synthetic-beta/analytics';
 import { buildCohort } from '@synthetic-beta/population';
-import type { RunConfiguration, RunMetrics, SessionPlan, SessionRecord } from '@synthetic-beta/contracts';
+import { isAgentAction, type RunConfiguration, type RunMetrics, type SessionPlan, type SessionRecord } from '@synthetic-beta/contracts';
 import { writeSessionArtifacts } from './artifacts/session-log';
 import { createLocalBrowserSessionExecutor, defaultSandboxAccount } from './browser/local-executor';
 
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
     status: result.status,
     started_at: new Date(Date.parse(result.finished_at) - elapsed_ms).toISOString(),
     finished_at: result.finished_at,
-    action_count: result.events.filter(event => event.action_type !== 'navigate').length,
+    action_count: result.events.filter(event => isAgentAction(event.action_type)).length,
     elapsed_ms,
     event_log_ref: bundle.event_log_ref,
     replay_ref: result.replay_ref,

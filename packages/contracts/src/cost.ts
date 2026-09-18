@@ -10,6 +10,12 @@ export const HANDOFF_COST_MODEL: Readonly<CostModel> = {
   contingency_percent: 20,
 };
 
+/**
+ * Deterministic spend attributed to one recorded session action. The local executor uses it
+ * to account for a run budget; the AWS path replaces it with recorded Nova Act usage.
+ */
+export const SESSION_ACTION_COST_CENTS = 1;
+
 /** Maximum configured duration/actions, rounded UP once to cents. No model calculates metrics or cost. */
 export function estimateCost(
   config: Pick<RunConfiguration, 'user_count' | 'max_session_seconds' | 'run_hard_cap_usd'>,

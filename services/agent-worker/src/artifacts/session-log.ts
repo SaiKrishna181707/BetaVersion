@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BehaviorEvent, SessionResult } from '@synthetic-beta/contracts';
+import { isAgentAction, type BehaviorEvent, type SessionResult } from '@synthetic-beta/contracts';
 
 export interface SessionArtifactBundle {
   directory: string;
@@ -35,7 +35,7 @@ export async function writeSessionArtifacts(options: WriteSessionArtifactsOption
     status: result.status,
     finish_reason: result.finish_reason,
     finished_at: result.finished_at,
-    action_count: events.filter(event => event.action_type !== 'navigate').length,
+    action_count: events.filter(event => isAgentAction(event.action_type)).length,
     event_count: events.length,
     checkpoints: [...new Set(events.map(event => event.task_checkpoint).filter((value): value is string => value !== null))],
     replay_ref: result.replay_ref,

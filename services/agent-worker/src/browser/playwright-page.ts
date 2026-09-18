@@ -1,13 +1,17 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { chromium, type Browser, type Page } from 'playwright-core';
-import type { ActionResult, PageObservation } from '@synthetic-beta/contracts';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
+import type { ActionResult, PageObservation, TraceSink } from '@synthetic-beta/contracts';
 import type { ActionOutcome, BrowserPagePort } from './page-port';
 import { OBSERVE_SOURCE } from './observation-script';
 
 /**
  * Playwright is the local stand-in for AgentCore Browser. It drives an already installed
  * Chromium-based browser, so no browser binary is downloaded and nothing leaves the machine.
+ *
+ * Besides actuating the page, this class is the browser's evidence recorder: navigations,
+ * console errors, failed requests, and the replay archive are written straight from real
+ * browser events into the session trace.
  */
 
 export interface PlaywrightPageOptions {
@@ -17,9 +21,15 @@ export interface PlaywrightPageOptions {
   /** Channels to try in order. Defaults to the installed Chrome, then Edge. */
   channels?: string[] | undefined;
   viewport?: { width: number; height: number };
+  /** Evidence stream for facts only the browser can observe. */
+  trace?: TraceSink | undefined;
+  /** Record a replayable Playwright trace archive into the session directory. */
+  record_replay?: boolean;
 }
 
 const DEFAULT_CHANNELS = ['chrome', 'msedge'];
+const REPLAY_FILE = 'replay.zip';
+const ROUTE_SOURCE = "window.location.hash.replace(/^#/, '') || '/'";
 
 function firstLine(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
@@ -57,21 +67,70 @@ const SETTLE_ATTEMPTS = 8;
 export class PlaywrightPage implements BrowserPagePort {
   private readonly page: Page;
   private readonly browser: Browser;
+  private readonly context: BrowserContext;
   private readonly artifactsDir: string;
+  private readonly trace: TraceSink | null;
+  private readonly replayPath: string | null;
+  private replayStarted = false;
   private pendingConsole: string[] = [];
   private pendingNetwork: string[] = [];
 
-  private constructor(browser: Browser, page: Page, artifactsDir: string) {
+  private constructor(
+    browser: Browser,
+    context: BrowserContext,
+    page: Page,
+    options: PlaywrightPageOptions,
+  ) {
     this.browser = browser;
+    this.context = context;
     this.page = page;
-    this.artifactsDir = artifactsDir;
+    this.artifactsDir = options.artifacts_dir;
+    this.trace = options.trace ?? null;
+    this.replayPath = options.record_replay === false
+      ? null
+      : `${options.artifacts_dir.replace(/\\/g, '/')}/${REPLAY_FILE}`;
+    this.wireEvidence();
+  }
+
+  private wireEvidence(): void {
     this.page.on('console', message => {
-      if (message.type() === 'error') this.pendingConsole.push(message.text().slice(0, 300));
+      if (message.type() !== 'error') return;
+      const text = message.text().slice(0, 300);
+      this.pendingConsole.push(text);
+      this.trace?.record({ kind: 'CONSOLE_ERROR', message: text });
     });
-    this.page.on('pageerror', error => this.pendingConsole.push(String(error.message).slice(0, 300)));
+    this.page.on('pageerror', error => {
+      const text = String(error.message).slice(0, 300);
+      this.pendingConsole.push(text);
+      this.trace?.record({ kind: 'CONSOLE_ERROR', message: text });
+    });
     this.page.on('requestfailed', request => {
-      this.pendingNetwork.push(`${request.method()} ${request.url().slice(0, 200)} ${request.failure()?.errorText ?? ''}`.trim());
+      const text = `${request.method()} ${request.url().slice(0, 200)} ${request.failure()?.errorText ?? ''}`.trim();
+      this.pendingNetwork.push(text);
+      this.trace?.record({ kind: 'NETWORK_FAILURE', message: text });
     });
+    this.page.on('framenavigated', frame => {
+      if (frame !== this.page.mainFrame()) return;
+      void this.recordNavigation();
+    });
+  }
+
+  /** A navigation the loop has not observed yet. The recorder drops repeats. */
+  private async recordNavigation(): Promise<void> {
+    if (this.trace === null) return;
+    try {
+      const [title, route] = await Promise.all([
+        this.page.title(),
+        this.page.evaluate(ROUTE_SOURCE) as Promise<string>,
+      ]);
+      this.trace.record({
+        kind: 'NAVIGATION',
+        url: this.page.url(),
+        title: title.slice(0, 120),
+        route,
+        trigger: 'REDIRECT',
+      });
+    } catch { /* A navigation that cannot be read is not evidence. */ }
   }
 
   static async launch(options: PlaywrightPageOptions): Promise<PlaywrightPage> {
@@ -83,7 +142,30 @@ export class PlaywrightPage implements BrowserPagePort {
     context.setDefaultTimeout(5_000);
     context.setDefaultNavigationTimeout(10_000);
     const page = await context.newPage();
-    return new PlaywrightPage(browser, page, options.artifacts_dir);
+    return new PlaywrightPage(browser, context, page, options);
+  }
+
+  /** The replay archive location, whether or not recording has finished. */
+  get replayRef(): string | null { return this.replayPath; }
+
+  /** Starts a Playwright trace so the session can be replayed afterwards. */
+  async startReplay(): Promise<void> {
+    if (this.replayPath === null || this.replayStarted) return;
+    this.replayStarted = true;
+    await this.context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+  }
+
+  /** Writes the replay archive and returns its path, or null when nothing was recorded. */
+  async stopReplay(): Promise<string | null> {
+    if (this.replayPath === null || !this.replayStarted) return null;
+    this.replayStarted = false;
+    try {
+      await mkdir(dirname(this.replayPath), { recursive: true });
+      await this.context.tracing.stop({ path: this.replayPath });
+      return this.replayPath;
+    } catch {
+      return null;
+    }
   }
 
   async open(url: string): Promise<void> {

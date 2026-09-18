@@ -102,3 +102,63 @@ test('median never interpolates a value that was not observed for odd samples', 
   assert.equal(median([1, 2, 3, 4]), 3);
   assert.equal(median([30, 10, 20]), 20);
 });
+test('separates an outright failure from a session that only recorded a technical error', () => {
+  const result = metrics();
+  // Only s4 ended FAILED; s1 counts as a technical failure too because it recorded a
+  // console error, but it still reached its goal.
+  assert.equal(result.failure.numerator, 1);
+  assert.equal(result.failure.denominator, 4);
+  assert.deepEqual(result.failure.supporting_session_ids, ['s4']);
+  assert.equal(result.technical_failure.numerator, 1);
+  assert.deepEqual(result.technical_failure.supporting_session_ids, ['s4']);
+});
+
+test('counts a session that failed after a recorded error in both rates', () => {
+  const { personas, sessions, events } = runFixture();
+  const withError = sessions.map(session => session.session_id === 's1'
+    ? { ...session, status: 'FAILED' as const }
+    : session);
+  const result = computeRunMetrics({
+    run_id: 'run-1',
+    sessions: withError,
+    events,
+    personas,
+    checkpoint_plan: CHECKPOINT_PLAN,
+  });
+  assert.deepEqual(result.failure.supporting_session_ids, ['s1', 's4']);
+  assert.equal(result.failure.percentage, 50);
+  assert.deepEqual(result.technical_failure.supporting_session_ids, ['s1', 's4']);
+});
+
+test('splits the same outcomes by the persona traits the run actually varied', () => {
+  const { personas, sessions, events } = runFixture();
+  const varied = personas.map((persona, index) => ({
+    ...persona,
+    technical_ability: index === 0 ? 'LOW' as const : 'HIGH' as const,
+    device_class: 'DESKTOP' as const,
+  }));
+  const result = computeRunMetrics({
+    run_id: 'run-1',
+    sessions,
+    events,
+    personas: varied,
+    checkpoint_plan: CHECKPOINT_PLAN,
+  });
+
+  const abilities = result.segments.filter(row => row.dimension === 'technical_ability');
+  assert.deepEqual(abilities.map(row => row.segment), ['HIGH', 'LOW']);
+  assert.deepEqual(abilities.map(row => row.session_count), [3, 1]);
+  assert.deepEqual(abilities.find(row => row.segment === 'LOW')?.completion.supporting_session_ids, ['s1']);
+  assert.deepEqual(abilities.find(row => row.segment === 'HIGH')?.abandonment.supporting_session_ids, ['s2']);
+
+  const devices = result.segments.filter(row => row.dimension === 'device_class');
+  assert.deepEqual(devices.map(row => row.segment), ['DESKTOP']);
+  assert.equal(devices[0]?.session_count, 4);
+});
+
+test('lists segments in a fixed order so two identical runs cannot differ', () => {
+  const result = metrics();
+  const dimensions = result.segments.map(row => row.dimension);
+  assert.deepEqual([...new Set(dimensions)], ['technical_ability', 'product_familiarity', 'patience', 'device_class']);
+  assert.deepEqual(result.segments, metrics().segments);
+});
