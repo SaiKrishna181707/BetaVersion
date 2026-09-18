@@ -153,7 +153,8 @@ function technicalFailureFinding(
     kind: 'FAILURE',
     title: `${metrics.technical_failure.numerator} of ${metrics.technical_failure.denominator} sessions hit a technical failure`,
     detail: 'A session counts as a technical failure when it ended FAILED or recorded a console error, '
-      + 'network error, or an action that returned ERROR. These are product defects, not user confusion.',
+      + 'network error, or an action that returned ERROR. These are technical signals that require inspection '
+      + 'and are reported separately from observed user friction.',
     metric_refs: ['technical_failure'],
     evidence: firstMatchingEvidence(
       metrics.technical_failure.supporting_session_ids,
