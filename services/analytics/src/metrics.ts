@@ -67,6 +67,19 @@ function firstCheckpointElapsed(events: readonly BehaviorEvent[], checkpoint: st
   return earliest;
 }
 
+function furthestCheckpointIndex(
+  events: readonly BehaviorEvent[],
+  checkpointIndex: ReadonlyMap<string, number>,
+): number {
+  let furthest = -1;
+  for (const event of events) {
+    if (event.task_checkpoint === null) continue;
+    const index = checkpointIndex.get(event.task_checkpoint);
+    if (index !== undefined && index > furthest) furthest = index;
+  }
+  return furthest;
+}
+
 /**
  * Derives every reported number from recorded sessions and events. No sampling, no
  * model output, and no interpolation: an empty denominator reports null, not 0%.
@@ -79,6 +92,7 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
     else eventsBySession.set(event.session_id, [event]);
   }
   const cohortByPersona = new Map(input.personas.map(persona => [persona.persona_id, persona.cohort]));
+  const checkpointIndex = new Map(input.checkpoint_plan.map((checkpoint, index) => [checkpoint, index] as const));
   const goalCheckpoint = input.checkpoint_plan.at(-1) ?? null;
 
   const outcomes: SessionOutcome[] = input.sessions
@@ -118,10 +132,18 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
     frictionBySession.set(event.session_id, (frictionBySession.get(event.session_id) ?? 0) + 1);
   }
 
+  const furthestBySession = new Map(
+    outcomes.map(outcome => [
+      outcome.session_id,
+      furthestCheckpointIndex(eventsBySession.get(outcome.session_id) ?? [], checkpointIndex),
+    ] as const),
+  );
+
   const funnel: FunnelStep[] = input.checkpoint_plan.map((checkpoint, position) => {
+    // Funnel semantics are ordered: reaching a later milestone implies the session
+    // necessarily belongs to every earlier stage for conversion accounting.
     const reached = outcomes
-      .filter(outcome =>
-        (eventsBySession.get(outcome.session_id) ?? []).some(event => event.task_checkpoint === checkpoint))
+      .filter(outcome => (furthestBySession.get(outcome.session_id) ?? -1) >= position)
       .map(outcome => outcome.session_id);
     return {
       checkpoint,
