@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { SessionPlan } from '@synthetic-beta/contracts';
+import { GUARDRAILS, type SessionPlan } from '@synthetic-beta/contracts';
 import {
   SessionExecutorUnavailableError,
   SessionPlanRejectedError,
