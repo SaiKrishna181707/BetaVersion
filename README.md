@@ -45,13 +45,13 @@ The LLM/agent decides how to use the product. Code computes the numbers.
 - npm-workspace monorepo with React/TypeScript frontend and typed shared contracts.
 - Local Playwright browser adapter that runs one synthetic persona against an owned demo product.
 - Persona-aware decision policy for zero-cloud-cost loop/telemetry testing.
-- Session guardrails: authorization, origin allowlist, action/time/retry/budget ceilings and cancellation.
+- Session guardrails: authorization, exact-host allowlists, action/time/retry/budget ceilings, cancellation, safe artifact identifiers and URL-secret redaction.
 - Structured session artifacts: `session.json`, `events.json`, checkpoint/final screenshots.
 - Deterministic population sampling.
 - Deterministic completion, abandonment, timeout, technical-failure, funnel, friction and cohort metrics.
-- Evidence-grounded report assembly with session/action pointers.
+- Evidence-grounded report assembly with session/action pointers and fail-closed trace-integrity checks.
 - Owned `demo-target/` with deliberate UX friction.
-- 101 Node unit/integration tests.
+- 124 Node unit/integration/stress tests, including cost monotonicity, hostile URL, traversal, data-integrity and population invariants.
 
 ### Real AWS execution adapter implemented
 
@@ -60,9 +60,11 @@ The LLM/agent decides how to use the product. Code computes the numbers.
 - Nova Act workflow mode with AWS IAM authentication,
 - Amazon Bedrock AgentCore Browser over CDP,
 - persona + objective behavior prompt,
-- explicit authorized-origin and destructive-action boundaries,
+- exact-host Nova Act state guardrails plus a server-side AgentCore Browser session timeout,
+- public-target-only cloud execution with private/link-local/local host rejection,
+- strict persona/input contracts and bounded observation budgets,
 - no Nova Act API key required by the worker,
-- 5 Python contract tests that run in CI without AWS credentials.
+- Python contract/adversarial tests that run in CI without AWS credentials.
 
 The AWS worker is intentionally honest about its current boundary: it proves the real autonomous browser path,
 but Nova/AgentCore trace steps are **not yet** converted into the TypeScript `BehaviorEvent[]` schema. The code
@@ -185,11 +187,14 @@ CAPTCHA bypass, access-control bypass or arbitrary third-party testing.
 GitHub Actions runs:
 
 - ESLint,
-- Node tests,
+- Node unit/integration/stress tests,
 - TypeScript typecheck,
 - production Vite build,
-- Python compile,
-- Nova worker contract tests.
+- `npm audit --audit-level=high`,
+- pinned Python dependency installation plus `pip check`,
+- `pip-audit` against the Nova worker requirements,
+- Python compile and Nova worker contract/adversarial tests,
+- an installed-SDK smoke test for the AgentCore Browser and Nova Act call surface.
 
 `amplify.yml` contains the AWS Amplify Hosting build specification for `apps/web`. Submission changes reach
 `main` only through CI-green pull requests.
