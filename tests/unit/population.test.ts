@@ -48,7 +48,11 @@ test('refuses to build an out-of-range population', () => {
   assert.throws(() => buildCohort({ ...spec, size: 101 }), /1 to 100/);
   assert.throws(() => buildCohort({ ...spec, size: 2.5 }), /1 to 100/);
   assert.throws(() => buildCohort({ ...spec, population_seed: 'ab' }), /seed/);
+  assert.throws(() => buildCohort({ ...spec, population_seed: '../escape' }), /seed/);
+  assert.throws(() => buildCohort({ ...spec, population_seed: 'a'.repeat(65) }), /seed/);
   assert.throws(() => buildCohort({ ...spec, cohort: '  ' }), /cohort label/);
+  assert.throws(() => buildCohort({ ...spec, cohort: 'x'.repeat(81) }), /cohort label/);
+  assert.throws(() => buildCohort({ ...spec, goal_context: '  ' }), /Goal context/);
 });
 
 test('profiles a cohort with tallies that add up', () => {
