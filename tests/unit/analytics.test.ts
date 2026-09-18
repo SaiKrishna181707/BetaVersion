@@ -89,6 +89,58 @@ test('orders outcomes deterministically', () => {
   assert.deepEqual(metrics(), metrics());
 });
 
+test('rejects duplicate sessions instead of double-counting them', () => {
+  const { personas, sessions, events } = runFixture();
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions: [...sessions, sessions[0]!],
+      events,
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /duplicate session ID/,
+  );
+});
+
+test('rejects orphan and cross-run events instead of contaminating metrics', () => {
+  const { personas, sessions, events } = runFixture();
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions,
+      events: [...events, { ...events[0]!, session_id: 'unknown-session' }],
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /unknown session/,
+  );
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions,
+      events: [{ ...events[0]!, run_id: 'run-other' }],
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /another run/,
+  );
+});
+
+test('rejects persona mismatches in recorded evidence', () => {
+  const { personas, sessions, events } = runFixture();
+  assert.throws(
+    () => computeRunMetrics({
+      run_id: 'run-1',
+      sessions,
+      events: [{ ...events[0]!, persona_id: 'seed-a-002' }],
+      personas,
+      checkpoint_plan: CHECKPOINT_PLAN,
+    }),
+    /persona does not match/,
+  );
+});
+
 test('reports null instead of 0% when nothing was recorded', () => {
   const result = computeRunMetrics({
     run_id: 'run-empty',
