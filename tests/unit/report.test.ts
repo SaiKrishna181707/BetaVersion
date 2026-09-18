@@ -44,14 +44,15 @@ test('points friction at the largest recorded drop-off', async () => {
   const finding = (await build()).findings.find(entry => entry.kind === 'FRICTION');
   assert.ok(finding, 'expected a FRICTION finding');
   assert.equal(finding.finding_id, 'funnel-1-CREATE_PROJECT');
-  assert.match(finding.title, /3 of 3 sessions did not reach "CREATE_PROJECT"/);
-  assert.deepEqual(finding.evidence.map(pointer => pointer.session_id), ['s1', 's2', 's3']);
+  assert.match(finding.title, /2 of 3 sessions did not reach "CREATE_PROJECT"/);
+  assert.deepEqual(finding.evidence.map(pointer => pointer.session_id), ['s2', 's3']);
 });
 
 test('drop-off evidence contains only sessions eligible from the previous funnel stage', async () => {
   const finding = (await build()).findings.find(entry => entry.finding_id === 'funnel-1-CREATE_PROJECT');
   assert.ok(finding);
-  assert.equal(finding.evidence.length, 3);
+  assert.equal(finding.evidence.length, 2);
+  assert.deepEqual(finding.evidence.map(pointer => pointer.session_id), ['s2', 's3']);
   assert.ok(!finding.evidence.some(pointer => pointer.session_id === 's4'));
 });
 
