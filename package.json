@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "check": "npm run lint && npm run test && npm run build",
     "preview": "npm run preview --workspace @synthetic-beta/web",
-    "dev:demo": "node demo-target/serve.mjs"
+    "dev:demo": "node demo-target/serve.mjs",
+    "l1:run": "tsx services/agent-worker/src/l1-run.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

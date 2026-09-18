@@ -4,5 +4,10 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@synthetic-beta/contracts": "*" }
+  "dependencies": {
+    "@synthetic-beta/analytics": "*",
+    "@synthetic-beta/contracts": "*",
+    "@synthetic-beta/population": "*",
+    "playwright-core": "^1.49.0"
+  }
 }

@@ -43,6 +43,8 @@ The single source of truth, so no type or rule is duplicated across services:
 - `metrics.ts` — `SessionOutcome`, `FunnelStep`, `CohortMetrics`, `RunMetrics`.
 - `population.ts` — `PopulationSpec` and the trait types derived from `SyntheticPersona`.
 - `execution.ts` — `SessionPlan`, `SessionResult`, `RunPlan`, and `SessionExecutorPort`.
+- `observation.ts` — `PageObservation`, `ObservedElement`, `AgentAction`, `AgentPolicyPort`,
+  and the deterministic `observationStateKey` used to detect repeated states.
 - `report.ts` — `EvidencePointer`, `ReportFinding`, `SyntheticBetaReport`, `ReportNarratorPort`.
 - `validation.ts` / `cost.ts` — run configuration validation and the cost model.
 
@@ -75,6 +77,36 @@ The server-side review is the authoritative one; the form is a convenience. It r
 limits, remaining budget, the presence of a checkpoint plan and an origin allowlist, the transport scheme
 (HTTPS, or HTTP only for a local sandbox), the absence of credentials in the URL, and membership of the target
 host in the allowlist.
+
+#### The local browser session (L1)
+
+L1 runs one persona against one authorized target in a real browser on this machine. Four pieces, each with a
+single responsibility:
+
+| Piece | Responsibility |
+| --- | --- |
+| `PlaywrightPage` | Implements `BrowserPagePort`: open, observe, perform one action, screenshot. It is the only
+code that knows a browser exists. |
+| `createLocalAgentPolicy` | Implements `AgentPolicyPort`: one action plus a reason code from the observation,
+the persona, the objective, and the history. Seeded, persona-weighted, and never given a click path. |
+| `runSessionLoop` | Everything that must not be a judgment call: deadline, action budget, remaining-budget
+guard, duplicate-state detection, origin allowlist, cancellation, checkpoint capture, outcome classification. |
+| `writeSessionArtifacts` | Writes `session.json`, `events.json`, and screenshots, and refuses to write a log
+containing a value it was told to protect. |
+
+The observation is a structured `PageObservation` (route, headings, text excerpt, declared checkpoints, and a
+list of visible controls with roles, accessible names, instrumentation hooks, and `value_present`), never raw
+HTML. Refs are observation-scoped: the observation clears previous stamps before assigning new ones, so one ref
+always matches exactly one element.
+
+The in-page observation routine lives in `observation-script.ts` as source text rather than as a function. The
+local runner is compiled by tsx/esbuild, which injects `__name(...)` calls into nested functions; Playwright
+serialises the function and evaluates it inside the page, where `__name` does not exist. Shipping source text is
+also what a remote browser transport has to do, so the definition stays in one place.
+
+`local-playwright` is a **development adapter**: `createLocalBrowserSessionExecutor()` reports `available: true`
+and `kind: "local-playwright"`. It changes none of the contracts, so an AgentCore Browser executor can replace
+it without touching the loop, the policy port, the event schema, or the artefacts.
 
 ### Population — `services/population`
 

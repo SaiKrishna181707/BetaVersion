@@ -100,7 +100,7 @@ function renderSignIn() {
 
 function renderProjects() {
   app.innerHTML = `
-    <main class="shell">
+    <main class="shell" data-synthetic-checkpoint="OPEN_APP">
       <header class="page-head">
         <div>
           <h1>Projects</h1>
@@ -258,7 +258,7 @@ function renderProject(project, tab, message) {
   const base = `#/projects/${encodeURIComponent(project.id)}`;
 
   app.innerHTML = `
-    <main class="shell">
+    <main class="shell" data-synthetic-checkpoint="CREATE_PROJECT">
       <p class="breadcrumb"><a href="#/projects">Projects</a> / ${escapeHtml(project.name)}</p>
       <header class="page-head">
         <div>
@@ -272,7 +272,7 @@ function renderProject(project, tab, message) {
         <button type="button" role="menuitem" id="open-invite" data-synthetic-target="invite-teammate">Invite teammate</button>
         <button type="button" role="menuitem" id="menu-settings">Project settings</button>
       </div>
-      ${message ? `<p class="notice" role="status">${escapeHtml(message)}</p>` : ''}
+      ${message ? `<p class="notice" role="status" data-synthetic-checkpoint="INVITE_TEAMMATE">${escapeHtml(message)}</p>` : ''}
       <div id="invite-panel" class="panel" hidden data-synthetic-target="invite-panel">
         <form id="invite-form" novalidate>
           <div class="field">

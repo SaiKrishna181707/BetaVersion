@@ -52,17 +52,31 @@ The cohort is already computed deterministically today: `POST /runs/:id/populati
 personas and a trait profile, covered by tests. The screen that renders it is registered in the route table as
 `PLANNED`, so visiting `#/runs/example/population` shows an honest placeholder instead of a fabricated table.
 
-## 4. Watch, inspect, replay — **next phase**
+## 4. Watch, inspect, replay — **live locally, not on AWS**
 
-Starting a run returns `501 EXECUTION_NOT_CONFIGURED` by design. The demo target already contains the friction
-these steps will surface, and `demo-target/README.md` documents each trap:
+Starting a run through the API returns `501 EXECUTION_NOT_CONFIGURED` by design. The browser session itself can
+be demonstrated today with a local adapter: keep `npm run dev:demo` running and use a second terminal.
+
+```bash
+npm run l1:run                 # one persona, headless
+L1_HEADLESS=0 npm run l1:run   # same session in a visible window
+```
+
+The runner prints the persona, the objective, the outcome, the actions taken, the checkpoints reached, and the
+deterministic metrics computed from the log, then names the session directory it wrote under `.artifacts/`.
+Open `events.json` beside the screenshots to walk a judge through "what did this synthetic user actually do".
+Say plainly that this is a local adapter: no Step Functions, no AgentCore Browser, no AWS spend.
+
+The demo target already contains the friction these steps surface, and `demo-target/README.md` documents each
+trap:
 
 - The invite control is hidden behind the project overflow menu, not the Team tab.
 - The invite form clears the email field when it fails validation.
 - The members list loads slowly, pushing the invite control down the page.
 
-Planned sequence once the executor lands: watch sessions advance state by state, open the session that hit the
-retry trap, and replay its recorded actions with screenshots beside the timeline.
+Planned sequence once the AWS executor lands: watch sessions advance state by state on the Live Run screen, open
+the session that hit the retry trap, and replay its recorded actions with screenshots beside the timeline. The
+event log and the screenshots the replay needs already come out of L1.
 
 ## 5. Report — **next phase**
 
@@ -80,7 +94,7 @@ The strongest claim is the one that can be checked:
 - The cost panel reads its rates from the same model the arithmetic uses.
 - Unbuilt surfaces say so, and the unavailable executor throws instead of inventing behaviour.
 
-Point at `npm test`: 70 tests, no network, no AWS, and the numbers in this script are asserted in them.
+Point at `npm test`: 98 tests, no network, no AWS, and the numbers in this script are asserted in them.
 
 ## Recovery notes
 

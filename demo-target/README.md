@@ -40,6 +40,11 @@ accumulate repeated empty-field submissions until its retry or action budget run
 
 ## Instrumentation hooks
 
+A reached state can also declare itself with `data-synthetic-checkpoint`. The L1 runner uses
+`OPEN_APP` (projects list), `CREATE_PROJECT` (project shell), and `INVITE_TEAMMATE` (the invitation success
+notice) as its ordered checkpoints, which is how a session demonstrates real progress instead of a plausible
+looking summary. Run it with `npm run l1:run` while this target is serving; see `docs/l1-local-session.md`.
+
 Interactive elements carry stable `data-synthetic-target` attributes (`sign-in-form`, `new-project`,
 `project-name`, `create-project-submit`, `open-project`, `project-overflow`, `invite-teammate`, `invite-email`,
 `invite-submit`, `tab-team`, and so on). Recording tooling can use these as `target_descriptor` values instead
