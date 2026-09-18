@@ -1,3 +1,4 @@
+import { isRetrySignal } from '@synthetic-beta/analytics';
 import {
   type BehaviorEvent,
   type EvidencePointer,
@@ -157,15 +158,15 @@ function retryFinding(
   return {
     finding_id: 'retry-friction',
     kind: 'FRICTION',
-    title: `${metrics.retry.sessions_with_retry} sessions retried in the same state`,
+    title: `${metrics.retry.sessions_with_retry} sessions showed retry or recovery behavior`,
     detail: `${metrics.retry.total_retries} retries and ${metrics.friction.total_signals} friction signals were recorded `
       + `across ${metrics.friction.sessions_with_friction} sessions. `
-      + 'Each pointer below is the first recorded retry in a session.',
+      + 'Each pointer below is the first recorded retry/recovery signal in a session.',
     metric_refs: ['retry.sessions_with_retry', 'retry.total_retries', 'friction.total_signals'],
     evidence: firstMatchingEvidence(
       metrics.funnel.flatMap(step => step.supporting_session_ids).concat(metrics.outcomes.map(o => o.session_id)),
       bySession,
-      event => event.agent_reason_code === 'RETRYING',
+      event => isRetrySignal(event),
       limit,
     ),
     interpretation: null,
