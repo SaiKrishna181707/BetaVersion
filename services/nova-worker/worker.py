@@ -1,10 +1,13 @@
 """AWS execution adapter for one Synthetic Beta session.
 
-This worker intentionally has a tiny JSON boundary:
 SessionPlan JSON in -> Nova Act drives an AgentCore Browser -> JSON result out.
 
-It uses AWS IAM authentication through a Nova Act workflow. No API key is accepted
-or read here. The target must be an explicitly authorized HTTPS origin.
+The implementation deliberately follows the two current AWS-documented building blocks:
+- Nova Act IAM authentication via a Workflow context.
+- AgentCore Browser via browser_session() + CDP endpoint/headers.
+
+No Nova Act API key is accepted or read here. The target must be an explicitly
+authorized HTTPS origin.
 """
 
 from __future__ import annotations
@@ -69,6 +72,7 @@ def validate_plan(raw: Any) -> ValidatedPlan:
         raise PlanError("credentials must never be embedded in the target URL")
     if parsed.query or parsed.fragment:
         raise PlanError("target URL must not contain query parameters or fragments")
+
     target_host = (parsed.hostname or "").lower()
     if not target_host:
         raise PlanError("target URL must contain a hostname")
@@ -76,7 +80,9 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     origins = raw.get("allowed_origins")
     if not isinstance(origins, list) or not origins:
         raise PlanError("allowed_origins must be a non-empty array")
-    allowed = tuple(sorted({_host(str(item)) for item in origins if _host(str(item))}))
+
+    normalized = {_host(str(item)) for item in origins}
+    allowed = tuple(sorted(host for host in normalized if host))
     if target_host not in allowed:
         raise PlanError("target host is not present in allowed_origins")
 
@@ -139,39 +145,46 @@ Safety boundaries:
 - Never send spam or contact real third parties.
 - If the objective cannot be completed safely, stop rather than bypassing a control.
 
+Run budget:
+- Do not intentionally exceed about {plan.max_actions} meaningful interaction steps.
+- The surrounding orchestrator is expected to enforce a hard session timeout of {plan.max_session_seconds} seconds.
+
 Stop when the objective has clearly been achieved, when you are genuinely stuck, or when continuing would
 violate a safety boundary. At the end, briefly state whether you completed, abandoned, or were blocked and
 what visible state led to that outcome."""
-    
 
-def execute_with_aws(plan: ValidatedPlan, *, region: str, workflow_name: str, model_id: str) -> dict[str, Any]:
-    # Imported lazily so CI can validate the plan/prompt contract without installing
-    # cloud SDKs or requiring AWS credentials.
+
+def execute_with_aws(
+    plan: ValidatedPlan,
+    *,
+    region: str,
+    workflow_name: str,
+    model_id: str,
+) -> dict[str, Any]:
+    """Run one real Nova Act session inside an AgentCore Browser.
+
+    Cloud imports are lazy so CI can test validation/prompt construction without
+    installing AWS SDK packages or requiring credentials.
+    """
     from bedrock_agentcore.tools.browser_client import browser_session
-    from nova_act import NovaAct, workflow
+    from nova_act import NovaAct, Workflow
 
-    def _run() -> Any:
+    with Workflow(
+        workflow_definition_name=workflow_name,
+        model_id=model_id,
+    ) as workflow:
         with browser_session(region) as client:
             ws_url, headers = client.generate_ws_headers()
             with NovaAct(
                 cdp_endpoint_url=ws_url,
                 cdp_headers=headers,
                 starting_page=plan.target_url,
+                workflow=workflow,
                 headless=True,
                 tty=False,
             ) as nova:
-                return nova.act(
-                    build_prompt(plan),
-                    max_steps=plan.max_actions,
-                    timeout=plan.max_session_seconds,
-                )
+                result = nova.act(build_prompt(plan))
 
-    workflow_runner = workflow(
-        workflow_definition_name=workflow_name,
-        model_id=model_id,
-    )(_run)
-
-    result = workflow_runner()
     response = getattr(result, "response", None)
     return {
         "schema_version": 1,
@@ -181,6 +194,8 @@ def execute_with_aws(plan: ValidatedPlan, *, region: str, workflow_name: str, mo
         "region": region,
         "workflow_definition_name": workflow_name,
         "model_id": model_id,
+        "requested_max_actions": plan.max_actions,
+        "requested_max_session_seconds": plan.max_session_seconds,
         "response": response if isinstance(response, str) else str(result),
     }
 
@@ -193,37 +208,60 @@ def load_json(path: str | None) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run one Synthetic Beta session on Nova Act + AgentCore Browser")
+    parser = argparse.ArgumentParser(
+        description="Run one Synthetic Beta session on Nova Act + AgentCore Browser"
+    )
     parser.add_argument("--plan-file", help="SessionPlan JSON file. Reads stdin when omitted.")
-    parser.add_argument("--validate-only", action="store_true", help="Validate and print the prompt without calling AWS.")
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate and print the prompt without calling AWS.",
+    )
     args = parser.parse_args()
 
     try:
         plan = validate_plan(load_json(args.plan_file))
         if args.validate_only:
-            print(json.dumps({
-                "valid": True,
-                "run_id": plan.run_id,
-                "session_id": plan.session_id,
-                "prompt": build_prompt(plan),
-            }, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "valid": True,
+                        "run_id": plan.run_id,
+                        "session_id": plan.session_id,
+                        "prompt": build_prompt(plan),
+                    },
+                    indent=2,
+                )
+            )
             return 0
 
         region = os.environ.get("AWS_REGION", DEFAULT_REGION)
         workflow_name = os.environ.get("NOVA_ACT_WORKFLOW_NAME", DEFAULT_WORKFLOW_NAME)
         model_id = os.environ.get("NOVA_ACT_MODEL_ID", DEFAULT_MODEL_ID)
-        print(json.dumps(execute_with_aws(
-            plan,
-            region=region,
-            workflow_name=workflow_name,
-            model_id=model_id,
-        ), indent=2))
+        print(
+            json.dumps(
+                execute_with_aws(
+                    plan,
+                    region=region,
+                    workflow_name=workflow_name,
+                    model_id=model_id,
+                ),
+                indent=2,
+            )
+        )
         return 0
     except PlanError as exc:
-        print(json.dumps({"error": "PLAN_REJECTED", "message": str(exc)}), file=sys.stderr)
+        print(
+            json.dumps({"error": "PLAN_REJECTED", "message": str(exc)}),
+            file=sys.stderr,
+        )
         return 2
-    except Exception as exc:  # Cloud errors stay explicit; never manufacture a successful session.
-        print(json.dumps({"error": "EXECUTION_FAILED", "message": str(exc)}), file=sys.stderr)
+    except Exception as exc:
+        # Cloud errors stay explicit; never manufacture a successful session.
+        print(
+            json.dumps({"error": "EXECUTION_FAILED", "message": str(exc)}),
+            file=sys.stderr,
+        )
         return 1
 
 

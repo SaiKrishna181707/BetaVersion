@@ -17,9 +17,9 @@ documented in US East (N. Virginia), so the default region is `us-east-1`.
 
 ## L2 validation sequence
 
-1. Deploy `demo-target` or another owned staging app to a public HTTPS URL.
+1. Deploy the frontend to Amplify. The build includes an owned target at `https://<your-amplify-domain>/demo-target/`, so no second hosting service is required.
 2. Copy `services/nova-worker/plan.example.json`.
-3. Replace the placeholder target and allowlist with the owned hostname.
+3. Replace the placeholder target with `https://<your-amplify-domain>/demo-target/` (or another owned HTTPS staging app) and put the same hostname in `allowed_origins`.
 4. Configure AWS credentials and a Nova Act workflow definition.
 5. Run `--validate-only`.
 6. Run one real session.
