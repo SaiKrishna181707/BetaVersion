@@ -57,9 +57,20 @@ test('counts retries and friction signals separately', () => {
 test('builds a funnel step for every planned checkpoint', () => {
   const result = metrics();
   assert.deepEqual(result.funnel.map(step => step.checkpoint), [...CHECKPOINT_PLAN]);
-  assert.deepEqual(result.funnel.map(step => step.reached), [3, 0, 1]);
-  assert.deepEqual(result.funnel.map(step => step.reached_percentage), [75, 0, 25]);
+  assert.deepEqual(result.funnel.map(step => step.reached), [3, 1, 1]);
+  assert.deepEqual(result.funnel.map(step => step.reached_percentage), [75, 25, 25]);
   assert.deepEqual(result.funnel[0]?.supporting_session_ids, ['s1', 's2', 's3']);
+});
+
+test('funnel never increases when only a later checkpoint was recorded', () => {
+  const result = metrics();
+  for (let index = 1; index < result.funnel.length; index += 1) {
+    assert.ok(
+      (result.funnel[index]?.reached ?? 0) <= (result.funnel[index - 1]?.reached ?? 0),
+      'ordered funnel counts must be monotonic',
+    );
+  }
+  assert.deepEqual(result.funnel[1]?.supporting_session_ids, ['s1']);
 });
 
 test('compares cohorts against each other', () => {
