@@ -1,4 +1,3 @@
-import { isRetrySignal } from '@synthetic-beta/analytics';
 import {
   type BehaviorEvent,
   type EvidencePointer,
@@ -22,6 +21,13 @@ export interface BuildReportInput {
 }
 
 const DEFAULT_MAX_EVIDENCE = 6;
+
+function isRetryEvidence(event: BehaviorEvent): boolean {
+  return event.agent_reason_code === 'RETRYING'
+    || event.agent_reason_code === 'BACKTRACKING'
+    || event.result === 'NO_CHANGE'
+    || event.result === 'VALIDATION_FAILURE';
+}
 
 export const REPORT_LIMITATIONS: readonly string[] = [
   'Synthetic users are simulated agents. They are not real beta users and do not represent market demand or purchasing intent.',
@@ -166,7 +172,7 @@ function retryFinding(
     evidence: firstMatchingEvidence(
       metrics.funnel.flatMap(step => step.supporting_session_ids).concat(metrics.outcomes.map(o => o.session_id)),
       bySession,
-      event => isRetrySignal(event),
+      event => isRetryEvidence(event),
       limit,
     ),
     interpretation: null,
