@@ -28,12 +28,13 @@ this repository pretends otherwise.
 - `services/report` — evidence-grounded report assembly from metrics plus citations.
 - `services/agent-worker` — guardrail review, the executor port, a persona-aware local policy, and
   the deterministic session loop (timers, action budget, remaining-budget guard, duplicate-state detection,
-  origin allowlist, cancellation, checkpoint capture, and outcome classification).
+  origin allowlist, cancellation, checkpoint capture, and outcome classification). A session that repeats
+  one screen for `MAX_RETRIES_SAME_STATE` actions ends as `ABANDONED`, not as a timeout.
 - `local-playwright` — a **local** executor that drives an installed Chrome or Edge against an
   authorized target and writes `session.json`, `events.json`, and screenshots to `.artifacts/`.
 - `services/api` — transport skeleton for API Gateway/Lambda doing deterministic work only.
 - Landing page and New Run page, with an honest routing foundation and a real not-found surface.
-- 98 tests covering contracts, cost arithmetic, sampling, analytics, guardrails, reports, routing, the API,
+- 99 tests covering contracts, cost arithmetic, sampling, analytics, guardrails, reports, routing, the API,
   the agent policy, the session loop, and session artefact redaction.
 - `demo-target/` — an authorized local demo product with deliberate friction, used as the test target.
 
@@ -76,7 +77,7 @@ npm install
 npm run dev        # front end on http://127.0.0.1:5173
 npm run dev:demo   # demo target on http://127.0.0.1:4174
 npm run l1:run     # one synthetic user, one real browser session (needs the demo target)
-npm test           # 98 unit and integration tests
+npm test           # 99 unit and integration tests
 npm run typecheck  # tsc --noEmit across apps, packages, services, and tests
 npm run lint       # ESLint across apps, packages, services, and tests
 npm run build      # typecheck, then a production Vite build
@@ -90,6 +91,13 @@ suggests. See `demo-target/README.md` for the intentional friction it contains a
 demo target. It needs an installed Chrome or Edge and a running demo target, and it writes its evidence to
 `.artifacts/runs/<run_id>/sessions/<session_id>/` (git-ignored). It is a local development adapter, not AWS
 execution. See `docs/l1-local-session.md`.
+
+## Configuration
+
+`.env.example` records the configuration surface: variable names, the handoff default where one exists, and
+the rule that a secret never goes in a `VITE_` variable. No AWS entry is read by any code in this repository
+yet, because the execution plane is not built. The only variable the front end reads today is
+`VITE_AUTHORIZED_DOMAINS`, which sits beside the front end in `apps/web/.env.example`.
 
 ## Guardrails
 
