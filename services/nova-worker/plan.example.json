@@ -1,0 +1,22 @@
+{
+  "run_id": "run-demo-001",
+  "session_id": "session-001",
+  "persona": {
+    "persona_id": "demo-001",
+    "technical_ability": "LOW",
+    "product_familiarity": "NEW",
+    "patience": "LOW",
+    "reading_style": "SCANNING",
+    "device_class": "DESKTOP",
+    "price_sensitivity": "HIGH",
+    "privacy_sensitivity": "MEDIUM",
+    "goal_context": "First-time visitor evaluating whether this tool is easy enough for a small team."
+  },
+  "objective": "Create a project and invite a teammate to collaborate.",
+  "target_url": "https://your-authorized-staging.example.com",
+  "allowed_origins": [
+    "your-authorized-staging.example.com"
+  ],
+  "max_actions": 40,
+  "max_session_seconds": 180
+}

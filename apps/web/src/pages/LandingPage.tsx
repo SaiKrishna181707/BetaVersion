@@ -1,0 +1,18 @@
+import { Badge, Brand, Icon, type IconName } from '@synthetic-beta/ui';
+import { SessionIllustration } from '../components/SessionIllustration';
+
+const workflow: { number: string; icon: IconName; title: string; text: string; detail: string }[] = [
+  { number: '01', icon: 'globe', title: 'Give them a goal.', text: 'Your product. Your audience. One objective. Set the boundaries before a session begins.', detail: 'DEFINE THE TEST' },
+  { number: '02', icon: 'cursor', title: 'Let them find their way.', text: 'Autonomous agents explore the actual interface. They can take wrong turns, retry, or abandon.', detail: 'OBSERVE REAL INTERACTION' },
+  { number: '03', icon: 'activity', title: 'Follow the evidence.', text: 'Trace friction to recorded actions and session IDs. Decide what to fix with measured outcomes.', detail: 'INSPECT THE RESULTS' },
+];
+
+export function LandingPage() {
+  return <div className="landing-page"><header className="landing-header container"><Brand /><nav aria-label="Main navigation"><a className="quiet-link" href="#workflow">How it works</a><a className="button button-secondary header-cta" href="#/new">Open workspace <Icon name="arrow" size={15} /></a></nav></header>
+    <main id="main"><section className="hero container" aria-labelledby="hero-heading"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line" />PRODUCT TESTING, WITH EVIDENCE</div><h1 id="hero-heading">Deploy synthetic users.<br /><span>Watch where your product breaks.</span></h1><p className="hero-description">Find obvious UX and product failures before spending time recruiting human beta users.</p><p className="hero-detail">Autonomous browser agents. Actual interaction.<br />Every finding tied to what happened.</p><div className="hero-actions"><a className="button button-primary button-large" href="#/new">Deploy synthetic users <Icon name="arrow" size={17} /></a><a className="text-link" href="#workflow">See the workflow <Icon name="chevron" size={13} /></a></div><div className="hero-guardrail"><Icon name="shield" size={14} /><span>Authorized targets. Explicit limits. You stay in control.</span></div></div><SessionIllustration /></section>
+    <div className="scope-strip container"><span className="scope-label"><span className="dot" /> BUILT FOR THE WEB</span><span>One objective per run</span><span>Independent browser sessions</span><span>Evidence before assumptions</span></div>
+    <section id="workflow" className="workflow container" aria-labelledby="workflow-heading"><div className="workflow-heading"><h2 id="workflow-heading">A goal in. Evidence out.</h2><Badge>THE WORKFLOW</Badge></div><div className="workflow-grid">{workflow.map(step => <article className="workflow-step" key={step.number}><div className="workflow-step-top"><span className="mono">{step.number}</span><Icon name={step.icon} size={20} /></div><h3>{step.title}</h3><p>{step.text}</p><span className="step-detail mono">{step.detail}</span></article>)}</div></section>
+    <section className="principle container"><Icon name="users" size={19} /><p><strong>An earlier signal. A better starting point.</strong><span>Synthetic sessions help you spot friction. They don’t replace research with real people.</span></p><a className="text-link" href="#/new">Create your first run <Icon name="arrow" size={16} /></a></section></main>
+    <footer className="landing-footer container"><span>Synthetic Beta <span className="footer-separator">/</span> Observe. Understand. Improve.</span><span className="footer-build mono">FOUNDATION PREVIEW <span className="dot" /></span></footer>
+  </div>;
+}

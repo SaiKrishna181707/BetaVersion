@@ -1,0 +1,13 @@
+{
+  "name": "@synthetic-beta/agent-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@synthetic-beta/analytics": "*",
+    "@synthetic-beta/contracts": "*",
+    "@synthetic-beta/population": "*",
+    "playwright-core": "^1.49.0"
+  }
+}
