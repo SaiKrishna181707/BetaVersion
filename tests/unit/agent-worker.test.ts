@@ -95,10 +95,34 @@ test('rejects plain http for a non-local target', () => {
   assert.match(String(reasons[0]), /Only HTTPS targets/);
 });
 
+test('rejects budget above the global ceiling and oversized policy lists', () => {
+  const overBudget = reviewSessionPlan(planFixture({
+    remaining_budget_cents: GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100 + 1,
+  }));
+  assert.ok(overBudget.some(reason => reason.includes('Remaining run budget')));
+
+  const tooManyOrigins = reviewSessionPlan(planFixture({
+    allowed_origins: Array.from({ length: 9 }, (_, index) => `host-${index}.example.test`),
+  }));
+  assert.ok(tooManyOrigins.some(reason => reason.includes('1–8 authorized origins')));
+
+  const tooManyCheckpoints = reviewSessionPlan(planFixture({
+    checkpoint_plan: Array.from({ length: 33 }, (_, index) => `STEP_${index}`),
+  }));
+  assert.ok(tooManyCheckpoints.some(reason => reason.includes('1–32 ordered milestones')));
+});
+
+test('rejects origin entries that are not plain hostnames', () => {
+  for (const origin of ['https://localhost', 'localhost/path', '*.localhost', 'localhost:4174']) {
+    const reasons = reviewSessionPlan(planFixture({ allowed_origins: [origin] }));
+    assert.ok(reasons.some(reason => reason.includes('hostname-only')));
+  }
+});
+
 test('rejects a plan with no checkpoints and no authorized origins', () => {
   const reasons = reviewSessionPlan(planFixture({ checkpoint_plan: [], allowed_origins: [] }));
-  assert.ok(reasons.some(reason => reason.includes('task checkpoint')), reasons.join(' | '));
-  assert.ok(reasons.some(reason => reason.includes('allowlist of authorized origins')), reasons.join(' | '));
+  assert.ok(reasons.some(reason => reason.includes('checkpoint plan')), reasons.join(' | '));
+  assert.ok(reasons.some(reason => reason.includes('authorized origins')), reasons.join(' | '));
   // An empty allowlist also means the target itself cannot be authorized.
   assert.ok(reasons.some(reason => reason.includes('localhost is not in the authorized origin allowlist')), reasons.join(' | '));
 });
@@ -111,7 +135,7 @@ test('raises a typed rejection carrying every reason', () => {
       assert.equal(error.code, 'SESSION_PLAN_REJECTED');
       assert.ok(error.reasons.length >= 2);
       assert.ok(error.reasons.some(reason => reason.includes('Action budget')));
-      assert.ok(error.reasons.some(reason => reason.includes('allowlist of authorized origins')));
+      assert.ok(error.reasons.some(reason => reason.includes('authorized origins')));
       return true;
     },
   );
