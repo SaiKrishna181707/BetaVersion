@@ -10,12 +10,22 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-/** Reads a positive-weight trait mix, ignoring anything that is not a usable weight. */
-function readMix<T extends string>(value: unknown): Partial<Record<T, number>> | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+function readMix<T extends string>(
+  value: unknown,
+  allowedKeys: readonly T[],
+  label: string,
+): Partial<Record<T, number>> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object.`);
+
+  const allowed = new Set<string>(allowedKeys);
   const mix: Partial<Record<T, number>> = {};
   for (const [key, weight] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) mix[key as T] = weight;
+    if (!allowed.has(key)) throw new Error(`${label} contains unsupported value "${key}".`);
+    if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+      throw new Error(`${label} weights must be positive finite numbers.`);
+    }
+    mix[key as T] = weight;
   }
   return Object.keys(mix).length > 0 ? mix : undefined;
 }
@@ -28,9 +38,9 @@ function readPopulationSpec(value: unknown): PopulationSpec | null {
     cohort: readString(raw.cohort),
     goal_context: readString(raw.goal_context),
     size: typeof raw.size === 'number' ? raw.size : Number.NaN,
-    device_class_mix: readMix(raw.device_class_mix),
-    technical_ability_mix: readMix(raw.technical_ability_mix),
-    patience_mix: readMix(raw.patience_mix),
+    device_class_mix: readMix(raw.device_class_mix, ['DESKTOP', 'TABLET', 'MOBILE_WEB'], 'device_class_mix'),
+    technical_ability_mix: readMix(raw.technical_ability_mix, ['LOW', 'MEDIUM', 'HIGH'], 'technical_ability_mix'),
+    patience_mix: readMix(raw.patience_mix, ['LOW', 'MEDIUM', 'HIGH'], 'patience_mix'),
   };
   return spec;
 }
@@ -48,7 +58,7 @@ export function createApiHandler(authorizedDomains: readonly string[]) {
   });
 
   const parseBody = (request: ApiRequest): { ok: true; value: unknown } | { ok: false; response: ApiResponse } => {
-    if ((request.body?.length ?? 0) > MAX_BODY_BYTES) {
+    if (Buffer.byteLength(request.body ?? '', 'utf8') > MAX_BODY_BYTES) {
       return { ok: false, response: response(413, { code: 'PAYLOAD_TOO_LARGE' }) };
     }
     try {
@@ -74,9 +84,9 @@ export function createApiHandler(authorizedDomains: readonly string[]) {
     if (request.httpMethod === 'POST' && /^\/runs\/[^/]+\/population-preview$/.test(request.path)) {
       const body = parseBody(request);
       if (!body.ok) return body.response;
-      const spec = readPopulationSpec(body.value);
-      if (spec === null) return response(400, { code: 'INVALID_POPULATION_SPEC' });
       try {
+        const spec = readPopulationSpec(body.value);
+        if (spec === null) return response(400, { code: 'INVALID_POPULATION_SPEC' });
         const personas = buildCohort(spec);
         return response(200, { personas, profile: profileCohort(personas) });
       } catch (cause) {
