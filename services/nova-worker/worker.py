@@ -30,8 +30,16 @@ DEFAULT_MODEL_ID = "nova-act-latest"
 DEFAULT_WORKFLOW_NAME = "synthetic-beta-browser-session"
 DEFAULT_BROWSER_IDENTIFIER = "aws.browser.v1"
 MAX_ACTIONS = 40
+MIN_SESSION_SECONDS = 30
 MAX_SESSION_SECONDS = 300
+MAX_ALLOWED_ORIGINS = 8
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+TECHNICAL_ABILITIES = {"LOW", "MEDIUM", "HIGH"}
+PRODUCT_FAMILIARITIES = {"NEW", "CATEGORY_FAMILIAR", "POWER_USER"}
+PATIENCE_LEVELS = {"LOW", "MEDIUM", "HIGH"}
+READING_STYLES = {"SCANNING", "SELECTIVE", "THOROUGH"}
+DEVICE_CLASSES = {"DESKTOP", "TABLET", "MOBILE_WEB"}
+SENSITIVITY_LEVELS = {"LOW", "MEDIUM", "HIGH"}
 
 
 class PlanError(ValueError):
@@ -55,6 +63,19 @@ def _required_string(raw: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise PlanError(f"{key} must be a non-empty string")
     return value.strip()
+
+
+def _enum_field(persona: dict[str, Any], key: str, allowed: set[str]) -> str:
+    value = persona.get(key)
+    if not isinstance(value, str) or value not in allowed:
+        raise PlanError(f"persona.{key} must be one of: {', '.join(sorted(allowed))}")
+    return value
+
+
+def _optional_enum_field(persona: dict[str, Any], key: str, allowed: set[str]) -> None:
+    value = persona.get(key)
+    if value is not None and (not isinstance(value, str) or value not in allowed):
+        raise PlanError(f"persona.{key} must be one of: {', '.join(sorted(allowed))}")
 
 
 def _host(value: str) -> str:
@@ -102,6 +123,8 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     objective = _required_string(raw, "objective")
     target_url = _required_string(raw, "target_url")
 
+    if len(target_url) > 2048:
+        raise PlanError("target_url must be at most 2048 characters")
     if not SAFE_ID.fullmatch(run_id):
         raise PlanError("run_id must use 1-128 ASCII letters, numbers, underscores, or hyphens")
     if not SAFE_ID.fullmatch(session_id):
@@ -126,8 +149,12 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     origins = raw.get("allowed_origins")
     if not isinstance(origins, list) or not origins:
         raise PlanError("allowed_origins must be a non-empty array")
+    if len(origins) > MAX_ALLOWED_ORIGINS:
+        raise PlanError(f"allowed_origins may contain at most {MAX_ALLOWED_ORIGINS} hosts")
+    if any(not isinstance(item, str) or len(item) > 253 for item in origins):
+        raise PlanError("allowed_origins entries must be hostname strings of at most 253 characters")
 
-    normalized = {_host(str(item)) for item in origins}
+    normalized = {_host(item) for item in origins}
     if "" in normalized:
         raise PlanError("allowed_origins contains an invalid hostname")
     if any(not _is_public_target_host(host) for host in normalized):
@@ -142,6 +169,16 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     persona_id = _required_string(persona, "persona_id")
     if not SAFE_ID.fullmatch(persona_id):
         raise PlanError("persona_id must use 1-128 ASCII letters, numbers, underscores, or hyphens")
+    _enum_field(persona, "technical_ability", TECHNICAL_ABILITIES)
+    _enum_field(persona, "product_familiarity", PRODUCT_FAMILIARITIES)
+    _enum_field(persona, "patience", PATIENCE_LEVELS)
+    _enum_field(persona, "reading_style", READING_STYLES)
+    _enum_field(persona, "device_class", DEVICE_CLASSES)
+    _optional_enum_field(persona, "price_sensitivity", SENSITIVITY_LEVELS)
+    _optional_enum_field(persona, "privacy_sensitivity", SENSITIVITY_LEVELS)
+    goal_context = persona.get("goal_context", "")
+    if not isinstance(goal_context, str) or len(goal_context) > 1000:
+        raise PlanError("persona.goal_context must be a string of at most 1000 characters")
 
     max_actions = raw.get("max_actions", MAX_ACTIONS)
     if not isinstance(max_actions, int) or isinstance(max_actions, bool) or not 1 <= max_actions <= MAX_ACTIONS:
@@ -151,9 +188,11 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     if (
         not isinstance(max_session_seconds, int)
         or isinstance(max_session_seconds, bool)
-        or not 1 <= max_session_seconds <= MAX_SESSION_SECONDS
+        or not MIN_SESSION_SECONDS <= max_session_seconds <= MAX_SESSION_SECONDS
     ):
-        raise PlanError(f"max_session_seconds must be between 1 and {MAX_SESSION_SECONDS}")
+        raise PlanError(
+            f"max_session_seconds must be between {MIN_SESSION_SECONDS} and {MAX_SESSION_SECONDS}"
+        )
 
     return ValidatedPlan(
         run_id=run_id,
