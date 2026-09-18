@@ -215,7 +215,7 @@ export function createLocalAgentPolicy(options: LocalPolicyOptions): AgentPolicy
         const text = composeTextInput(emptyTextbox.name || emptyTextbox.target_descriptor || '', persona, objective, options.account);
         return {
           action: { type: 'type', ref: emptyTextbox.ref, text },
-          reason_code: 'GOAL_PROGRESS',
+          reason_code: repeats > 0 ? 'RETRYING' : 'GOAL_PROGRESS',
           rationale: `fills the ${emptyTextbox.name || 'visible'} field`,
           sensitive_input: isSecretField(emptyTextbox),
         };
@@ -253,7 +253,9 @@ export function createLocalAgentPolicy(options: LocalPolicyOptions): AgentPolicy
 
       const explore = random() < explorationRate(persona) && scored.length > 1;
       const chosen = explore ? (scored[Math.min(scored.length - 1, 1 + Math.floor(random() * 2))] ?? best) : best;
-      const reasonCode = explore && chosen !== best ? 'EXPLORING' : best.score > 3 ? 'GOAL_PROGRESS' : 'EXPLORING';
+      const reasonCode = repeats > 0
+        ? 'RETRYING'
+        : explore && chosen !== best ? 'EXPLORING' : best.score > 3 ? 'GOAL_PROGRESS' : 'EXPLORING';
       const label = chosen.element.name || chosen.element.target_descriptor || chosen.element.role;
       return {
         action: { type: 'click', ref: chosen.element.ref },

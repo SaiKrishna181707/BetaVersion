@@ -154,6 +154,10 @@ function retryFinding(
   limit: number,
 ): ReportFinding | null {
   if (metrics.retry.sessions_with_retry === 0) return null;
+  const retrySessionIds = [...bySession.entries()]
+    .filter(([, events]) => events.some(event => event.agent_reason_code === 'RETRYING'))
+    .map(([sessionId]) => sessionId)
+    .sort((a, b) => a.localeCompare(b));
   return {
     finding_id: 'retry-friction',
     kind: 'FRICTION',
@@ -163,7 +167,7 @@ function retryFinding(
       + 'Each pointer below is the first recorded retry in a session.',
     metric_refs: ['retry.sessions_with_retry', 'retry.total_retries', 'friction.total_signals'],
     evidence: firstMatchingEvidence(
-      metrics.funnel.flatMap(step => step.supporting_session_ids).concat(metrics.outcomes.map(o => o.session_id)),
+      retrySessionIds,
       bySession,
       event => event.agent_reason_code === 'RETRYING',
       limit,

@@ -72,3 +72,11 @@ test('always states its limitations', async () => {
   assert.equal(report.limitations.length, 3);
   assert.match(String(report.limitations[0]), /not real beta users/);
 });
+
+test('retry finding cites each retrying session once', async () => {
+  const finding = (await build()).findings.find(entry => entry.finding_id === 'retry-friction');
+  assert.ok(finding, 'expected retry-friction finding');
+  assert.equal(finding.evidence.length, 1);
+  assert.equal(finding.evidence[0]?.session_id, 's2');
+  assert.equal(finding.evidence[0]?.sequence, 1);
+});
