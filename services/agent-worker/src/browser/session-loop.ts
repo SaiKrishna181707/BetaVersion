@@ -1,4 +1,5 @@
 import {
+  GUARDRAILS,
   observationStateKey,
   type AgentAction,
   type AgentPolicyPort,
@@ -6,6 +7,7 @@ import {
   type HistoryEntry,
   type SessionPlan,
   type SessionResult,
+  type PageObservation,
   type SessionStopReason,
   type SessionStatus,
 } from '@synthetic-beta/contracts';
@@ -93,6 +95,33 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
     try {
       await options.page.screenshot(`final-${events.length}`);
     } catch { /* A missing capture must not fail a session. */ }
+  };
+
+  /** Ending on one screen counts as abandonment, not as a technical failure. */
+  const recordAbandon = (observation: PageObservation, stateKey: string): void => {
+    record({
+      timestamp: new Date(now()).toISOString(),
+      elapsed_ms: Math.max(0, now() - startedAt),
+      url: observation.url,
+      page_title: observation.page_title,
+      route: observation.route,
+      action_type: 'abandon',
+      target_descriptor: null,
+      result: 'SUCCESS',
+      screenshot_ref: null,
+      console_error: null,
+      network_error: null,
+      task_checkpoint: null,
+      agent_reason_code: 'PATIENCE_EXHAUSTED',
+    });
+    history.push({
+      action_type: 'abandon',
+      target_descriptor: null,
+      result: 'SUCCESS',
+      agent_reason_code: 'PATIENCE_EXHAUSTED',
+      state_key: stateKey,
+      task_checkpoint: null,
+    });
   };
 
   try {
@@ -234,6 +263,14 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
       repeats += 1;
     }
 
+    // A ceiling the persona cannot argue with: a session that repeats one screen more than the
+    // handoff allows has stopped making progress, whatever the policy would try next.
+    if (repeats >= GUARDRAILS.MAX_RETRIES_SAME_STATE) {
+      recordAbandon(observation, stateKey);
+      stopReason = 'ABANDONED';
+      break;
+    }
+
     const byRef = new Map(observation.elements.map(element => [element.ref, element.target_descriptor] as const));
     const decision = await options.policy.decide({
       observation,
@@ -245,29 +282,7 @@ export async function runSessionLoop(plan: SessionPlan, options: SessionLoopOpti
     });
 
     if (decision.action.type === 'abandon') {
-      record({
-        timestamp: new Date(now()).toISOString(),
-        elapsed_ms: Math.max(0, now() - startedAt),
-        url: observation.url,
-        page_title: observation.page_title,
-        route: observation.route,
-        action_type: 'abandon',
-        target_descriptor: null,
-        result: 'SUCCESS',
-        screenshot_ref: null,
-        console_error: null,
-        network_error: null,
-        task_checkpoint: null,
-        agent_reason_code: 'PATIENCE_EXHAUSTED',
-      });
-      history.push({
-        action_type: 'abandon',
-        target_descriptor: null,
-        result: 'SUCCESS',
-        agent_reason_code: 'PATIENCE_EXHAUSTED',
-        state_key: stateKey,
-        task_checkpoint: null,
-      });
+      recordAbandon(observation, stateKey);
       stopReason = 'ABANDONED';
       break;
     }

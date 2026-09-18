@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AgentAction, AgentPolicyPort, ObservedElement, PageObservation, SessionPlan } from '@synthetic-beta/contracts';
+import {
+  GUARDRAILS,
+  type AgentAction,
+  type AgentPolicyPort,
+  type ObservedElement,
+  type PageObservation,
+  type SessionPlan,
+} from '@synthetic-beta/contracts';
 import {
   runSessionLoop,
   type ActionOutcome,
@@ -293,3 +300,23 @@ test('merges console and network errors from an action into the event', async ()
   assert.equal(action.console_error, 'TypeError: boom');
   assert.equal(action.network_error, 'GET /api 500');
 });
+
+test(
+  'stops a session that keeps landing on the same screen, and calls it abandonment',
+  async () => {
+    const page = new ScriptedPage({ states: [state('/projects', 'OPEN_APP')] });
+    const result = await runSessionLoop(plan(), { page, policy: clicker(), now: () => START });
+
+    assert.equal(result.status, 'ABANDONED', 'a stuck session is an abandonment, not a technical failure');
+    assert.equal(result.finish_reason, 'ABANDONED');
+    assert.equal(
+      page.actions.length,
+      GUARDRAILS.MAX_RETRIES_SAME_STATE,
+      'the loop must stop at the same-state ceiling instead of burning the whole action budget',
+    );
+    const last = result.events.at(-1);
+    assert.ok(last !== undefined);
+    assert.equal(last.action_type, 'abandon');
+    assert.equal(last.agent_reason_code, 'PATIENCE_EXHAUSTED');
+  },
+);

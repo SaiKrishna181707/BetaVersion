@@ -47,6 +47,11 @@ Four pieces, each with a single responsibility:
 The loop stops for one recorded reason: `OBJECTIVE_COMPLETE`, `ABANDONED`, `TIMED_OUT`, `ACTION_LIMIT`,
 `BUDGET_LIMIT`, `TECHNICAL_ERROR`, `SAFETY_STOP`, or `CANCELLED`.
 
+Duplicate-state detection has a ceiling as well. When a persona repeats one screen for
+`MAX_RETRIES_SAME_STATE` (5) actions without the state changing, the loop ends the session as `ABANDONED`
+with `PATIENCE_EXHAUSTED`, because the handoff treats a user who cannot leave a screen as a user who gave up
+rather than a user who hit a technical fault.
+
 ## What it writes
 
 ```
