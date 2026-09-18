@@ -43,14 +43,17 @@ function pick<T extends string>(values: readonly T[], random: () => number, mix?
     const weight = mix?.[value];
     return typeof weight === 'number' && Number.isFinite(weight) && weight > 0 ? weight : 0;
   });
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  if (total <= 0) {
+  const maximum = Math.max(...weights);
+  if (maximum <= 0) {
     const index = Math.min(values.length - 1, Math.floor(random() * values.length));
     return values[index] as T;
   }
+  // Normalize first so very large but finite caller weights cannot overflow the sum.
+  const normalized = weights.map(weight => weight / maximum);
+  const total = normalized.reduce((sum, weight) => sum + weight, 0);
   let threshold = random() * total;
   for (let index = 0; index < values.length; index += 1) {
-    threshold -= weights[index] ?? 0;
+    threshold -= normalized[index] ?? 0;
     if (threshold < 0) return values[index] as T;
   }
   return values[values.length - 1] as T;
