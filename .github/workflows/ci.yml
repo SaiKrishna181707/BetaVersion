@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - feat/**
+      - fix/**
+      - chore/**
   pull_request:
     branches:
       - main
@@ -27,13 +29,35 @@ jobs:
       - run: npm run check
 
   nova-worker:
-    name: Nova worker contract tests
+    name: Nova worker SDK + contract tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/nova-worker/requirements.txt
+      - run: python -m pip install --disable-pip-version-check -r services/nova-worker/requirements.txt
+      - run: python -m pip check
       - run: python -m compileall services/nova-worker
+      - name: Verify pinned AWS SDK surface
+        run: |
+          python - <<'PY'
+          import inspect
+          from bedrock_agentcore.tools.browser_client import BrowserClient
+          from nova_act import GuardrailDecision, NovaAct, Workflow
+
+          start = inspect.signature(BrowserClient.start)
+          if "session_timeout_seconds" not in start.parameters:
+              raise SystemExit("BrowserClient.start lacks session_timeout_seconds")
+
+          nova = inspect.signature(NovaAct)
+          if "state_guardrail" not in nova.parameters:
+              raise SystemExit("NovaAct lacks state_guardrail")
+
+          assert GuardrailDecision.PASS is not None
+          assert Workflow is not None
+          PY
       - run: python -m unittest discover -s services/nova-worker -p "test_*.py"
