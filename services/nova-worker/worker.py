@@ -15,8 +15,10 @@ authorized HTTPS host.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +31,7 @@ DEFAULT_WORKFLOW_NAME = "synthetic-beta-browser-session"
 DEFAULT_BROWSER_IDENTIFIER = "aws.browser.v1"
 MAX_ACTIONS = 40
 MAX_SESSION_SECONDS = 300
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 
 
 class PlanError(ValueError):
@@ -65,6 +68,16 @@ def _host(value: str) -> str:
         return ""
 
 
+def _is_public_target_host(host: str) -> bool:
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local") or host.endswith(".internal"):
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return address.is_global
+
+
 def navigation_guardrail_reason(
     browser_url: str,
     allowed_hosts: tuple[str, ...],
@@ -89,6 +102,13 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     objective = _required_string(raw, "objective")
     target_url = _required_string(raw, "target_url")
 
+    if not SAFE_ID.fullmatch(run_id):
+        raise PlanError("run_id must use 1-128 ASCII letters, numbers, underscores, or hyphens")
+    if not SAFE_ID.fullmatch(session_id):
+        raise PlanError("session_id must use 1-128 ASCII letters, numbers, underscores, or hyphens")
+    if len(objective) < 3 or len(objective) > 1000:
+        raise PlanError("objective must be 3-1000 characters")
+
     parsed = urlparse(target_url)
     if parsed.scheme != "https":
         raise PlanError("AWS browser execution requires an HTTPS target")
@@ -100,6 +120,8 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     target_host = _host(target_url)
     if not target_host:
         raise PlanError("target URL must contain a valid hostname")
+    if not _is_public_target_host(target_host):
+        raise PlanError("AWS browser execution requires a public target hostname")
 
     origins = raw.get("allowed_origins")
     if not isinstance(origins, list) or not origins:
@@ -108,6 +130,8 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     normalized = {_host(str(item)) for item in origins}
     if "" in normalized:
         raise PlanError("allowed_origins contains an invalid hostname")
+    if any(not _is_public_target_host(host) for host in normalized):
+        raise PlanError("allowed_origins must contain public hostnames only")
     allowed = tuple(sorted(normalized))
     if target_host not in allowed:
         raise PlanError("target host is not present in allowed_origins")
@@ -115,7 +139,9 @@ def validate_plan(raw: Any) -> ValidatedPlan:
     persona = raw.get("persona")
     if not isinstance(persona, dict):
         raise PlanError("persona must be an object")
-    _required_string(persona, "persona_id")
+    persona_id = _required_string(persona, "persona_id")
+    if not SAFE_ID.fullmatch(persona_id):
+        raise PlanError("persona_id must use 1-128 ASCII letters, numbers, underscores, or hyphens")
 
     max_actions = raw.get("max_actions", MAX_ACTIONS)
     if not isinstance(max_actions, int) or isinstance(max_actions, bool) or not 1 <= max_actions <= MAX_ACTIONS:
