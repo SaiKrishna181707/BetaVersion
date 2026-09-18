@@ -46,6 +46,13 @@ function hasTechnicalFailure(event: BehaviorEvent): boolean {
   return event.result === 'ERROR' || event.console_error !== null || event.network_error !== null;
 }
 
+export function isRetrySignal(event: BehaviorEvent): boolean {
+  return event.agent_reason_code === 'RETRYING'
+    || event.agent_reason_code === 'BACKTRACKING'
+    || event.result === 'NO_CHANGE'
+    || event.result === 'VALIDATION_FAILURE';
+}
+
 function hasFriction(event: BehaviorEvent): boolean {
   return FRICTION_REASON_CODES.has(event.agent_reason_code) || FRICTION_RESULTS.has(event.result);
 }
@@ -84,7 +91,7 @@ export function computeRunMetrics(input: ComputeRunMetricsInput): RunMetrics {
         status: session.status,
         action_count: session.action_count,
         elapsed_ms: session.elapsed_ms,
-        retries: events.filter(event => event.agent_reason_code === 'RETRYING').length,
+        retries: events.filter(isRetrySignal).length,
         technical_failures: events.filter(hasTechnicalFailure).length,
         goal_reached_at_ms: firstCheckpointElapsed(events, goalCheckpoint),
         observed_event_count: events.length,
