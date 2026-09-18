@@ -1,187 +1,163 @@
 # Architecture
 
 Synthetic Beta deploys synthetic users into isolated browser sessions against a web product you are authorized
-to test. The differentiator is that the agents operate the **real product in a real browser**, and that every
-number in the resulting report is computed from recorded events.
+to test. The differentiator is that agents operate the **real product in a real browser**, while numerical
+analytics remain deterministic functions of recorded evidence.
 
 ## Design principles
 
-1. **Evidence before interpretation.** Metrics are deterministic functions of recorded events. A language model
-   may cluster behaviour and write prose, but it may never produce a number.
-2. **Honest surfaces.** Nothing in the UI claims to be live when it is not. A surface that is not built renders
-   a stated placeholder; an executor that is not configured reports itself unavailable and throws.
-3. **Boundaries before capability.** Guardrails are declared in one place, enforced by shared validation on the
-   client, and re-checked server-side before a session could start.
-4. **Ports, not stubs.** AWS integration is represented as typed ports and documented topology, never as
-   invented SDK calls.
+1. **Evidence before interpretation.** Models can decide actions and write labelled interpretation; they do not
+   invent percentages.
+2. **Honest surfaces.** Unbuilt or unconfigured execution paths fail explicitly instead of emitting plausible
+   synthetic results.
+3. **Boundaries before capability.** Authorization, origin, action, time and budget limits exist before scale.
+4. **Replaceable execution.** Local Playwright validates the loop cheaply; Nova Act + AgentCore Browser is the
+   real AWS execution path.
+5. **Scale after one real session.** 1 → 5 → 20 → 100, keeping one session contract.
 
 ## Components
 
-### Front end — `apps/web`
+### Frontend — `apps/web`
 
-React, TypeScript, and Vite. Hash routing through a typed route table in `apps/web/src/router.ts`:
+React, TypeScript and Vite. The landing and New Run surfaces are built. Population Preview, Live Run, Session
+Detail, Run Report and Settings are registered routes that remain honest placeholders until they have real data.
 
-| Route | Surface | Status |
-| --- | --- | --- |
-| `#/` | Landing | Built |
-| `#/new` | New run | Built |
-| `#/runs/:runId/population` | Population preview | Planned |
-| `#/runs/:runId/live` | Live run | Planned |
-| `#/runs/:runId/sessions/:sessionId` | Session detail | Planned |
-| `#/runs/:runId/report` | Run report | Planned |
-| `#/settings` | Cost and settings | Planned |
-
-A planned route resolves to an honest "registered, not built" surface rather than a mock dashboard. This keeps
-navigation truthful while the execution phase lands.
+AWS Amplify Hosting is the submission hosting path; `amplify.yml` builds the npm-workspace monorepo from the
+repository root and publishes `apps/web/dist`.
 
 ### Shared contracts — `packages/contracts`
 
-The single source of truth, so no type or rule is duplicated across services:
+The shared types define guardrails, personas, run configuration, browser observations, behavior events, metrics,
+reports and the `SessionExecutorPort`. They keep analytics independent of whichever browser runtime produced
+the evidence.
 
-- `model.ts` — `GUARDRAILS`, session statuses, `BehaviorEvent`, `SyntheticPersona`, `RunConfiguration`,
-  `SessionRecord`, `EvidenceRate`, `RunGateway`.
-- `metrics.ts` — `SessionOutcome`, `FunnelStep`, `CohortMetrics`, `RunMetrics`.
-- `population.ts` — `PopulationSpec` and the trait types derived from `SyntheticPersona`.
-- `execution.ts` — `SessionPlan`, `SessionResult`, `RunPlan`, and `SessionExecutorPort`.
-- `observation.ts` — `PageObservation`, `ObservedElement`, `AgentAction`, `AgentPolicyPort`,
-  and the deterministic `observationStateKey` used to detect repeated states.
-- `report.ts` — `EvidencePointer`, `ReportFinding`, `SyntheticBetaReport`, `ReportNarratorPort`.
-- `validation.ts` / `cost.ts` — run configuration validation and the cost model.
+### Local browser execution — `services/agent-worker`
 
-### API — `services/api`
+The L1 adapter uses an installed Chrome/Edge through Playwright. It proves:
 
-A transport-shaped handler (`createApiHandler`) that maps a request to a response and does deterministic work
-only. It performs no I/O and calls no AWS service:
+- autonomous decision loop wiring,
+- action/time/retry/budget limits,
+- origin enforcement,
+- structured observations,
+- screenshot capture,
+- event logging,
+- deterministic outcome classification.
 
-| Endpoint | Behaviour |
-| --- | --- |
-| `GET /health` | Reports `execution_available: false` and `mode: FOUNDATION` |
-| `POST /runs/:id/estimate-cost` | Validates the configuration, returns the cost estimate |
-| `POST /runs/:id/population-preview` | Builds and profiles a deterministic cohort |
-| `POST /runs/:id/start` | `501 EXECUTION_NOT_CONFIGURED` |
-| `GET /runs/:id/metrics` | `501 NO_RECORDED_EVENTS` |
+The current local policy is deliberately heuristic. It is a zero-cloud-cost test double for the agent judgment
+boundary, not the final hackathon agent.
 
-An unknown route returns `404`, malformed JSON returns `400`, and a body over 16 KiB returns `413`.
+### AWS autonomous execution — `services/nova-worker`
 
-### Agent worker — `services/agent-worker`
+The L2 worker is the real AWS path. It accepts one JSON session plan, validates it, then uses:
 
-Owns the boundary between an approved plan and a browser. It exposes:
+- Nova Act workflow mode with AWS IAM authentication,
+- Amazon Bedrock AgentCore Browser,
+- CDP between Nova Act and the managed browser,
+- persona + objective conditioning rather than a scripted click path,
+- explicit authorized-host and destructive-action boundaries.
 
-- `reviewSessionPlan(plan)` — returns every guardrail violation as a list of reasons.
-- `assertSessionPlanWithinGuardrails(plan)` — throws `SessionPlanRejectedError` carrying those reasons.
-- `SessionExecutorPort` — the interface a real runtime must implement.
-- `createUnconfiguredSessionExecutor()` — the honest placeholder: `available: false`, and `execute()` rejects
-  with `SessionExecutorUnavailableError` instead of fabricating behaviour.
+The worker does **not** require `data-synthetic-checkpoint` hooks from the target product. Nova Act reasons over
+the actual product UI and stops when the task is complete, blocked, abandoned or limited.
 
-The server-side review is the authoritative one; the form is a convenience. It re-checks action and duration
-limits, remaining budget, the presence of a checkpoint plan and an origin allowlist, the transport scheme
-(HTTPS, or HTTP only for a local sandbox), the absence of credentials in the URL, and membership of the target
-host in the allowlist.
-
-#### The local browser session (L1)
-
-L1 runs one persona against one authorized target in a real browser on this machine. Four pieces, each with a
-single responsibility:
-
-| Piece | Responsibility |
-| --- | --- |
-| `PlaywrightPage` | Implements `BrowserPagePort`: open, observe, perform one action, screenshot. It is the only
-code that knows a browser exists. |
-| `createLocalAgentPolicy` | Implements `AgentPolicyPort`: one action plus a reason code from the observation,
-the persona, the objective, and the history. Seeded, persona-weighted, and never given a click path. |
-| `runSessionLoop` | Everything that must not be a judgment call: deadline, action budget, remaining-budget
-guard, duplicate-state detection, origin allowlist, cancellation, checkpoint capture, outcome classification. |
-| `writeSessionArtifacts` | Writes `session.json`, `events.json`, and screenshots, and refuses to write a log
-containing a value it was told to protect. |
-
-The observation is a structured `PageObservation` (route, headings, text excerpt, declared checkpoints, and a
-list of visible controls with roles, accessible names, instrumentation hooks, and `value_present`), never raw
-HTML. Refs are observation-scoped: the observation clears previous stamps before assigning new ones, so one ref
-always matches exactly one element.
-
-The in-page observation routine lives in `observation-script.ts` as source text rather than as a function. The
-local runner is compiled by tsx/esbuild, which injects `__name(...)` calls into nested functions; Playwright
-serialises the function and evaluates it inside the page, where `__name` does not exist. Shipping source text is
-also what a remote browser transport has to do, so the definition stays in one place.
-
-`local-playwright` is a **development adapter**: `createLocalBrowserSessionExecutor()` reports `available: true`
-and `kind: "local-playwright"`. It changes none of the contracts, so an AgentCore Browser executor can replace
-it without touching the loop, the policy port, the event schema, or the artefacts.
+Current boundary: the worker returns an explicit Nova result envelope, while actual Nova/AgentCore trace steps
+still need an adapter into `BehaviorEvent[]`. The system must never fabricate event rows from the final model
+response.
 
 ### Population — `services/population`
 
-`buildCohort(spec)` turns a `PopulationSpec` into personas using an FNV-1a seed hash and a mulberry32
-generator. The same spec always produces the same cohort, so a run stays reproducible and reviewable after the
-fact. Trait assignment supports explicit weighted mixes and falls back to an equal share. `profileCohort`
-summarises trait counts for the population preview surface.
+`buildCohort` is seeded and reproducible. Traits are structured simulation inputs; any human-friendly persona
+story shown later is presentation, not the source of analytics.
 
 ### Analytics — `services/analytics`
 
-`computeRunMetrics` is a pure function of `SessionRecord[]`, `BehaviorEvent[]`, `SyntheticPersona[]`, and the
-ordered checkpoint plan. It produces completion, abandonment, timeout, and technical failure rates; median
-time-to-value; retry and friction counts; a funnel; and per-cohort comparisons.
-
-Every rate carries its numerator, denominator, and the session ids behind it. **An empty denominator reports
-`null`, never `0%`.** A session counts as a technical failure when it ended `FAILED` or recorded a console
-error, network error, or an action that returned `ERROR` — those are product defects, not user confusion.
+`computeRunMetrics` is a pure function over session records and behavior events. It produces completion,
+abandonment, timeout, technical failure, time-to-value, retry/friction, funnel and cohort metrics. Rates retain
+their numerator, denominator and supporting session IDs.
 
 ### Report — `services/report`
 
-`buildSyntheticBetaReport` assembles findings from the metrics and attaches `EvidencePointer`s that resolve to
-specific actions in specific sessions. Four deterministic rules currently run: largest funnel drop-off,
-technical failure, retry friction, and completion. Interpretation is strictly optional: without a
-`ReportNarratorPort` every finding keeps `interpretation: null` and `interpretation_source: 'NONE'`. When a
-narrator is supplied its text is labelled `NARRATOR` and the metrics are passed through untouched.
+`buildSyntheticBetaReport` creates deterministic findings and attaches evidence pointers. Optional model
+narration can interpret an existing finding but cannot change its metrics.
 
-## Run lifecycle
+## Local evidence lifecycle
 
-```
-RunConfiguration ──validate──▶ estimate ──▶ reviewed draft (local)
-                                                │
-                          (execution phase)     ▼
-                     RunPlan ──▶ SessionPlan[] ──▶ reviewSessionPlan
-                                                        │
-                                                        ▼
-                                          SessionExecutorPort.execute
-                                                        │
-                                            BehaviorEvent[] + SessionRecord
-                                                        │
-                            ┌───────────────────────────┴───────────────────────────┐
-                            ▼                                                       ▼
-                  computeRunMetrics                                    replay / screenshots
-                            │
-                            ▼
-                buildSyntheticBetaReport ──▶ findings + evidence pointers
+```text
+SessionPlan
+   ↓
+local Playwright + policy
+   ↓
+BehaviorEvent[] + SessionRecord
+   ↓
+computeRunMetrics
+   ↓
+buildSyntheticBetaReport
 ```
 
-The behaviour model a session will eventually carry: persona, goal, constraints, browser session, observed UI
-state, actions, navigation, retries, errors, screenshots and recordings, completion or abandonment, and timing.
-An agent may make mistakes, retry, backtrack, get stuck, abandon, or hit a technical error. Those outcomes are
-recording targets, not failures to hide.
+## AWS execution lifecycle
 
-## Intended AWS topology
+```text
+SessionPlan JSON
+   ↓ validate
+Nova Act workflow (IAM)
+   ↓
+AgentCore Browser
+   ↓
+real autonomous browser use
+   ↓
+Nova/AgentCore trace + result
+   ↓
+[trace adapter — next release gate]
+   ↓
+BehaviorEvent[] + SessionRecord
+   ↓
+existing deterministic analytics/report path
+```
 
-Documented in `infra/README.md`. In short: CloudFront and S3 for the built front end, API Gateway and Lambda for
-the control plane, Step Functions for batch orchestration, a browser-executor Lambda for agent sessions, DynamoDB
-for run/session/event metadata, S3 for evidence artefacts, Bedrock (Nova) for interpretation only, and
-CloudWatch for logs, metrics, and alarms. Each service gets its own least-privilege role; the spend ceiling is
-enforced in the control plane before any batch is dispatched.
+This separation is intentional: the browser/model runtime may change; the evidence/analytics contract should
+not.
 
-This phase ships the topology and the IAM boundaries as documentation, because guessing service action names
-would be worse than deferring them.
+## Scale path
 
-## Metric guarantees
+```text
+L1  local 1-user pipeline proof
+L2  1 real Nova Act + AgentCore Browser session
+L3  5 real AWS sessions
+L4  20-session controlled batch
+L5  100 users, normally five batches of 20
+```
 
-- Metrics derive only from recorded `SessionRecord` and `BehaviorEvent` rows.
-- `computed_from` states how many rows each computation consumed, so a report can be audited.
-- Rates expose their supporting session ids, so a percentage can always be traced back to sessions.
-- Population sampling is seeded and reproducible.
-- Cost estimation is pure, dated, and pinned by tests.
+The product promises up to 100 synthetic users; it does not require all 100 browsers to start simultaneously.
+
+## Submission AWS topology
+
+```text
+GitHub main
+   ↓
+AWS Amplify Hosting ── frontend
+   ↓
+control plane (API/Lambda as connected)
+   ↓
+batch orchestration
+   ↓
+Nova Act workflow(s)
+   ↓
+AgentCore Browser sessions
+   ↓
+trace/evidence persistence
+   ↓
+deterministic analytics + report
+```
+
+The production topology can add Step Functions, DynamoDB and S3 as the batch/persistence layer. For the
+hackathon, the non-negotiable proof is one genuine AWS agent session visible in AgentCore Live View, followed by
+a controlled scale run.
 
 ## Security posture
 
-Least-privilege IAM is the target. Authorized domains come from explicit configuration, and
-`VITE_AUTHORIZED_DOMAINS` is browser-visible by design and never carries a secret — production must verify
-target ownership independently rather than trusting a client-side allowlist. Credentials are rejected in target
-URLs. Disposable test accounts are referenced by `account_ref`, never by stored secrets. Session isolation is a
-requirement of the executor: one browser context per synthetic user, no shared cookies or storage.
+- Authorized products only.
+- AWS browser target must be public HTTPS.
+- Target hostname must exist in the explicit allowlist.
+- Credentials are forbidden in target URLs.
+- No real-money purchases, destructive operations, spam, CAPTCHA bypass or access-control bypass.
+- Typed secrets must not be persisted in evidence logs.
+- Cost and session ceilings are enforced before scale.
