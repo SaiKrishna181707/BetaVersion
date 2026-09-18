@@ -102,10 +102,21 @@ function funnelFinding(
   bySession: Map<string, BehaviorEvent[]>,
   limit: number,
 ): ReportFinding | null {
+  const allSessionIds = metrics.outcomes.map(outcome => outcome.session_id);
+
   const candidates = metrics.funnel
     .map((step, index) => {
-      const previous = index === 0 ? metrics.session_count : metrics.funnel[index - 1]?.reached ?? metrics.session_count;
-      return { step, previous, lost: previous - step.reached };
+      const previousStep = index === 0 ? null : metrics.funnel[index - 1] ?? null;
+      const eligibleSessionIds = previousStep?.supporting_session_ids ?? allSessionIds;
+      const reachedCurrent = new Set(step.supporting_session_ids);
+      const lostSessionIds = eligibleSessionIds.filter(sessionId => !reachedCurrent.has(sessionId));
+      return {
+        step,
+        previousStep,
+        eligibleSessionIds,
+        lostSessionIds,
+        lost: lostSessionIds.length,
+      };
     })
     .filter(entry => entry.lost > 0)
     .sort((a, b) => b.lost - a.lost || a.step.position - b.step.position);
@@ -113,19 +124,19 @@ function funnelFinding(
   const worst = candidates[0];
   if (worst === undefined) return null;
 
-  const stopped = metrics.outcomes
-    .map(outcome => outcome.session_id)
-    .filter(sessionId => !worst.step.supporting_session_ids.includes(sessionId));
+  const priorLabel = worst.previousStep === null
+    ? 'the run'
+    : `checkpoint "${worst.previousStep.checkpoint}"`;
 
   return {
     finding_id: `funnel-${worst.step.position}-${worst.step.checkpoint}`,
     kind: 'FRICTION',
-    title: `${worst.lost} of ${worst.previous} sessions did not reach "${worst.step.checkpoint}"`,
-    detail: `The largest recorded drop-off is at checkpoint "${worst.step.checkpoint}" `
-      + `(${worst.step.reached} of ${worst.step.of_sessions} sessions reached it). `
-      + 'Each pointer below is the last recorded action for a session that stopped before this checkpoint.',
+    title: `${worst.lost} of ${worst.eligibleSessionIds.length} sessions did not reach "${worst.step.checkpoint}"`,
+    detail: `Among sessions eligible after ${priorLabel}, ${worst.lost} did not reach `
+      + `checkpoint "${worst.step.checkpoint}". Each pointer below is the last recorded action for one of `
+      + 'those exact drop-off sessions.',
     metric_refs: [`funnel.${worst.step.position}.reached`],
-    evidence: lastEventEvidence(stopped, bySession, limit),
+    evidence: lastEventEvidence(worst.lostSessionIds, bySession, limit),
     interpretation: null,
     interpretation_source: 'NONE',
   };
