@@ -1,0 +1,103 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f4f6f9;
+  color: #1a1a2e;
+  line-height: 1.5;
+}
+.shop-header {
+  background: #1a1a2e;
+  color: #fff;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.shop-brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.cart-badge {
+  background: #e94560;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.shop-container {
+  max-width: 800px;
+  margin: 32px auto;
+  padding: 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+.product-card {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 24px;
+}
+.product-img {
+  width: 140px;
+  height: 140px;
+  background: #e0e7ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+.product-info h2 { font-size: 22px; margin-bottom: 8px; }
+.product-price { font-size: 24px; font-weight: 700; color: #16213e; margin-bottom: 16px; }
+.btn {
+  background: #0f3460;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.9; }
+.btn-primary { background: #e94560; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.form-group input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 15px;
+}
+.form-error { color: #e94560; font-size: 13px; margin-top: 4px; }
+.accordion {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.accordion-header {
+  background: #f8f9fa;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+.accordion-content { padding: 16px; display: none; }
+.accordion.open .accordion-content { display: block; }
+.success-banner {
+  text-align: center;
+  padding: 40px 20px;
+}
+.success-icon { font-size: 64px; color: #10b981; margin-bottom: 16px; }
+.shop-foot {
+  text-align: center;
+  font-size: 12px;
+  color: #888;
+  padding: 24px;
+}

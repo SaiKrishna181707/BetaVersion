@@ -2,6 +2,9 @@ import { Component, useEffect, useSyncExternalStore, type ReactNode } from 'reac
 import { Brand, Button } from '@synthetic-beta/ui';
 import { LandingPage } from './pages/LandingPage';
 import { NewRunPage } from './pages/NewRunPage';
+import { LiveRunPage } from './pages/LiveRunPage';
+import { RunReportPage } from './pages/RunReportPage';
+import { SessionDetailPage } from './pages/SessionDetailPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { parseRoute, titleFor, type RouteMatch } from './router';
 
@@ -40,6 +43,15 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 
 function RouteSurface({ match }: { match: RouteMatch }) {
   if (match.definition?.id === 'new-run') return <NewRunPage />;
+  if (match.definition?.id === 'live-run' && match.params.runId) {
+    return <LiveRunPage runId={match.params.runId} />;
+  }
+  if (match.definition?.id === 'run-report' && match.params.runId) {
+    return <RunReportPage runId={match.params.runId} />;
+  }
+  if (match.definition?.id === 'session-detail' && match.params.runId && match.params.sessionId) {
+    return <SessionDetailPage runId={match.params.runId} sessionId={match.params.sessionId} />;
+  }
   if (match.definition?.status === 'READY') return <LandingPage />;
   return <NotFoundPage requested={match.requested} planned={match.definition} />;
 }
