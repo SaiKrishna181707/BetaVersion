@@ -169,5 +169,10 @@ class WorkerContractTests(unittest.TestCase):
         self.assertNotIn("click the", prompt.lower())
 
 
+    def test_parse_nova_html_log_handles_missing_file(self):
+        from worker import parse_nova_html_log
+        self.assertEqual(parse_nova_html_log("non_existent_file.html"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

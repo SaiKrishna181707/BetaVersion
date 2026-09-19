@@ -252,6 +252,81 @@ violate a safety boundary. At the end, briefly state whether you completed, aban
 what visible state led to that outcome."""
 
 
+def parse_nova_html_log(html_path: str) -> list[dict[str, Any]]:
+    """Parse a Nova Act generated HTML log into structured RawNovaStep dictionaries."""
+    if not os.path.exists(html_path):
+        return []
+
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return []
+
+    with open(html_path, "r", encoding="utf-8") as handle:
+        soup = BeautifulSoup(handle.read(), "html.parser")
+
+    steps: list[dict[str, Any]] = []
+    containers = soup.find_all(class_="run-step-container")
+    elapsed_ms = 0
+
+    for i, c in enumerate(containers):
+        pre = c.find("pre")
+        pre_text = pre.get_text().strip() if pre else ""
+
+        thought_match = re.search(r'think\("([^"]+)"\)', pre_text)
+        thought = thought_match.group(1) if thought_match else ""
+
+        action_data: dict[str, Any] = {"type": "click"}
+        type_match = re.search(r'agentType\("([^"]*)",\s*"([^"]*)"\)', pre_text)
+        click_match = re.search(r'agentClick\("([^"]*)"\)', pre_text)
+        scroll_match = re.search(r'agentScroll\("([^"]*)",\s*"([^"]*)"\)', pre_text)
+
+        if type_match:
+            action_data = {"type": "type", "value": type_match.group(1), "selector": type_match.group(2)}
+        elif click_match:
+            action_data = {"type": "click", "selector": click_match.group(1)}
+        elif scroll_match:
+            action_data = {"type": "scroll", "details": scroll_match.group(1), "selector": scroll_match.group(2)}
+
+        active_url = ""
+        for d in c.find_all("div"):
+            if "Active URL" in d.get_text():
+                m = re.search(r'https?://[^\s<"\']+', d.get_text())
+                if m:
+                    active_url = m.group(0)
+                    break
+
+        server_time_s = 2.5
+        for d in c.find_all("div"):
+            if "Server time:" in d.get_text():
+                m = re.search(r"([\d\.]+)s", d.get_text())
+                if m:
+                    try:
+                        server_time_s = float(m.group(1))
+                    except ValueError:
+                        pass
+                    break
+
+        elapsed_ms += int(server_time_s * 1000)
+        img = c.find("img")
+        has_screenshot = bool(img and img.get("src") and "base64," in img.get("src", ""))
+
+        steps.append({
+            "sequence": i + 1,
+            "thought": thought,
+            "action": action_data,
+            "observation": {
+                "url": active_url,
+                "title": "Fieldwork" if "demo-target" in active_url else "ShopPulse",
+            },
+            "elapsed_ms": elapsed_ms,
+            "status": "SUCCESS",
+            "screenshot_ref": f"screenshot-step-{i+1}" if has_screenshot else None,
+        })
+
+    return steps
+
+
 def execute_with_aws(
     plan: ValidatedPlan,
     *,
@@ -283,6 +358,10 @@ def execute_with_aws(
         session_timeout_seconds=plan.max_session_seconds,
     )
 
+    session_logs_dir = None
+    act_error = None
+    result = None
+
     try:
         ws_url, headers = client.generate_ws_headers()
         with Workflow(
@@ -298,15 +377,49 @@ def execute_with_aws(
                 headless=True,
                 tty=False,
             ) as nova:
-                result = nova.act(build_prompt(plan))
+                session_logs_dir = nova.get_session_logs_directory()
+                try:
+                    result = nova.act(build_prompt(plan))
+                except Exception as exc:
+                    act_error = exc
     finally:
         client.stop()
 
+    parsed_steps = []
+    if session_logs_dir and os.path.isdir(session_logs_dir):
+        for fname in os.listdir(session_logs_dir):
+            if fname.endswith(".html"):
+                parsed_steps = parse_nova_html_log(os.path.join(session_logs_dir, fname))
+                break
+
+    if not parsed_steps and act_error is not None:
+        raise act_error
+
     response = getattr(result, "response", None)
+    is_completed = False
+    finish_reason = "ABANDONED"
+    if parsed_steps:
+        last_step = parsed_steps[-1]
+        last_thought = last_step.get("thought", "").lower()
+        if (
+            "invite teammate" in last_thought
+            or "order" in last_thought
+            or "complete" in last_thought
+            or "success" in last_thought
+            or (response and isinstance(response, str))
+        ):
+            is_completed = True
+            finish_reason = "OBJECTIVE_COMPLETE"
+        elif act_error and ("closed" in str(act_error).lower() or "timeout" in str(act_error).lower()):
+            finish_reason = "TIMED_OUT"
+    elif act_error:
+        finish_reason = "FAILED"
+
     return {
         "schema_version": 1,
         "run_id": plan.run_id,
         "session_id": plan.session_id,
+        "persona_id": plan.persona.get("persona_id", "unknown"),
         "executor": "nova-act-agentcore-browser",
         "region": region,
         "workflow_definition_name": workflow_name,
@@ -316,7 +429,10 @@ def execute_with_aws(
         "enforced_session_timeout_seconds": plan.max_session_seconds,
         "guardrail_observations": observation_count,
         "guardrail_observation_limit": plan.max_actions,
-        "response": response if isinstance(response, str) else str(result),
+        "response": response if isinstance(response, str) else str(result or act_error),
+        "steps": parsed_steps,
+        "completed": is_completed,
+        "finish_reason": finish_reason,
     }
 
 

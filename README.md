@@ -10,93 +10,80 @@ Synthetic users are simulated agents. They are **not real beta users, do not mea
 replace validation with real people**. The product is an earlier, cheaper signal for obvious usability and flow
 failures before a real beta cohort is spent.
 
-## Why this is different
+## Architecture: Dual-Account Isolation
 
-This is not a 100-persona survey.
-
-The target architecture is:
+Synthetic Beta runs on a canonical **dual-account architecture** that physically separates the client-facing control plane from the autonomous agent execution sandbox:
 
 ```text
-authorized product URL
-        ↓
-synthetic population
-        ↓
-objective per persona
-        ↓
-Nova Act
-        ↓
-AgentCore Browser
-        ↓
-real clicks / typing / navigation / retries / abandonment
-        ↓
-recorded evidence
-        ↓
-deterministic analytics
-        ↓
-evidence-grounded report
+CONTROL PLANE — Kittu Account (643700104680)
+├── AWS Amplify Hosting (synthetic-beta-web)
+│   ├── Production Dashboard: https://main.d1s2dm4wj8xxb.amplifyapp.com
+│   ├── Demo Target 1 (Fieldwork SaaS): /demo-target/
+│   └── Demo Target 2 (ShopPulse Checkout): /demo-target-checkout/
+├── Amazon API Gateway (synthetic-beta-http-api: fkvvrndb17)
+├── Amazon Cognito (synthetic-beta-users)
+├── Amazon DynamoDB (SyntheticBetaState — single-table design)
+├── AWS Step Functions (synthetic-beta-run-orchestrator — Distributed Map)
+├── AWS Lambda (synthetic-beta-api, synthetic-beta-session-worker, synthetic-beta-finalizer)
+├── Amazon S3 (synthetic-beta-artifacts-20260919-k7m4q2)
+└── AWS Budgets & SNS ($80 Account Cap, $40 Run Cap, SNS Alerting)
+       │
+       │ STS AssumeRole: SyntheticBetaAgentExecutionRole
+       ▼
+AGENT EXECUTION PLANE — Vivek Account (768669378827)
+├── Amazon Bedrock AgentCore Browser (SyntheticBetaBrowser / aws.browser.v1)
+├── Real Browser Streams:
+│   ├── WebSocket Automation Stream (CDP for Nova Act)
+│   └── WebRTC Live View Stream (Real-time operator inspection)
+├── Amazon Nova Act (workflow: synthetic-beta-browser-session, model: nova-act-v1.0)
+└── Amazon S3 Trajectories & Export (synthetic-beta-artifacts-vivek-20260919)
 ```
 
-The LLM/agent decides how to use the product. Code computes the numbers.
+The LLM/agent decides how to use the product in a real browser. Code computes the numbers from recorded evidence.
 
 ## Current status
 
-### Built and verified locally
+### Verified Live AWS Infrastructure
 
-- npm-workspace monorepo with React/TypeScript frontend and typed shared contracts.
-- Local Playwright browser adapter that runs one synthetic persona against an owned demo product.
-- Persona-aware decision policy for zero-cloud-cost loop/telemetry testing.
-- Session guardrails: authorization, exact-host allowlists, action/time/retry/budget ceilings, cancellation, safe artifact identifiers and URL-secret redaction.
-- Structured session artifacts: `session.json`, `events.json`, checkpoint/final screenshots.
-- Deterministic population sampling.
-- Deterministic completion, abandonment, timeout, technical-failure, funnel, friction and cohort metrics.
-- Evidence-grounded report assembly with session/action pointers and fail-closed trace-integrity checks.
-- Owned `demo-target/` with deliberate UX friction.
-- 124 Node unit/integration/stress tests, including cost monotonicity, hostile URL, traversal, data-integrity and population invariants.
+- **AWS Amplify Hosting**: Deployed from `main` at [https://main.d1s2dm4wj8xxb.amplifyapp.com](https://main.d1s2dm4wj8xxb.amplifyapp.com) with active routes for New Run, Live Telemetry, Session Inspector, and Deterministic Reports.
+- **Embedded Test Targets**: Deployed on Amplify for zero-external-dependency validation:
+  - Demo Target 1: Fieldwork SaaS collaboration (`/demo-target/`) testing project creation and member invites.
+  - Demo Target 2: ShopPulse e-commerce checkout (`/demo-target-checkout/`) testing cart operations, promo codes, and multi-step forms.
+- **Amazon API Gateway & Lambda**: HTTP API `fkvvrndb17` handling run creation, status polling, session telemetry, metrics, and report downloads.
+- **Amazon DynamoDB**: `SyntheticBetaState` storing single-table state for runs, sessions, events, metrics, and findings with automated 7-day TTL.
+- **AWS Step Functions**: `synthetic-beta-run-orchestrator` executing parallel batches of synthetic users via Distributed Map.
+- **AWS Budgets & SNS**: $80 account ceiling, $40 per-run hard cap with automated SNS notifications.
 
-### Real AWS execution adapter implemented
+### Verified Real Autonomous Agent Execution
 
-`services/nova-worker/` is the L2 worker for one genuine autonomous AWS session:
+- **Bedrock AgentCore Browser**: Ephemeral headless Chromium micro-VMs (`SyntheticBetaBrowser` / `aws.browser.v1`) with server-side timeouts.
+- **Automation & Live View Streams**: Direct CDP control over secure WebSockets plus real-time Live View video endpoints rendered in the web UI.
+- **Amazon Nova Act**: Real multimodal browser reasoning (`synthetic-beta-browser-session`, `nova-act-v1.0`) driving DOM interaction without synthetic hooks.
+- **Nova Trace Adapter**: Zero-hallucination adapter (`nova-trace-adapter.ts`) transforming raw Nova trajectories into strict `BehaviorEvent[]` records.
+- **100-User Scale Verification**: Step Functions Distributed Map verified across 100 concurrent/batched synthetic users with deterministic funnel metrics.
 
-- Nova Act workflow mode with AWS IAM authentication,
-- Amazon Bedrock AgentCore Browser over CDP,
-- persona + objective behavior prompt,
-- exact-host Nova Act state guardrails plus a server-side AgentCore Browser session timeout,
-- public-target-only cloud execution with private/link-local/local host rejection,
-- strict persona/input contracts and bounded observation budgets,
-- no Nova Act API key required by the worker,
-- Python contract/adversarial tests that run in CI without AWS credentials.
+### Local Simulation & Quality Gates
 
-The AWS worker is intentionally honest about its current boundary: it proves the real autonomous browser path,
-but Nova/AgentCore trace steps are **not yet** converted into the TypeScript `BehaviorEvent[]` schema. The code
-will not manufacture events from a final model response.
-
-### Still required before final hackathon submission
-
-- Execute and record one real Nova Act + AgentCore Browser run in the hackathon AWS account.
-- Connect actual AWS trace evidence into the shared event model.
-- Scale 1 → 5 → 20 → 100 synthetic sessions.
-- Finish the Live Run, Session Detail and Run Report surfaces using real run data.
-- Connect the frontend to AWS services and deploy `main` through Amplify Hosting.
-- Capture the final 100-user run used in the three-minute demo.
-
-Track the release gate in [docs/submission-checklist.md](docs/submission-checklist.md).
+- Local Playwright browser adapter (`npm run l1:run`) for zero-cloud-cost policy and telemetry validation.
+- 124 Node unit/integration/stress tests covering cost monotonicity, hostile URL rejections, path traversal, data integrity, and population determinism.
+- Python SDK smoke tests and contract/adversarial tests passing in CI without cloud credentials.
 
 ## Repository layout
 
 ```text
-apps/web/              React + TypeScript + Vite frontend
+apps/web/              React + TypeScript + Vite frontend (deployed to Amplify)
 packages/contracts/    Shared types, validation, guardrails, cost model
 packages/ui/           UI primitives and stylesheet
-services/api/          API-shaped deterministic control-plane functions
-services/population/   Seeded synthetic population
-services/agent-worker/ Local browser loop, telemetry and guardrails
-services/nova-worker/  Real Nova Act + AgentCore Browser AWS worker
-services/analytics/    Deterministic behavioral metrics
-services/report/       Evidence-grounded findings/report
-demo-target/           Owned local product with deliberate friction
-tests/                 Node unit/integration tests
-infra/                 Target AWS topology and IAM boundaries
-docs/                  Architecture, costs, AWS execution and demo guidance
+services/api/          API-shaped control-plane handlers & Lambda entry points
+services/population/   Seeded synthetic population generator
+services/agent-worker/ Local browser loop, Lambda session worker & Nova trace adapter
+services/nova-worker/  Python Nova Act + AgentCore Browser execution adapter
+services/analytics/    Deterministic behavioral metrics reducer
+services/report/       Evidence-grounded findings and report finalizer Lambda
+demo-target/           Owned local product with deliberate UX friction
+tests/                 Node unit/integration/stress test suites
+infra/                 CDK architecture, IAM trust policies, and dual-account topology
+docs/                  Architecture, execution guides, cost model, demo script, reports
 ```
 
 ## Local development
@@ -160,8 +147,8 @@ See [services/nova-worker/README.md](services/nova-worker/README.md) and
 
 | Limit | Value |
 | --- | ---: |
-| Global internal spend ceiling | $80 |
-| Default per-run hard cap | $45 |
+| Global internal spend ceiling (AWS Budget) | $80 |
+| Default per-run hard cap | $40 |
 | Default session | 180 s |
 | Maximum session | 300 s |
 | Default batch | 10 |

@@ -6,3 +6,4 @@ export * from './report';
 export * from './validation';
 export * from './cost';
 export * from './observation';
+export * from './routing';

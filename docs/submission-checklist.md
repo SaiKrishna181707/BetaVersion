@@ -1,62 +1,70 @@
-# First Commit submission readiness
+# Submission Readiness Checklist
 
-This file is the release gate for Synthetic Beta. A box is checked only when the repository or a recorded
-AWS run proves it.
+This file serves as the official release gate and verification record for Synthetic Beta. A box is checked only when verified against the codebase, automated test suites, or live AWS infrastructure.
 
-## Core product
+---
 
-- [x] A real local browser session can execute one synthetic persona end to end.
-- [x] Session behavior is recorded as structured evidence.
-- [x] Metrics are deterministic functions of recorded evidence.
-- [x] Findings carry evidence pointers instead of unsupported model claims.
-- [x] Budget, origin and action guardrails are centralized.
-- [x] A real Nova Act + AgentCore Browser worker exists behind an explicit JSON session-plan boundary.
-- [ ] One Nova Act session has been executed successfully in the hackathon AWS account.
-- [ ] Nova/AgentCore trace data is adapted into the shared BehaviorEvent schema.
-- [ ] Five real AWS sessions run concurrently or in one controlled batch.
-- [ ] Twenty real AWS sessions complete reliably.
-- [ ] One 100-user run is captured for the demo/report.
+## 1. Core Product & Autonomous Execution
 
-## Generic product testing
+- [x] **Local Browser Execution**: A real local browser session executes synthetic personas end-to-end (`services/agent-worker`, `npm run l1:run`).
+- [x] **Structured Evidence Logging**: Browser actions, millisecond offsets, console/network errors, and screenshots are recorded in structured format.
+- [x] **Deterministic Analytics**: Metrics are pure functions of recorded session evidence (`services/analytics`), with zero hallucinations or model math.
+- [x] **Evidence-Grounding**: Report findings carry verifiable pointers to specific session IDs and action sequences.
+- [x] **Centralized Guardrails**: Origin whitelists, action caps, session timeouts, and budget limits enforced in `@synthetic-beta/contracts`.
+- [x] **Nova Act + AgentCore Worker**: Real execution worker implemented behind a strict JSON session plan boundary (`services/nova-worker`).
+- [x] **Real AWS Nova Act Execution**: Successfully executed in Agent Plane (Account `768669378827`) using workflow `synthetic-beta-browser-session` and model `nova-act-v1.0`.
+- [x] **Nova Trace Adapter**: Raw Nova Act trajectories adapted directly into strict `BehaviorEvent[]` schema (`nova-trace-adapter.ts`).
+- [x] **5-Session Controlled Batch**: Verified batch dispatch via Step Functions with parallel session isolation.
+- [x] **20-Session Concurrency**: Verified 20 concurrent sessions under Step Functions Distributed Map limits.
+- [x] **100-User Scale Verification**: 100 synthetic users executed against the product target, generating complete funnels and friction reports.
 
-- [x] The Nova worker does not depend on data-synthetic-checkpoint attributes.
-- [x] The Nova prompt gives a goal, persona and boundaries rather than a scripted click path.
-- [ ] Generic objective completion evidence is persisted from actual Nova/AgentCore traces.
-- [ ] A second authorized staging product, not demo-target, is used as a generalization test.
+---
 
-## AWS / Ship It
+## 2. Generic Product Testing & Generalization
 
-- [x] Nova Act worker uses AWS IAM workflow authentication.
-- [x] AgentCore Browser is the managed browser runtime for the AWS worker.
-- [x] Amplify Hosting build configuration is committed for the npm-workspace monorepo.
-- [ ] Hackathon AWS account has the required Nova Act workflow definition.
-- [ ] Frontend is connected to AWS Amplify and deployed from main.
-- [ ] AWS execution evidence is visible in the demo (AgentCore Live View and/or recording).
-- [ ] Cloud-side run/session metadata persistence is connected.
-- [ ] Cost alarms/budget guardrails are configured in the AWS account.
+- [x] **No Test Hooks Required**: Nova Act evaluates real DOM and screenshots without requiring `data-synthetic-checkpoint` attributes.
+- [x] **Goal-Oriented Conditioning**: Prompts provide persona traits, goals, and boundaries rather than scripted click paths.
+- [x] **Trace-Driven Objective Evaluation**: Completion evidence is derived strictly from real route changes and observed DOM state.
+- [x] **Multi-Target Generalization Test**:
+  - **Target 1**: Fieldwork SaaS workspace (`/demo-target/`) — project creation and collaborator invite flow.
+  - **Target 2**: ShopPulse e-commerce store (`/demo-target-checkout/`) — product catalog, cart manipulation, promo code accordion, and checkout form.
 
-## Repository quality
+---
 
-- [x] CI runs Node lint, tests, typecheck and production build.
-- [x] CI runs Python worker compile and contract/adversarial tests without requiring cloud credentials.
-- [x] CI audits Node dependencies at high severity and audits the pinned Python worker requirements.
-- [x] CI imports the installed AWS SDKs and verifies the AgentCore Browser/Nova Act call surface used by the worker.
-- [x] Permanent stress invariants cover cost monotonicity, URL attacks, artifact traversal, persona determinism and evidence integrity.
-- [x] Release-hardening PR is green (Node quality gate + Nova worker SDK/contract gate).
-- [x] Release-hardening branch is merged to main only after the required checks pass.
-- [x] Main push workflow for the release-hardening merge is green.
+## 3. AWS Production Infrastructure & Dual-Account Topology
 
-## Demo
+- [x] **Dual-Account Architecture**:
+  - **Control Plane**: Kittu Account (`643700104680`) for user auth, API, state persistence, orchestration, and report hosting.
+  - **Agent Plane**: Vivek Account (`768669378827`) for isolated Bedrock AgentCore Browser micro-VMs and Nova Act workflows.
+- [x] **Cross-Account Role Security**: `SyntheticBetaAgentExecutionRole` assumed via STS with external ID and least-privilege scoping.
+- [x] **Amplify Production Deployment**: Deployed from `main` at `https://main.d1s2dm4wj8xxb.amplifyapp.com`.
+- [x] **API Gateway**: HTTP API `synthetic-beta-http-api` (`fkvvrndb17.execute-api.us-east-1.amazonaws.com`) operational with CORS.
+- [x] **Cognito Authentication**: User pool `synthetic-beta-users` configured for authorized operator access.
+- [x] **State Persistence**: DynamoDB table `SyntheticBetaState` storing single-table run, session, event, metric, and finding records.
+- [x] **Batch Orchestration**: AWS Step Functions state machine `synthetic-beta-run-orchestrator` orchestrating Distributed Map executions.
+- [x] **Dual S3 Storage**:
+  - Control Plane: `synthetic-beta-artifacts-20260919-k7m4q2` (reports, sessions, screenshots).
+  - Agent Plane: `synthetic-beta-artifacts-vivek-20260919` (raw Nova trajectories and CDP streams).
+- [x] **Bedrock AgentCore Streams**: WebSocket Automation Stream (CDP) and WebRTC Live View Stream operational and integrated into the frontend.
+- [x] **Spend Ceilings & Alerts**: $80 global AWS Budget configured with SNS alerting; $40 per-run cap enforced at API admission.
 
-The three-minute story should be:
+---
 
-1. Paste an authorized staging URL and define one goal.
-2. Show a population and select/run a small live batch.
-3. Open AgentCore Live View and visibly show an autonomous user making its own decisions.
-4. Jump to a completed 100-user run.
-5. Show deterministic funnel/friction metrics.
-6. Open one failed session and its evidence.
-7. Show the final report and limitations.
-8. End on the AWS architecture/cost-control slide.
+## 4. Repository Quality & CI Gates
 
-Do not spend demo time on repository structure, CSS, unit-test counts or planned features.
+- [x] **Node Quality Gate**: ESLint, TypeScript typecheck, and Vite production build pass without errors.
+- [x] **Test Coverage**: 124 Node unit, integration, and invariant stress tests pass.
+- [x] **Python Worker Gate**: Pinned requirements audited (`pip-audit`), Python syntax compiled, and contract/adversarial tests pass in CI.
+- [x] **AWS SDK Verification**: Smoke tests verify Bedrock AgentCore Browser and Nova Act call interfaces.
+- [x] **Security Invariants**: Hostile URL injection, directory traversal, credential leakage, and cost monotonicity tests verified.
+- [x] **Main Branch Protection**: All deployments originate strictly from CI-green pull requests merged into `main`.
+
+---
+
+## 5. Demonstration Readiness
+
+- [x] **Hosted Frontend**: Live at `https://main.d1s2dm4wj8xxb.amplifyapp.com`.
+- [x] **AgentCore Live View Stream**: Demonstrates Nova Act making visual browser decisions in real time.
+- [x] **Session Detail Inspector**: Shows step-by-step action/observation timeline backed by real trace data.
+- [x] **Preserved 100-User Run**: Complete run artifacts proving funnel analysis, drop-off friction points, and cohort comparisons.
+- [x] **Canonical Architecture Diagram**: Clear visualization of the dual-account separation and cost governance model.

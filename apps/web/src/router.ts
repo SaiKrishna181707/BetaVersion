@@ -1,38 +1,15 @@
-/**
- * The route table for the workspace. Landing and New run are implemented; the remaining
- * product surfaces are registered now so navigation has one source of truth, and are
- * reported honestly as PLANNED until the execution phase wires them up.
- */
-export type RouteId =
-  | 'home'
-  | 'new-run'
-  | 'population-preview'
-  | 'live-run'
-  | 'session-detail'
-  | 'run-report'
-  | 'settings';
+import {
+  ROUTES as CONTRACT_ROUTES,
+  FALLBACK_TITLE,
+  type RouteDefinition,
+  type RouteId,
+  type RouteStatus,
+} from '@synthetic-beta/contracts';
 
-export type RouteStatus = 'READY' | 'PLANNED';
+export type { RouteId, RouteStatus, RouteDefinition };
+export { FALLBACK_TITLE };
 
-export interface RouteDefinition {
-  id: RouteId;
-  /** Hash path pattern. A segment beginning with ':' captures a parameter. */
-  pattern: string;
-  title: string;
-  status: RouteStatus;
-}
-
-export const ROUTES: readonly RouteDefinition[] = [
-  { id: 'home', pattern: '/', title: 'Synthetic Beta — Product testing, with evidence', status: 'READY' },
-  { id: 'new-run', pattern: '/new', title: 'New run — Synthetic Beta', status: 'READY' },
-  { id: 'population-preview', pattern: '/runs/:runId/population', title: 'Population preview', status: 'PLANNED' },
-  { id: 'live-run', pattern: '/runs/:runId/live', title: 'Live run', status: 'PLANNED' },
-  { id: 'session-detail', pattern: '/runs/:runId/sessions/:sessionId', title: 'Session detail', status: 'PLANNED' },
-  { id: 'run-report', pattern: '/runs/:runId/report', title: 'Run report', status: 'PLANNED' },
-  { id: 'settings', pattern: '/settings', title: 'Cost and settings', status: 'PLANNED' },
-];
-
-export const FALLBACK_TITLE = 'Synthetic Beta — Product testing, with evidence';
+export const ROUTES: readonly RouteDefinition[] = CONTRACT_ROUTES;
 
 export interface RouteMatch {
   /** The matched definition, or null when no pattern applies. */

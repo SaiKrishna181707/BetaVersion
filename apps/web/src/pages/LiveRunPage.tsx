@@ -10,6 +10,9 @@ interface SessionItem {
   actions_taken?: number;
   duration_ms?: number;
   stop_reason?: string;
+  agentcore_session_id?: string;
+  live_view_url?: string;
+  trajectory_ref?: string;
   persona?: {
     display_name?: string;
     device_class?: string;
@@ -45,12 +48,26 @@ export function LiveRunPage({ runId }: { runId: string }) {
     const fetchStatus = async () => {
       if (!apiBase || !runId) return;
       try {
-        const res = await fetch(`${apiBase}/runs/${runId}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
+        const [runRes, sessionsRes] = await Promise.all([
+          fetch(`${apiBase}/runs/${runId}`),
+          fetch(`${apiBase}/runs/${runId}/sessions`),
+        ]);
+        if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`);
+        const runJson = await runRes.json();
+        let sessionsList: SessionItem[] = [];
+        if (sessionsRes.ok) {
+          const sessionsJson = await sessionsRes.json();
+          sessionsList = sessionsJson.sessions || [];
+        } else if (runJson.sessions) {
+          sessionsList = runJson.sessions;
+        }
         if (active) {
-          setData(json);
+          setData({
+            ...runJson,
+            sessions: sessionsList,
+          });
           setLoading(false);
+          setError('');
         }
       } catch (err) {
         if (active) {
@@ -128,6 +145,12 @@ export function LiveRunPage({ runId }: { runId: string }) {
                 <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
                   Device: {session.persona?.device_class || 'DESKTOP'} · Tech: {session.persona?.technical_ability || 'MED'} · Patience: {session.persona?.patience || 'MED'}
                 </div>
+                {(session.agentcore_session_id || session.live_view_url) && (
+                  <div style={{ fontSize: '11px', marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {session.agentcore_session_id && <span className="mono" style={{ color: '#0284c7' }}>AgentCore: {session.agentcore_session_id.slice(0, 10)}…</span>}
+                    {session.live_view_url && <Badge tone="accent">Live View</Badge>}
+                  </div>
+                )}
                 <div style={{ fontSize: '13px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
                   <span>Actions: <strong>{session.actions_taken ?? (session.status === 'COMPLETED' ? 6 : 5)}</strong></span>
                   <span className="mono" style={{ color: '#0284c7' }}>Inspect log →</span>
