@@ -1,306 +1,178 @@
-import { useEffect, useState } from 'react';
-import { Badge, Button, Icon } from '@synthetic-beta/ui';
+import { useEffect, useMemo, useState } from 'react';
+import type { BehaviorEvent } from '@synthetic-beta/contracts';
+import { Badge, Icon } from '@synthetic-beta/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
-import type { BehaviorEvent, SyntheticPersona, SessionStatus } from '@synthetic-beta/contracts';
+import {
+  productApi,
+  type AgentFeedback,
+  type RichPersona,
+  type SessionDetail,
+} from '../lib/api';
 
-interface SessionData {
-  session_id: string;
-  run_id: string;
-  status: SessionStatus;
-  stop_reason?: string;
-  duration_ms?: number;
-  persona?: SyntheticPersona;
-  events?: BehaviorEvent[];
-  trajectory_ref?: string;
-  agentcore_session_id?: string;
-  live_view_url?: string;
-  streamEndpoint?: string;
-  agentcore_diagnostic?: string;
-  metadata?: {
-    agentcore_session_id?: string;
-    live_view_url?: string;
-    streamEndpoint?: string;
-    trajectory_ref?: string;
-    agentcore_diagnostic?: string;
-    [key: string]: unknown;
+function formatDuration(milliseconds: number | undefined): string {
+  if (typeof milliseconds !== 'number') return '—';
+  const seconds = Math.round(milliseconds / 1000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function readable(value: unknown): string {
+  if (value === null || value === undefined || value === '') return 'Not provided';
+  return String(value).replaceAll('_', ' ').toLowerCase();
+}
+
+function fallbackFeedback(session: SessionDetail, events: BehaviorEvent[]): AgentFeedback {
+  const successful = events.filter(event => event.result === 'SUCCESS').length;
+  const confused = events.filter(event => event.agent_reason_code === 'CONFUSED' || ['NO_CHANGE', 'VALIDATION_FAILURE'].includes(event.result));
+  const retries = events.filter(event => ['RETRYING', 'BACKTRACKING'].includes(event.agent_reason_code));
+  return {
+    what_worked: successful ? `${successful} recorded actions succeeded during this session.` : 'No successful recorded actions were available.',
+    what_confused_them: confused.length
+      ? confused.slice(0, 3).map(event => event.target_descriptor || event.route || event.url).join(' · ')
+      : 'No explicit confusion signal was recorded.',
+    what_slowed_them_down: retries.length
+      ? `${retries.length} retry or backtracking signals were recorded.`
+      : 'No retry or backtracking signal was recorded.',
+    why_they_continued_or_abandoned: session.stop_reason
+      ? `Recorded stop reason: ${session.stop_reason.replaceAll('_', ' ')}.`
+      : `Recorded final status: ${session.status}.`,
+    what_they_expected: 'Not established by recorded evidence.',
+    improvement_suggestion: 'No evidence-grounded recommendation was generated for this session.',
+    evidence_session_id: session.session_id,
   };
 }
 
-export function SessionDetailPage({ runId, sessionId }: { runId: string; sessionId: string }) {
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+function ProfileFact({ label, value }: { label: string; value: unknown }) {
+  return <div><dt>{label}</dt><dd>{readable(value)}</dd></div>;
+}
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+export function SessionDetailPage({ runId, sessionId }: { runId: string; sessionId: string }) {
+  const [session, setSession] = useState<SessionDetail | null>(null);
+  const [events, setEvents] = useState<BehaviorEvent[]>([]);
+  const [feedback, setFeedback] = useState<AgentFeedback | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    const fetchSession = async () => {
-      if (!apiBase || !sessionId) return;
-      try {
-        const [sessionRes, eventsRes] = await Promise.all([
-          fetch(`${apiBase}/sessions/${sessionId}`),
-          fetch(`${apiBase}/sessions/${sessionId}/events`),
-        ]);
-
-        if (!sessionRes.ok) throw new Error(`Session HTTP ${sessionRes.status}`);
-        const sessionJson = await sessionRes.json();
-
-        let eventsList: BehaviorEvent[] = [];
-        if (eventsRes.ok) {
-          const eventsJson = await eventsRes.json();
-          eventsList = eventsJson.events || [];
-        } else if (sessionJson.events) {
-          eventsList = sessionJson.events;
-        }
-
-        if (active) {
-          setSession({
-            ...sessionJson,
-            events: eventsList,
-          });
-          setLoading(false);
-          setError('');
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to fetch session detail');
-          setLoading(false);
-        }
-      }
-    };
-    fetchSession();
+    Promise.all([
+      productApi.getSession(sessionId),
+      productApi.getSessionEvents(sessionId),
+      productApi.getSessionFeedback(sessionId).catch(() => null),
+    ]).then(([sessionResult, eventResult, feedbackResult]) => {
+      if (!active) return;
+      setSession(sessionResult);
+      setEvents(eventResult);
+      setFeedback(feedbackResult);
+      setLoading(false);
+    }).catch(cause => {
+      if (!active) return;
+      setError(cause instanceof Error ? cause.message : 'Could not load this agent experience.');
+      setLoading(false);
+    });
     return () => { active = false; };
-  }, [apiBase, sessionId]);
+  }, [sessionId]);
 
-  const p = session?.persona;
-  const agentCoreSessionId = session?.agentcore_session_id || session?.metadata?.agentcore_session_id;
-  const liveViewUrl = session?.live_view_url || session?.streamEndpoint || session?.metadata?.live_view_url || session?.metadata?.streamEndpoint;
-  const trajectoryRef = session?.trajectory_ref || session?.metadata?.trajectory_ref;
-  const agentCoreDiagnostic = session?.agentcore_diagnostic || session?.metadata?.agentcore_diagnostic;
-
-  return (
-    <WorkspaceShell>
-      <div className="new-run-heading">
-        <div>
-          <div className="eyebrow">SESSION EVIDENCE INSPECTOR</div>
-          <h1 tabIndex={-1}>Session<span>:</span> <span className="mono" style={{ fontSize: '22px' }}>{sessionId}</span></h1>
-          <p>Run: <span className="mono">{runId}</span></p>
-        </div>
-        <div className="row" style={{ gap: '12px', alignItems: 'center' }}>
-          <Badge tone={session?.status === 'COMPLETED' ? 'accent' : 'warning'}>
-            {session?.status || 'QUEUED'}
-          </Badge>
-          <Button variant="secondary" onClick={() => { window.location.hash = `#/runs/${runId}/live`; }}>
-            <Icon name="arrow" size={14} className="back-arrow" /> Back to Run
-          </Button>
-        </div>
-      </div>
-
-      {loading && <p>Loading session timeline and event evidence from AWS…</p>}
-      {error && <p className="field-error">{error}</p>}
-
-      {session && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', margin: '24px 0' }}>
-          {/* Prominent Bedrock AgentCore Integration Panel */}
-          <div
-            style={{
-              background: '#0f172a',
-              color: '#f8fafc',
-              border: '1px solid #334155',
-              borderRadius: '8px',
-              padding: '20px',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-              <div style={{ flex: 1, minWidth: '280px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <Icon name="terminal" size={16} style={{ color: '#38bdf8' }} />
-                  <span className="mono" style={{ fontSize: '11px', letterSpacing: '0.08em', color: '#94a3b8', textTransform: 'uppercase' }}>
-                    Amazon Bedrock AgentCore Integration
-                  </span>
-                  <Badge tone={agentCoreSessionId ? 'accent' : 'warning'}>
-                    {agentCoreSessionId ? 'CONNECTED' : 'LOCAL / SIMULATED'}
-                  </Badge>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                  <div>
-                    <span style={{ color: '#94a3b8' }}>AgentCore Session ID: </span>
-                    {agentCoreSessionId ? (
-                      <span className="mono" style={{ color: '#38bdf8', fontWeight: 600 }}>{agentCoreSessionId}</span>
-                    ) : (
-                      <span className="mono" style={{ color: '#cbd5e1' }}>
-                        {session.session_id} <span style={{ color: '#64748b', fontSize: '12px' }}>(fallback runtime ID)</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {trajectoryRef && (
-                    <div>
-                      <span style={{ color: '#94a3b8' }}>Trajectory Ref: </span>
-                      <span className="mono" style={{ color: '#6ee7b7' }}>{trajectoryRef}</span>
-                    </div>
-                  )}
-
-                  {session.stop_reason && (
-                    <div>
-                      <span style={{ color: '#94a3b8' }}>Stop Reason: </span>
-                      <strong style={{ color: '#f8fafc' }}>{session.stop_reason}</strong>
-                      {typeof session.duration_ms === 'number' && (
-                        <span style={{ color: '#94a3b8', marginLeft: '12px' }}>
-                          Duration: {session.duration_ms}ms ({(session.duration_ms / 1000).toFixed(1)}s)
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {agentCoreDiagnostic && (
-                    <div style={{ fontSize: '12px', color: '#cbd5e1', marginTop: '4px', background: '#1e293b', padding: '8px 12px', borderRadius: '4px', border: '1px solid #334155' }}>
-                      <span style={{ color: '#fbbf24', fontWeight: 600 }}>Diagnostic: </span>{agentCoreDiagnostic}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {liveViewUrl && (
-                  <a
-                    href={liveViewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="button button-primary"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <Icon name="activity" size={15} />
-                    Open Live View
-                  </a>
-                )}
-
-                {trajectoryRef && (
-                  <a
-                    href={trajectoryRef.startsWith('http') ? trajectoryRef : undefined}
-                    target={trajectoryRef.startsWith('http') ? '_blank' : undefined}
-                    rel="noopener noreferrer"
-                    className="button button-secondary"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#1e293b', borderColor: '#475569', color: '#f8fafc' }}
-                    onClick={(e) => {
-                      if (!trajectoryRef.startsWith('http')) {
-                        e.preventDefault();
-                        if (navigator.clipboard?.writeText) {
-                          navigator.clipboard.writeText(trajectoryRef);
-                        }
-                        alert(`Trajectory Ref copied to clipboard:\n${trajectoryRef}`);
-                      }
-                    }}
-                  >
-                    <Icon name="file" size={15} />
-                    {trajectoryRef.startsWith('http') ? 'Download Trajectory' : 'Trajectory Ref'}
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Persona Card */}
-          {p && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <h2 style={{ fontSize: '16px', marginBottom: '12px' }}>Persona Profile: {p.display_name || p.persona_id}</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '13px' }}>
-                <div><strong>Cohort:</strong> {p.cohort}</div>
-                <div><strong>Device:</strong> {p.device_class}</div>
-                <div><strong>Technical Ability:</strong> {p.technical_ability}</div>
-                <div><strong>Patience:</strong> {p.patience}</div>
-                <div><strong>Reading Style:</strong> {p.reading_style}</div>
-                <div><strong>Product Familiarity:</strong> {p.product_familiarity}</div>
-              </div>
-              {p.goal_context && (
-                <div style={{ marginTop: '12px', fontSize: '13px', color: '#475569' }}>
-                  <strong>Goal Context:</strong> {p.goal_context}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Action Timeline */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-            <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Behavioral Action Timeline ({session.events?.length || 0} events)</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {(session.events || []).map((ev, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    gap: '16px',
-                    padding: '12px',
-                    border: '1px solid #f1f5f9',
-                    borderRadius: '6px',
-                    background: ev.result === 'ERROR' ? '#fff1f2' : '#f8fafc',
-                  }}
-                >
-                  <div className="mono" style={{ width: '40px', fontWeight: 700, color: '#64748b' }}>
-                    #{idx + 1}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, textTransform: 'uppercase', fontSize: '13px' }}>
-                        {ev.action_type} {ev.target_descriptor ? `→ ${ev.target_descriptor}` : ''}
-                      </span>
-                      <Badge tone={ev.result === 'SUCCESS' ? 'accent' : 'warning'}>{ev.result}</Badge>
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
-                      URL: <span className="mono">{ev.url}</span> ({ev.route}) · Reason: <strong>{ev.agent_reason_code}</strong>
-                    </div>
-
-                    {ev.task_checkpoint && (
-                      <div style={{ marginTop: '6px' }}>
-                        <Badge tone="accent">Milestone: {ev.task_checkpoint}</Badge>
-                      </div>
-                    )}
-
-                    {ev.console_error && (
-                      <div className="field-error" style={{ fontSize: '12px', marginTop: '4px' }}>
-                        Console: {ev.console_error}
-                      </div>
-                    )}
-
-                    {ev.network_error && (
-                      <div className="field-error" style={{ fontSize: '12px', marginTop: '4px' }}>
-                        Network: {ev.network_error}
-                      </div>
-                    )}
-
-                    {ev.screenshot_ref && (
-                      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-                        <span style={{ color: '#475569', fontWeight: 600 }}>Evidence:</span>
-                        {ev.screenshot_ref.startsWith('http') || ev.screenshot_ref.startsWith('/') || ev.screenshot_ref.startsWith('data:') ? (
-                          <a
-                            href={ev.screenshot_ref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mono"
-                            style={{ color: '#0284c7', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Icon name="cursor" size={13} /> Screenshot ({ev.screenshot_ref})
-                          </a>
-                        ) : (
-                          <span className="mono" style={{ background: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', color: '#1e293b' }}>
-                            📸 {ev.screenshot_ref}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                    +{ev.elapsed_ms}ms
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </WorkspaceShell>
+  const measuredFeedback = useMemo(
+    () => session ? feedback || fallbackFeedback(session, events) : null,
+    [events, feedback, session],
   );
+
+  if (loading) return <WorkspaceShell><div className="vision-loading-page"><span className="vision-loader" /><strong>Loading this agent’s experience…</strong><span>Retrieving the persisted persona, trajectory and evidence.</span></div></WorkspaceShell>;
+
+  const persona = session?.persona as RichPersona | undefined;
+
+  return <WorkspaceShell>
+    <div className="vision-page-heading">
+      <div>
+        <span className="eyebrow">INDIVIDUAL AGENT EXPERIENCE</span>
+        <h1>{persona?.display_name || session?.persona_id || sessionId}</h1>
+        <p>{persona?.occupation || persona?.cohort || `Session ${sessionId}`}</p>
+      </div>
+      <div className="vision-heading-actions">
+        <Badge tone={session?.status === 'COMPLETED' ? 'accent' : session?.status === 'ABANDONED' ? 'warning' : 'neutral'}>{session?.status || 'UNKNOWN'}</Badge>
+        <a className="button button-secondary" href={`#/runs/${runId}/report`}><Icon name="arrow" size={14} className="back-arrow" /> Results</a>
+      </div>
+    </div>
+
+    {error ? <p className="vision-error" role="alert">{error}</p> : null}
+
+    {session ? <>
+      <section className="vision-agent-summary">
+        <div className="vision-agent-summary-primary">
+          <span className="agent-avatar large">{(persona?.display_name || session.persona_id).slice(0, 2).toUpperCase()}</span>
+          <div><span>WHO THEY ARE</span><h2>{persona?.display_name || session.persona_id}</h2><p>{persona?.backstory || persona?.biography || 'No backstory was persisted for this persona.'}</p></div>
+        </div>
+        <dl className="vision-agent-summary-facts">
+          <ProfileFact label="Age" value={persona?.age ?? persona?.age_band} />
+          <ProfileFact label="Gender" value={persona?.gender} />
+          <ProfileFact label="Location" value={persona?.location ?? persona?.location_band} />
+          <ProfileFact label="Occupation" value={persona?.occupation} />
+          <ProfileFact label="Education" value={persona?.education} />
+          <ProfileFact label="Income" value={persona?.income_range ?? persona?.income_annual} />
+          <ProfileFact label="Household" value={persona?.household_context} />
+          <ProfileFact label="Device" value={persona?.device_class} />
+          <ProfileFact label="Technical ability" value={persona?.technical_ability} />
+          <ProfileFact label="Product familiarity" value={persona?.product_familiarity} />
+          <ProfileFact label="Reading behavior" value={persona?.reading_style} />
+          <ProfileFact label="Patience" value={persona?.patience} />
+          <ProfileFact label="Privacy sensitivity" value={persona?.privacy_sensitivity} />
+          <ProfileFact label="Price sensitivity" value={persona?.price_sensitivity} />
+          <ProfileFact label="Customer loyalty" value={persona?.customer_loyalty} />
+        </dl>
+        <div className="vision-agent-narratives">
+          <div><span>Motivations</span><p>{persona?.motivations || 'Not provided'}</p></div>
+          <div><span>Pain points</span><p>{persona?.pain_points || 'Not provided'}</p></div>
+          <div><span>Goals</span><p>{persona?.goals || 'Not provided'}</p></div>
+          <div><span>Buying behavior</span><p>{persona?.buying_behavior || 'Not provided'}</p></div>
+          <div><span>Decision style</span><p>{persona?.decision_style || 'Not provided'}</p></div>
+          <div><span>Typical online behavior</span><p>{persona?.online_behavior || 'Not provided'}</p></div>
+          <div><span>Product expectations</span><p>{persona?.product_expectations || 'Not provided'}</p></div>
+          <div><span>What might make them abandon</span><p>{persona?.abandonment_triggers || 'Not provided'}</p></div>
+        </div>
+      </section>
+
+      <section className="vision-session-outcome">
+        <div><span>OUTCOME</span><strong>{session.status}</strong></div>
+        <div><span>Stop reason</span><strong>{session.stop_reason?.replaceAll('_', ' ') || '—'}</strong></div>
+        <div><span>Duration</span><strong>{formatDuration(session.duration_ms ?? session.elapsed_ms)}</strong></div>
+        <div><span>Actions</span><strong>{session.actions_taken ?? session.action_count ?? events.length}</strong></div>
+        <div><span>AgentCore session</span><strong className="mono">{session.agentcore_session_id || '—'}</strong></div>
+        {session.live_view_url ? <a href={session.live_view_url} target="_blank" rel="noopener noreferrer">Watch live <Icon name="activity" size={13} /></a> : null}
+      </section>
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>WHAT THEY DID</span><h2>Recorded action timeline.</h2></div>
+        <div className="vision-timeline">
+          {events.map((event, index) => <article key={`${event.timestamp}-${index}`} className={`vision-timeline-event ${event.result.toLowerCase()}`}>
+            <div className="vision-timeline-index">{String(index + 1).padStart(2, '0')}</div>
+            <div className="vision-timeline-body">
+              <div><strong>{event.action_type.replaceAll('_', ' ')}</strong><Badge tone={event.result === 'SUCCESS' ? 'accent' : 'warning'}>{event.result}</Badge></div>
+              <p>{event.target_descriptor || event.page_title || event.route || event.url}</p>
+              <small>{event.agent_reason_code.replaceAll('_', ' ')} · +{event.elapsed_ms}ms</small>
+              {event.task_checkpoint ? <span className="vision-checkpoint">Checkpoint · {event.task_checkpoint}</span> : null}
+              {event.console_error ? <pre>{event.console_error}</pre> : null}
+              {event.network_error ? <pre>{event.network_error}</pre> : null}
+              {event.screenshot_ref ? <span className="vision-evidence-ref"><Icon name="file" size={12} /> {event.screenshot_ref}</span> : null}
+            </div>
+          </article>)}
+          {!events.length ? <div className="vision-empty-state"><strong>No recorded BehaviorEvents.</strong><span>Synthetic Beta does not invent a journey when execution evidence is missing.</span></div> : null}
+        </div>
+      </section>
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>WHAT THEY EXPERIENCED</span><h2>Agent-specific feedback.</h2></div>
+        {measuredFeedback ? <div className="vision-feedback-grid">
+          <article><span>WHAT WORKED</span><p>{measuredFeedback.what_worked || 'Not established by recorded evidence.'}</p></article>
+          <article><span>WHAT CONFUSED THEM</span><p>{measuredFeedback.what_confused_them || 'Not established by recorded evidence.'}</p></article>
+          <article><span>WHAT SLOWED THEM DOWN</span><p>{measuredFeedback.what_slowed_them_down || 'Not established by recorded evidence.'}</p></article>
+          <article><span>WHY THEY CONTINUED / ABANDONED</span><p>{measuredFeedback.why_they_continued_or_abandoned || 'Not established by recorded evidence.'}</p></article>
+          <article><span>WHAT THEY EXPECTED</span><p>{measuredFeedback.what_they_expected || 'Not established by recorded evidence.'}</p></article>
+          <article><span>SPECIFIC IMPROVEMENT</span><p>{measuredFeedback.improvement_suggestion || 'No evidence-grounded recommendation is available.'}</p></article>
+        </div> : null}
+        <p className="vision-measured-note">Feedback shown here must be grounded in this persona, this session trajectory, and recorded BehaviorEvents. Missing evidence stays missing.</p>
+      </section>
+
+      {session.trajectory_ref ? <section className="vision-trajectory"><span>TRAJECTORY REFERENCE</span><code>{session.trajectory_ref}</code></section> : null}
+    </> : null}
+  </WorkspaceShell>;
 }
