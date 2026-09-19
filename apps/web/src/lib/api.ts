@@ -1,6 +1,5 @@
 import type {
   BehaviorEvent,
-  EditablePersonaFields,
   PopulationSpec,
   ProductIntelligence,
   ProductIntelligenceRequest,
@@ -141,7 +140,7 @@ export const productApi = {
       .then(result => result?.personas ?? []);
   },
 
-  updatePersona(runId: string, personaId: string, patch: Partial<EditablePersonaFields> & Record<string, unknown>) {
+  updatePersona(runId: string, personaId: string, patch: Partial<RichPersona>) {
     return request<{ persona: RichPersona }>(
       `/runs/${encodeURIComponent(runId)}/personas/${encodeURIComponent(personaId)}`,
       { method: 'PATCH', body: JSON.stringify(patch) },
