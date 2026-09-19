@@ -29,7 +29,7 @@ test('reports an unknown route without inventing a match', () => {
 
 test('registers future surfaces as planned', () => {
   const planned = ROUTES.filter(route => route.status === 'PLANNED').map(route => route.id);
-  assert.deepEqual(planned, ['population-preview', 'settings']);
+  assert.deepEqual(planned, ['settings']);
   assert.equal(parseRoute('#/settings').definition?.status, 'PLANNED');
 });
 
