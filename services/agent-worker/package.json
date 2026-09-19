@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.1136.0",
+    "@aws-sdk/client-sts": "^3.1136.0",
     "@synthetic-beta/analytics": "*",
     "@synthetic-beta/contracts": "*",
     "@synthetic-beta/population": "*",

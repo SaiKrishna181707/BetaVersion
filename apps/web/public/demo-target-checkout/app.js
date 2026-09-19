@@ -44,6 +44,9 @@ function render() {
     `;
   } else if (route === '/checkout') {
     app.innerHTML = `
+      <div style="background: #fef9c3; border: 1px solid #facc15; padding: 10px 14px; border-radius: 6px; margin-bottom: 20px; font-size: 13px; color: #854d0e; font-weight: 700; text-align: center;">
+        ⚠️ SIMULATED CHECKOUT — NO REAL PAYMENT
+      </div>
       <h2>Complete Checkout</h2>
       <p style="margin-bottom: 20px;">Enter billing email and shipping info.</p>
       <div class="form-group">
@@ -65,7 +68,7 @@ function render() {
         </div>
       </div>
       <div style="margin-top: 24px;">
-        <button id="place-order-btn" class="btn btn-primary" style="width: 100%;" onclick="window.placeOrder()">Place Order ($49.00)</button>
+        <button id="place-order-btn" class="btn btn-primary" style="width: 100%;" onclick="window.placeOrder()">Complete Simulated Order ($49.00 - Test Mode)</button>
       </div>
     `;
   } else if (route === '/confirmed') {
@@ -74,7 +77,7 @@ function render() {
         <div class="success-icon">✓</div>
         <h2>Order Confirmed!</h2>
         <p>Order #SB-98421 has been placed successfully.</p>
-        <p style="color: #666; margin-top: 8px;">A receipt has been sent to your billing email.</p>
+        <p style="color: #666; margin-top: 8px;">SIMULATED CHECKOUT — NO REAL PAYMENT. Test mode completed.</p>
       </div>
     `;
   }

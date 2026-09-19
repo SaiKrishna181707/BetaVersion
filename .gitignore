@@ -90,6 +90,7 @@ out
 .nuxt
 dist
 dist-lambdas
+dist_worker
 .output
 
 # Gatsby files
