@@ -24,6 +24,11 @@
     "nova:validate": "python services/nova-worker/worker.py --plan-file services/nova-worker/plan.example.json --validate-only"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1136.0",
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/client-sfn": "^3.1136.0",
+    "@aws-sdk/lib-dynamodb": "^3.1136.0",
+    "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@eslint/js": "^9.39.5",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
