@@ -106,10 +106,10 @@ The serverless production path executed by Step Functions:
 Synthetic Beta promises evaluation of up to 100 synthetic users. The Step Functions Distributed Map orchestrates this scale safely:
 1. **L2 (1 user)**: Single Nova Act session validating DOM interaction and Live View streaming.
 2. **L3 (5 users)**: Small batch verifying parallel session isolation and DynamoDB event indexing.
-3. **L4 (20 users)**: Full single-batch concurrency saturation test (`MaxConcurrency: 20`).
-4. **L5 (100 users)**: Complete production run executed across 5 controlled batches of 20 users.
+3. **L4 (20 users)**: Concurrency-controlled batch verification (`MaxConcurrency: 5`, 4 waves of 5) achieving 100% completion and zero throttling.
+4. **L5 (100 users)**: Complete production run executed across 20 controlled waves of 5 (`run-mu8qcp85-ryxcm`), recording all discrete behavior events with zero infrastructure throttling.
 
-The 100-user run preserves all 500+ discrete behavior events, generating complete funnel drops, friction heatmaps, and cohort variance analytics.
+The 100-user run preserves all discrete behavior events, generating complete funnel drops, friction heatmaps, and cohort variance analytics.
 
 ---
 

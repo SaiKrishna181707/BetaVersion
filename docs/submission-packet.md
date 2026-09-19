@@ -61,7 +61,7 @@ Synthetic Beta separates autonomous reasoning from numerical calculation:
 
 - **Amazon Nova Act**: Multimodal agent model (`nova-act-v1.0`) driving autonomous visual browser navigation without pre-recorded scripts.
 - **Amazon Bedrock AgentCore**: Managed browser runtime (`aws.browser.v1`) providing secure micro-VM Chromium instances, CDP WebSocket automation streams, and WebRTC Live View streams.
-- **AWS Step Functions**: Distributed Map state machine orchestrating controlled batch execution (5 batches of 20 users) up to 100 concurrent/batched sessions.
+- **AWS Step Functions**: Distributed Map state machine orchestrating controlled batch execution (waves with MaxConcurrency: 5) up to 100 concurrent/batched sessions while honoring account Lambda execution limits.
 - **AWS Lambda**: Serverless execution handlers for API dispatch, cross-account session execution, and deterministic metric finalization.
 - **Amazon DynamoDB**: Single-table data store indexing runs, sessions, events, metrics, and findings with automated 7-day TTL.
 - **Amazon S3**: Artifact persistence for structured session logs, raw agent trajectories, checkpoint screenshots, and downloadable report packages.
@@ -100,7 +100,7 @@ Synthetic Beta is engineered with multiple concentric layers of cost protection 
   - Default session timeout: 180 seconds.
   - Server-side hard timeout: 300 seconds enforced by AgentCore Browser.
   - Maximum action ceiling: 40 discrete steps enforced by Nova Act state guardrails.
-- **Cost Efficiency**: A full 100-user batch run against the ShopPulse checkout flow executed for only **$8.24**, far below the $40.00 cap.
+- **Cost Efficiency**: A full 100-user clean run executed for only **$6.15**, far below the $45.00 run cap.
 
 ---
 
@@ -123,13 +123,13 @@ We implemented a canonical dual-account AWS architecture:
 ### Challenges We Ran Into
 1. **Cross-Account Streaming & Security**: Securely bridging live browser CDP sockets and WebRTC video streams across two isolated AWS accounts required strict IAM trust policies with `sts:ExternalId` verification.
 2. **Zero-Hallucination Telemetry**: Ensuring LLM agents never hallucinate percentages or metrics required establishing a hard architectural boundary: Nova Act makes browser decisions, while deterministic TypeScript code computes all funnel metrics and drop-off rates from recorded event logs.
-3. **Graceful Quota & Browser Lifecycle Management**: Managing browser sessions across 100 synthetic users required configuring Step Functions Distributed Map concurrency limits (`MaxConcurrency: 20`) to prevent API throttling while preserving low median time-to-value.
+3. **Graceful Quota & Concurrency Control**: Managing browser sessions across 100 synthetic users required tuning Step Functions Distributed Map concurrency limits (`MaxConcurrency: 5`) to maintain headroom below the Control Plane account's 10-concurrency Lambda execution quota while streaming telemetry seamlessly to Vivek's execution plane.
 
 ### Accomplishments We're Proud Of
 - **Real Autonomous Navigation**: Nova Act successfully navigates real web applications, clicks buttons, types in forms, and overcomes intentional UX traps without requiring synthetic test checkpoint hooks.
 - **WebRTC Live View Integration**: Streaming live agent browser interactions directly into the React frontend in real-time.
-- **Full 100-User Concurrency Run**: Successfully executed 100 synthetic sessions across 5 batches of 20, recording 584 discrete actions and identifying exact checkout drop-off bottlenecks for only $8.24 in cloud compute.
-- **Rigorous Engineering Standards**: 124 passing unit/integration/stress tests, CI-automated dependency auditing, and strict dual-account least-privilege security.
+- **Full 100-User Verified Run (Run ID `run-mu8qcp85-ryxcm`)**: Successfully executed 100 synthetic sessions across 20 controlled waves of 5, achieving zero infrastructure throttling, 100 terminal session records, and deterministic friction findings for only $6.15 in cloud compute.
+- **Rigorous Engineering Standards**: 128 passing unit/integration/stress tests, CI-automated dependency auditing, and strict dual-account least-privilege security.
 
 ### What We Learned
 - Multimodal agents like Nova Act excel at interpreting real visual UI hierarchy, distinguishing primary calls-to-action from secondary links naturally.

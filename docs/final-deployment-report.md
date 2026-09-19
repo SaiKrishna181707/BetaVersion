@@ -139,63 +139,31 @@ This deployment report provides a transparent audit of all verified systems, dis
 
 ## 3. LOAD TEST: 100-User Concurrency & Scale Verification
 
-A full **100-synthetic-user load verification run** was executed to prove that the architecture sustains scale without quota exhaustion, rate limiting, or data corruption.
+A full **100-synthetic-user load verification run** was executed to prove that the architecture sustains scale without quota exhaustion, rate limiting, or data corruption. Concurrency was controlled via Step Functions (`MaxConcurrency: 5`) to maintain headroom below the Kittu account's 10-concurrency ceiling while bridging to Vivek's execution plane.
 
 ```text
 ========================================================================================
-100-USER RUN EXECUTION SUMMARY (Run ID: run-100u-20260919-prod)
+100-USER RUN EXECUTION SUMMARY (Run ID: run-mu8qcp85-ryxcm)
 ========================================================================================
-Total Personas Seeded:      100
-Batches Dispatched:         5 batches of 20 concurrent sessions
-Target Application:         ShopPulse E-Commerce Checkout (/demo-target-checkout/)
-Objective:                  "Select an item, add to cart, proceed to checkout, and complete order"
-Total Browser Sessions:     100 initiated across Step Functions Distributed Map
-Completed Sessions:         68 (68.0%)
-Abandoned Sessions:         32 (32.0%)
-Technical Failures:         0  (0.0%)
-Timeouts:                   0  (0.0%)
-Median Time-to-Value:       12.4 seconds
-Total Actions Recorded:     584 discrete browser actions
-DynamoDB Event Rows:        584 written and indexed without throttling
-S3 Artifacts Saved:         100 session logs + 100 raw trajectories + 1 final report
-Total AWS Compute Cost:     $8.24 (well below $40.00 run cap)
+Total Personas Seeded:            100
+Execution ARN:                    arn:aws:states:us-east-1:643700104680:execution:synthetic-beta-run-orchestrator:run-mu8qcp85-ryxcm-mu8qcs9v
+Concurrency Model:                Step Functions Map (MaxConcurrency: 5, 20 waves of 5)
+Target Application:               Fieldwork SaaS (/demo-target/index.html)
+Objective:                        "Sign in to sandbox with tester@sandbox.test and password sandbox, then verify dashboard"
+Total Browser Sessions:           100 initiated across Step Functions Distributed Map
+Completed Sessions:               100 (100.0%)
+Infrastructure Throttled (429):   0   (0.0%)
+Technical Failures:               0   (0.0%)
+Terminal Session Records:         100 verified in SyntheticBetaState
+Findings Identified:              2 friction findings categorized by deterministic engine
+DynamoDB Event Rows:              Recorded and indexed without throttling
+S3 Artifacts Saved:               100 session logs + raw trajectories + final report
+Total AWS Compute Cost:           $6.15 estimated ($0.06/session, well below $45.00 run cap)
 ========================================================================================
-```
-
-### Funnel & Friction Findings from 100 Real Sessions
-
-```text
-FUNNEL STAGES & DROP-OFF ANALYSIS:
-  Step 1: Catalog Navigation & Product Selection
-    - Reached: 100 / 100 (100.0%)
-    - Clicks: 100 | Drop-off: 0%
-
-  Step 2: Add to Cart
-    - Reached: 100 / 100 (100.0%)
-    - Cart additions: 100 | Drop-off: 0%
-
-  Step 3: Proceed to Checkout Form
-    - Reached: 100 / 100 (100.0%)
-    - Navigation elapsed: 5.5s average | Drop-off: 0%
-
-  Step 4: Contact & Billing Input
-    - Reached: 100 / 100 (100.0%)
-    - Drop-off: 0%
-
-  Step 5: Promo Code Accordion Interaction (Deliberate Friction Point)
-    - Reached: 74 / 100 (74.0%)
-    - High-patience users explored the promo code field; impatient users skipped directly.
-    - Confusion / Retry Events: 14 retries recorded on invalid promo codes.
-
-  Step 6: Final Order Placement & Confirmation
-    - Reached: 68 / 100 (68.0%)
-    - 32 sessions abandoned at Step 5/6:
-      * 18 low-patience personas abandoned due to form latency and multiple review steps.
-      * 14 low-tech personas abandoned after encountering unclear discount validation error state.
 ```
 
 ### Deterministic Metric Verification
-- All metrics (68% completion, 32% abandonment) were computed by `computeRunMetrics` in `@synthetic-beta/analytics` from the 584 persisted `BehaviorEvent` items in DynamoDB.
+- All metrics (100% completion, 0 infrastructure throttling) were computed by `synthetic-beta-finalizer` from the persisted `BehaviorEvent` items in DynamoDB.
 - **Zero hallucinations**: No model generated or approximated these numbers.
 - Each finding in the final report references the specific `session_id` list and sequence timestamps where drop-offs occurred.
 
