@@ -73,3 +73,11 @@ test('profiles a cohort with tallies that add up', () => {
   assert.equal(total, personas.length);
   assert.equal(Object.values(profile.patience).reduce((sum, count) => sum + count, 0), personas.length);
 });
+
+test('builds complete editable profiles from product context', () => {
+  const personas = buildCohort({ ...spec, size: 3, target_audience: 'Independent designers', product_name: 'Canvas' });
+  assert.ok(personas.every(persona => persona.occupation));
+  assert.ok(personas.every(persona => persona.biography?.includes('Canvas')));
+  assert.ok(personas.every(persona => persona.primary_motivation === spec.goal_context));
+  assert.ok(personas.every(persona => Array.isArray(persona.frustration_triggers)));
+});

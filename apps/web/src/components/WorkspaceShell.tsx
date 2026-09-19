@@ -1,91 +1,37 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { GUARDRAILS, formatUsd } from '@synthetic-beta/contracts';
 import { Badge, Brand, Icon } from '@synthetic-beta/ui';
+import { productApi } from '../lib/api';
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
-  const [currentHash, setCurrentHash] = useState(() => (typeof window !== 'undefined' ? window.location.hash : ''));
-
+  const [hash, setHash] = useState(() => window.location.hash);
+  const [cloudState, setCloudState] = useState<'LOADING' | 'AVAILABLE' | 'UNAVAILABLE'>('LOADING');
   useEffect(() => {
-    const handleHashChange = () => {
-      setCurrentHash(window.location.hash);
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const update = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
   }, []);
-
-  const isOverview = currentHash === '' || currentHash === '#/' || currentHash === '#';
-  const isNewRun = currentHash.startsWith('#/new');
-
-  return (
-    <div className="workspace-layout">
-      <aside className="workspace-sidebar">
-        <Brand />
-        <div className="workspace-selector">
-          <span className="workspace-avatar">S</span>
-          <div>
-            <strong>Sandbox workspace</strong>
-            <span>Local development</span>
-          </div>
-        </div>
-        <span className="nav-caption mono">WORKSPACE</span>
-        <nav aria-label="Workspace">
-          <a href="#/" className={isOverview ? 'active' : ''} aria-current={isOverview ? 'page' : undefined}>
-            <Icon name="grid" />
-            Overview
-            {isOverview && <span className="nav-active-dot" />}
-          </a>
-          <a href="#/new" className={isNewRun ? 'active' : ''} aria-current={isNewRun ? 'page' : undefined}>
-            <Icon name="plus" />
-            New run
-            {isNewRun && <span className="nav-active-dot" />}
-          </a>
-        </nav>
-        <div className="sidebar-empty">
-          <Icon name="terminal" size={18} />
-          <p>
-            Your first session<br />starts with a clear goal.
-          </p>
-          <span>Configure → review → run</span>
-        </div>
-        <div className="sidebar-budget">
-          <div>
-            <Icon name="shield" size={14} /> GLOBAL CEILING
-          </div>
-          <strong className="mono">
-            {formatUsd(GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100)}
-            <span>USD</span>
-          </strong>
-          <p>Configured limit · execution offline</p>
-        </div>
-        <div className="workspace-user">
-          <span className="workspace-avatar small">L</span>
-          <span>Local workspace</span>
-          <Badge>DEV</Badge>
-        </div>
-      </aside>
-      <div className="workspace-content">
-        <header className="workspace-topbar">
-          <div className="mobile-brand">
-            <Brand compact />
-          </div>
-          <div className="breadcrumbs">
-            <span>Workspace</span>
-            <Icon name="chevron" size={12} />
-            <strong>{isNewRun ? 'New run' : isOverview ? 'Overview' : 'Execution'}</strong>
-          </div>
-          <Badge tone="accent">
-            <span className="dot" />
-            Local preview
-          </Badge>
-        </header>
-        <main id="main" className="new-run-main">
-          {children}
-        </main>
-        <footer className="workspace-footer">
-          <Icon name="lock" size={12} />
-          Configuration stays in this browser. No agents are running.
-        </footer>
-      </div>
+  useEffect(() => {
+    let active = true;
+    productApi.health().then(result => { if (active) setCloudState(result.status === 'ok' && result.execution_available ? 'AVAILABLE' : 'UNAVAILABLE'); })
+      .catch(() => { if (active) setCloudState('UNAVAILABLE'); });
+    return () => { active = false; };
+  }, []);
+  const section = hash.includes('/population') ? 'Population' : hash.includes('/live') ? 'Live execution' : hash.includes('/report') ? 'Results' : hash.includes('/sessions/') ? 'Agent experience' : 'New research';
+  return <div className="workspace-layout">
+    <aside className="workspace-sidebar">
+      <Brand />
+      <div className="workspace-selector"><span className="workspace-avatar">S</span><div><strong>Product research</strong><span>Evidence workspace</span></div></div>
+      <span className="nav-caption mono">WORKSPACE</span>
+      <nav aria-label="Workspace"><a href="#/"><Icon name="grid" />Overview</a><a href="#/new" className={hash.startsWith('#/new') ? 'active' : ''}><Icon name="plus" />New run</a></nav>
+      <div className="sidebar-empty"><Icon name="activity" size={18} /><p>Product to population.<br />Population to evidence.</p><span>BUILD → OBSERVE → LEARN</span></div>
+      <div className="sidebar-budget"><div><Icon name="shield" size={14} /> GLOBAL CEILING</div><strong className="mono">{formatUsd(GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100)}<span>USD</span></strong><p>Hard safety limit per workspace</p></div>
+      <div className="workspace-user"><span className="workspace-avatar small">A</span><span>Cloud workspace</span></div>
+    </aside>
+    <div className="workspace-content">
+      <header className="workspace-topbar"><div className="mobile-brand"><Brand compact /></div><div className="breadcrumbs"><span>Synthetic Beta</span><Icon name="chevron" size={12} /><strong>{section}</strong></div><Badge tone={cloudState === 'AVAILABLE' ? 'accent' : cloudState === 'UNAVAILABLE' ? 'warning' : 'neutral'}><span className="dot" />{cloudState === 'AVAILABLE' ? 'AWS CONNECTED' : cloudState === 'UNAVAILABLE' ? 'API UNAVAILABLE' : 'CHECKING API'}</Badge></header>
+      <main id="main" className="new-run-main">{children}</main>
+      <footer className="workspace-footer"><Icon name="shield" size={12} />Runs execute within explicit time, action, budget, and concurrency limits.</footer>
     </div>
-  );
+  </div>;
 }

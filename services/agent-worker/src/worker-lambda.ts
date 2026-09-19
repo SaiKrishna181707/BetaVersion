@@ -19,6 +19,7 @@ const artifactBucket = process.env.ARTIFACT_BUCKET || 'synthetic-beta-artifacts-
 
 const VIVEK_EXECUTION_ROLE_ARN = process.env.VIVEK_EXECUTION_ROLE_ARN || 'arn:aws:iam::768669378827:role/SyntheticBetaAgentExecutionRole';
 const VIVEK_NOVA_LAMBDA_ARN = process.env.VIVEK_NOVA_LAMBDA_ARN || 'arn:aws:lambda:us-east-1:768669378827:function:synthetic-beta-nova-worker-fn';
+const CROSS_ACCOUNT_EXTERNAL_ID = process.env.CROSS_ACCOUNT_EXTERNAL_ID || '';
 const NOVA_ACT_WORKFLOW_NAME = process.env.NOVA_ACT_WORKFLOW_NAME || 'synthetic-beta-browser-session';
 const AGENTCORE_BROWSER_IDENTIFIER = process.env.AGENTCORE_BROWSER_IDENTIFIER || 'aws.browser.v1';
 
@@ -44,6 +45,7 @@ async function assumeVivekRole(sessionId: string): Promise<LambdaClient> {
     RoleArn: VIVEK_EXECUTION_ROLE_ARN,
     RoleSessionName: ('synthetic-beta-session-' + sessionId).slice(0, 64),
     DurationSeconds: 900,
+    ...(CROSS_ACCOUNT_EXTERNAL_ID ? { ExternalId: CROSS_ACCOUNT_EXTERNAL_ID } : {}),
   }));
   const creds = assumed.Credentials;
   if (!creds?.AccessKeyId || !creds?.SecretAccessKey || !creds?.SessionToken) {

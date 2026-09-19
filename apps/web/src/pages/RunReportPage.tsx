@@ -1,240 +1,35 @@
-import { useEffect, useState } from 'react';
-import { Badge, Button, Icon } from '@synthetic-beta/ui';
+import { useEffect, useMemo, useState } from 'react';
+import type { SyntheticBetaReport, SyntheticPersona } from '@synthetic-beta/contracts';
+import { Badge, Icon } from '@synthetic-beta/ui';
+import { AgentCard } from '../components/AgentCard';
 import { WorkspaceShell } from '../components/WorkspaceShell';
-
-interface EvidenceItem {
-  session_id: string;
-  sequence: number;
-  elapsed_ms: number;
-  url: string;
-  action_type: string;
-  result: string;
-}
-
-interface FindingItem {
-  finding_id: string;
-  kind: 'FRICTION' | 'FAILURE' | 'STRENGTH';
-  title: string;
-  detail: string;
-  metric_refs?: string[];
-  evidence?: EvidenceItem[];
-}
-
-interface FunnelItem {
-  checkpoint: string;
-  reached: number;
-  of_sessions: number;
-  reached_percentage: number | null;
-}
-
-interface ReportData {
-  run_id: string;
-  generated_at: string;
-  configuration: {
-    target_url: string;
-    objective: string;
-    user_count: number;
-  };
-  metrics: {
-    session_count: number;
-    completion: { percentage: number | null; numerator: number; denominator: number };
-    abandonment: { percentage: number | null; numerator: number; denominator: number };
-    friction?: { total_signals: number; sessions_with_friction: number };
-    funnel?: FunnelItem[];
-  };
-  findings: FindingItem[];
-  limitations?: string[];
-}
+import { productApi } from '../lib/api';
 
 export function RunReportPage({ runId }: { runId: string }) {
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [report, setReport] = useState<SyntheticBetaReport | null>(null);
+  const [personas, setPersonas] = useState<SyntheticPersona[]>([]);
+  const [downloadUrl, setDownloadUrl] = useState('');
   const [error, setError] = useState('');
-
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '';
-
   useEffect(() => {
     let active = true;
-    const fetchReport = async () => {
-      if (!apiBase || !runId) return;
-      try {
-        const res = await fetch(`${apiBase}/runs/${runId}/report`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        if (active) {
-          setReport(json.report);
-          setDownloadUrl(json.download_url || null);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to fetch report');
-          setLoading(false);
-        }
-      }
-    };
-    fetchReport();
+    Promise.all([productApi.getReport(runId), productApi.getPersonas(runId)]).then(([result, population]) => {
+      if (!active) return; setReport(result.report); setDownloadUrl(result.download_url || ''); setPersonas(population);
+    }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Results are not available yet.'); });
     return () => { active = false; };
-  }, [apiBase, runId]);
+  }, [runId]);
+  const resultByPersona = useMemo(() => new Map(report?.agent_results.map(result => [result.persona_id, result]) || []), [report]);
+  if (error) return <WorkspaceShell><div className="page-heading"><div><span className="eyebrow">05 / RESULTS</span><h1>Evidence is still resolving.</h1></div></div><p className="field-error">{error}</p><a href={`#/runs/${runId}/live`} className="button button-secondary">Return to live run</a></WorkspaceShell>;
+  if (!report) return <WorkspaceShell><div className="loading-state"><span className="live-pulse" />Loading recorded evidence...</div></WorkspaceShell>;
+  const percentage = (value: number | null) => value === null ? '—' : `${value}%`;
 
-  return (
-    <WorkspaceShell>
-      <div className="new-run-heading">
-        <div>
-          <div className="eyebrow">DETERMINISTIC EVALUATION · PERSISTED TO S3</div>
-          <h1 tabIndex={-1}>Run Report<span>:</span> <span className="mono" style={{ fontSize: '24px' }}>{runId}</span></h1>
-          <p>{report?.configuration?.objective || 'Synthetic user evidence-grounded report.'}</p>
-        </div>
-        <div className="row" style={{ gap: '12px', alignItems: 'center' }}>
-          {downloadUrl && (
-            <a href={downloadUrl} target="_blank" rel="noreferrer" className="button button-primary">
-              <Icon name="file" size={14} /> Download S3 JSON
-            </a>
-          )}
-          <Button variant="secondary" onClick={() => { window.location.hash = `#/runs/${runId}/live`; }}>
-            <Icon name="activity" size={14} /> View Live Run
-          </Button>
-        </div>
-      </div>
-
-      {loading && <p>Loading deterministic report from AWS S3 & DynamoDB…</p>}
-      {error && <p className="field-error">Report not yet ready or error: {error}</p>}
-
-      {report && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', margin: '24px 0' }}>
-          {/* Topline Metrics KPI Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>COMPLETION RATE</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#0f172a', margin: '8px 0' }}>
-                {report.metrics.completion.percentage ?? 0}%
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                {report.metrics.completion.numerator} of {report.metrics.completion.denominator} sessions
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>ABANDONMENT RATE</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#e11d48', margin: '8px 0' }}>
-                {report.metrics.abandonment.percentage ?? 0}%
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                {report.metrics.abandonment.numerator} of {report.metrics.abandonment.denominator} sessions
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>FRICTION SIGNALS</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b', margin: '8px 0' }}>
-                {report.metrics.friction?.total_signals ?? 0}
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                across {report.metrics.friction?.sessions_with_friction ?? 0} sessions
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>TOTAL POPULATION</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#0284c7', margin: '8px 0' }}>
-                {report.metrics.session_count}
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                synthetic personas evaluated
-              </div>
-            </div>
-          </div>
-
-          {/* Funnel Section */}
-          {report.metrics.funnel && report.metrics.funnel.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '24px' }}>
-              <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Behavioral Funnel Analysis</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {report.metrics.funnel.map((step, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '140px', fontSize: '14px', fontWeight: 600 }}>{step.checkpoint}</div>
-                    <div style={{ flex: 1, background: '#f1f5f9', borderRadius: '4px', height: '24px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          background: idx === 0 ? '#0284c7' : idx === report.metrics.funnel!.length - 1 ? '#10b981' : '#f59e0b',
-                          height: '100%',
-                          width: `${step.reached_percentage || 0}%`,
-                          transition: 'width 0.5s ease',
-                        }}
-                      />
-                    </div>
-                    <div style={{ width: '100px', fontSize: '14px', textAlign: 'right' }}>
-                      <strong>{step.reached_percentage ?? 0}%</strong> ({step.reached}/{step.of_sessions})
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Findings Section */}
-          <div>
-            <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>
-              Evidence-Grounded Findings ({report.findings.length})
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {report.findings.map(finding => (
-                <div
-                  key={finding.finding_id}
-                  style={{
-                    background: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '20px',
-                    borderLeft: `4px solid ${finding.kind === 'STRENGTH' ? '#10b981' : finding.kind === 'FAILURE' ? '#ef4444' : '#f59e0b'}`,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700 }}>{finding.title}</h3>
-                    <Badge tone={finding.kind === 'STRENGTH' ? 'accent' : 'warning'}>{finding.kind}</Badge>
-                  </div>
-                  <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.6 }}>{finding.detail}</p>
-
-                  {finding.evidence && finding.evidence.length > 0 && (
-                    <div style={{ marginTop: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
-                        CITING EVIDENCE SAMPLES ({finding.evidence.length})
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {finding.evidence.map((ev, eIdx) => (
-                          <div
-                            key={eIdx}
-                            style={{
-                              fontSize: '12px',
-                              background: '#f8fafc',
-                              padding: '8px 12px',
-                              borderRadius: '4px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${ev.session_id}`; }}
-                          >
-                            <span className="mono">{ev.session_id} · step #{ev.sequence}</span>
-                            <span>{ev.action_type} on {ev.url} → <strong>{ev.result}</strong> (+{ev.elapsed_ms}ms)</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginTop: '32px' }}>
-        <a href="#/new" className="text-link">
-          <Icon name="arrow" size={14} className="back-arrow" /> Start a new synthetic evaluation
-        </a>
-      </div>
-    </WorkspaceShell>
-  );
+  return <WorkspaceShell>
+    <div className="page-heading"><div><span className="eyebrow">05 / RESULTS</span><h1>What the population experienced.</h1><p>{report.configuration.objective}</p></div>{downloadUrl ? <a className="button button-secondary" href={downloadUrl} target="_blank" rel="noreferrer"><Icon name="file" size={14} />Download evidence</a> : null}</div>
+    <section className="metric-strip"><div><span>Completion</span><strong>{percentage(report.metrics.completion.percentage)}</strong><small>{report.metrics.completion.numerator} of {report.metrics.completion.denominator}</small></div><div><span>Abandonment</span><strong>{percentage(report.metrics.abandonment.percentage)}</strong><small>{report.metrics.abandonment.numerator} sessions</small></div><div><span>Friction signals</span><strong>{report.metrics.friction.total_signals}</strong><small>{report.metrics.friction.sessions_with_friction} agents affected</small></div><div><span>Recorded events</span><strong>{report.metrics.computed_from.behavior_events}</strong><small>across {report.metrics.session_count} agents</small></div></section>
+    <section className="results-section"><div className="section-heading"><div><span className="eyebrow">INDIVIDUAL RESULTS</span><h2>Every agent has a story.</h2></div><p>Scroll horizontally and open any agent to inspect its recorded trajectory.</p></div><div className="agent-rail results-rail">{personas.map(persona => {
+      const result = resultByPersona.get(persona.persona_id);
+      return <AgentCard key={persona.persona_id} persona={persona} result={result ? { status: result.status, actionCount: result.action_count, elapsedMs: result.elapsed_ms } : { status: 'NO SESSION RECORD' }} onSelect={() => { if (result) window.location.hash = `#/runs/${runId}/sessions/${result.session_id}`; }} />;
+    })}</div></section>
+    <section className="findings-list"><div className="section-heading"><div><span className="eyebrow">EVIDENCE-GROUNDED FINDINGS</span><h2>What deserves attention.</h2></div></div>{report.findings.map(finding => <article key={finding.finding_id}><div><Badge tone={finding.kind === 'STRENGTH' ? 'accent' : 'warning'}>{finding.kind}</Badge><h3>{finding.title}</h3></div><p>{finding.detail}</p>{finding.evidence.length ? <div className="evidence-links">{finding.evidence.map(pointer => <a key={`${pointer.session_id}-${pointer.sequence}`} href={`#/runs/${runId}/sessions/${pointer.session_id}`}>{pointer.session_id} · action {pointer.sequence + 1}<Icon name="arrow" size={12} /></a>)}</div> : null}</article>)}</section>
+    <section className="limitations"><Icon name="info" size={17} /><div><strong>Read with the limits in view.</strong>{report.limitations.map(item => <p key={item}>{item}</p>)}</div></section>
+  </WorkspaceShell>;
 }

@@ -22,4 +22,6 @@ export interface PopulationSpec {
   device_class_mix?: TraitMix<DeviceClass>;
   technical_ability_mix?: TraitMix<TechnicalAbility>;
   patience_mix?: TraitMix<PatienceLevel>;
+  target_audience?: string;
+  product_name?: string;
 }

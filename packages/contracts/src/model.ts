@@ -50,11 +50,59 @@ export interface SyntheticPersona {
   display_name?: string;
   age_band?: string;
   location_band?: string;
+  income_band?: 'LOW' | 'MIDDLE' | 'HIGH';
+  customer_loyalty?: 'LOW' | 'MEDIUM' | 'HIGH';
   price_sensitivity?: 'LOW' | 'MEDIUM' | 'HIGH';
   privacy_sensitivity?: 'LOW' | 'MEDIUM' | 'HIGH';
+  occupation?: string;
+  biography?: string;
+  primary_motivation?: string;
+  frustration_triggers?: string[];
+  accessibility_needs?: string[];
 }
 
+export interface ProductIntelligence {
+  company_name: string;
+  website_url: string;
+  product_name: string;
+  category: string;
+  summary: string;
+  target_audience: string;
+  suggested_objectives: string[];
+  value_propositions: string[];
+  source_title: string;
+  analyzed_at: string;
+}
+
+export interface ProductIntelligenceRequest {
+  company_name: string;
+  website_url: string;
+}
+
+export type EditablePersonaFields = Pick<SyntheticPersona,
+  | 'display_name'
+  | 'age_band'
+  | 'location_band'
+  | 'income_band'
+  | 'customer_loyalty'
+  | 'occupation'
+  | 'biography'
+  | 'primary_motivation'
+  | 'goal_context'
+  | 'technical_ability'
+  | 'product_familiarity'
+  | 'patience'
+  | 'reading_style'
+  | 'device_class'
+  | 'price_sensitivity'
+  | 'privacy_sensitivity'
+  | 'frustration_triggers'
+  | 'accessibility_needs'
+>;
+
 export interface RunConfiguration {
+  company_name?: string;
+  product_name?: string;
   target_url: string;
   product_description: string;
   target_audience: string;
@@ -77,6 +125,7 @@ export interface SessionRecord {
   elapsed_ms: number;
   event_log_ref: string | null;
   replay_ref: string | null;
+  stop_reason?: string;
 }
 
 export interface RunDraft {

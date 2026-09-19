@@ -2,6 +2,7 @@ import { Component, useEffect, useSyncExternalStore, type ReactNode } from 'reac
 import { Brand, Button } from '@synthetic-beta/ui';
 import { LandingPage } from './pages/LandingPage';
 import { NewRunPage } from './pages/NewRunPage';
+import { PopulationPage } from './pages/PopulationPage';
 import { LiveRunPage } from './pages/LiveRunPage';
 import { RunReportPage } from './pages/RunReportPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
@@ -43,6 +44,9 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 
 function RouteSurface({ match }: { match: RouteMatch }) {
   if (match.definition?.id === 'new-run') return <NewRunPage />;
+  if (match.definition?.id === 'population-preview' && match.params.runId) {
+    return <PopulationPage runId={match.params.runId} />;
+  }
   if (match.definition?.id === 'live-run' && match.params.runId) {
     return <LiveRunPage runId={match.params.runId} />;
   }

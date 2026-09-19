@@ -1,171 +1,44 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Icon } from '@synthetic-beta/ui';
+import type { SyntheticPersona } from '@synthetic-beta/contracts';
+import { Badge, Icon } from '@synthetic-beta/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
-import type { SessionStatus } from '@synthetic-beta/contracts';
-
-interface SessionItem {
-  session_id: string;
-  persona_id: string;
-  status: SessionStatus;
-  actions_taken?: number;
-  duration_ms?: number;
-  stop_reason?: string;
-  agentcore_session_id?: string;
-  live_view_url?: string;
-  trajectory_ref?: string;
-  persona?: {
-    display_name?: string;
-    device_class?: string;
-    technical_ability?: string;
-    patience?: string;
-  };
-}
-
-interface RunData {
-  run_id: string;
-  status: string;
-  configuration?: {
-    target_url?: string;
-    objective?: string;
-    user_count?: number;
-  };
-  sessions?: SessionItem[];
-  metrics_summary?: {
-    completion_rate?: number;
-    abandonment_rate?: number;
-  };
-}
+import { productApi, type RunSummary, type SessionItem } from '../lib/api';
 
 export function LiveRunPage({ runId }: { runId: string }) {
-  const [data, setData] = useState<RunData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [run, setRun] = useState<RunSummary | null>(null);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [personas, setPersonas] = useState<Map<string, SyntheticPersona>>(new Map());
   const [error, setError] = useState('');
-
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '';
-
   useEffect(() => {
     let active = true;
-    const fetchStatus = async () => {
-      if (!apiBase || !runId) return;
+    productApi.getPersonas(runId).then(values => { if (active) setPersonas(new Map(values.map(persona => [persona.persona_id, persona]))); }).catch(() => undefined);
+    const refresh = async () => {
       try {
-        const [runRes, sessionsRes] = await Promise.all([
-          fetch(`${apiBase}/runs/${runId}`),
-          fetch(`${apiBase}/runs/${runId}/sessions`),
-        ]);
-        if (!runRes.ok) throw new Error(`HTTP ${runRes.status}`);
-        const runJson = await runRes.json();
-        let sessionsList: SessionItem[] = [];
-        if (sessionsRes.ok) {
-          const sessionsJson = await sessionsRes.json();
-          sessionsList = sessionsJson.sessions || [];
-        } else if (runJson.sessions) {
-          sessionsList = runJson.sessions;
-        }
-        if (active) {
-          setData({
-            ...runJson,
-            sessions: sessionsList,
-          });
-          setLoading(false);
-          setError('');
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to fetch run');
-          setLoading(false);
-        }
-      }
+        const [nextRun, nextSessions] = await Promise.all([productApi.getRun(runId), productApi.getSessions(runId)]);
+        if (!active) return;
+        setRun(nextRun); setSessions(nextSessions); setError('');
+        if (nextRun.status === 'COMPLETED') window.setTimeout(() => { if (active) window.location.hash = `#/runs/${runId}/report`; }, 1800);
+      } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : 'Could not load live execution.'); }
     };
+    void refresh(); const timer = window.setInterval(() => void refresh(), 3000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [runId]);
+  const complete = sessions.filter(session => ['COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED'].includes(session.status)).length;
+  const progress = sessions.length ? Math.round((complete / sessions.length) * 100) : 0;
 
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [apiBase, runId]);
-
-  return (
-    <WorkspaceShell>
-      <div className="new-run-heading">
-        <div>
-          <div className="eyebrow">AMAZON BEDROCK AGENTCORE · CLOUD ORCHESTRATION</div>
-          <h1 tabIndex={-1}>Live Run<span>:</span> <span className="mono" style={{ fontSize: '24px' }}>{runId}</span></h1>
-          <p>{data?.configuration?.objective || 'Synthetic user session execution in progress.'}</p>
-        </div>
-        <div className="row" style={{ gap: '12px', alignItems: 'center' }}>
-          <Badge tone={data?.status === 'COMPLETED' ? 'accent' : 'warning'}>
-            <Icon name="activity" size={14} />
-            {data?.status || (loading ? 'CONNECTING…' : 'ACTIVE')}
-          </Badge>
-          <Button variant="secondary" onClick={() => { window.location.hash = `#/runs/${runId}/report`; }}>
-            View Report <Icon name="arrow" size={14} />
-          </Button>
-        </div>
-      </div>
-
-      <div className="notice notice-info" style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', margin: '20px 0' }}>
-        <Icon name="globe" size={20} />
-        <div>
-          <strong>Target Surface:</strong> <span className="mono">{data?.configuration?.target_url || 'https://main.d1s2dm4wj8xxb.amplifyapp.com/demo-target/'}</span>
-          <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
-            AgentCore Browser Engine: <span className="mono">SyntheticBetaBrowser (aws.browser.v1)</span> · Region: <span className="mono">us-east-1</span> · Orchestration: Step Functions Map (MaxConcurrency: 20)
-          </div>
-        </div>
-      </div>
-
-      {loading && <p>Loading live sessions from AWS DynamoDB…</p>}
-      {error && <p className="field-error">Error connecting to AWS API Gateway: {error}</p>}
-
-      {data && (
-        <div>
-          <h2 style={{ fontSize: '18px', margin: '24px 0 16px' }}>
-            Synthetic Sessions ({data.sessions?.length || data.configuration?.user_count || 0})
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-            {(data.sessions || []).map((session, index) => (
-              <div
-                key={session.session_id || index}
-                style={{
-                  background: '#fff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  cursor: 'pointer',
-                  transition: 'border-color 0.2s',
-                }}
-                onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${session.session_id}`; }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <strong style={{ fontSize: '15px' }}>{session.persona?.display_name || `User #${index + 1}`}</strong>
-                  <Badge tone={session.status === 'COMPLETED' ? 'accent' : session.status === 'ABANDONED' ? 'warning' : 'neutral'}>
-                    {session.status}
-                  </Badge>
-                </div>
-                <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
-                  Device: {session.persona?.device_class || 'DESKTOP'} · Tech: {session.persona?.technical_ability || 'MED'} · Patience: {session.persona?.patience || 'MED'}
-                </div>
-                {(session.agentcore_session_id || session.live_view_url) && (
-                  <div style={{ fontSize: '11px', marginBottom: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {session.agentcore_session_id && <span className="mono" style={{ color: '#0284c7' }}>AgentCore: {session.agentcore_session_id.slice(0, 10)}…</span>}
-                    {session.live_view_url && <Badge tone="accent">Live View</Badge>}
-                  </div>
-                )}
-                <div style={{ fontSize: '13px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
-                  <span>Actions: <strong>{session.actions_taken ?? (session.status === 'COMPLETED' ? 6 : 5)}</strong></span>
-                  <span className="mono" style={{ color: '#0284c7' }}>Inspect log →</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginTop: '32px' }}>
-        <a href="#/new" className="text-link">
-          <Icon name="arrow" size={14} className="back-arrow" /> Create another run
-        </a>
-      </div>
-    </WorkspaceShell>
-  );
+  return <WorkspaceShell>
+    <div className="page-heading"><div><span className="eyebrow">04 / LIVE EXECUTION</span><h1>Watch the population move.</h1><p>{run?.configuration?.objective || 'Loading the run objective...'}</p></div><Badge tone={run?.status === 'COMPLETED' ? 'accent' : 'warning'}><span className="live-pulse" />{run?.status || 'CONNECTING'}</Badge></div>
+    <section className="live-stage"><div><span className="step-kicker">REAL AWS EXECUTION</span><h2>{run?.configuration?.product_name || run?.configuration?.target_url || runId}</h2><p className="mono">{run?.configuration?.target_url}</p></div><div className="progress-orbit"><strong>{progress}%</strong><span>{complete} / {sessions.length || run?.persona_count || 0} terminal</span></div></section>
+    <div className="execution-progress"><span style={{ width: `${progress}%` }} /></div>
+    {error ? <p className="field-error" role="alert">{error}</p> : null}
+    <section className="live-agent-grid" aria-live="polite">{sessions.map(session => {
+      const persona = session.persona || personas.get(session.persona_id);
+      return <button key={session.session_id} className={`live-agent ${session.status.toLowerCase()}`} onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${session.session_id}`; }}>
+        <span className="live-agent-icon"><Icon name={session.status === 'ACTIVE' ? 'cursor' : 'users'} size={17} /></span>
+        <span><strong>{persona?.display_name || session.persona_id}</strong><small>{persona ? `${persona.device_class.replace('_', ' ')} · ${persona.technical_ability}` : session.session_id}</small></span>
+        <Badge tone={session.status === 'COMPLETED' ? 'accent' : session.status === 'FAILED' || session.status === 'ABANDONED' ? 'warning' : 'neutral'}>{session.status}</Badge>
+      </button>;
+    })}</section>
+    {run?.status === 'COMPLETED' ? <a className="button button-primary results-cta" href={`#/runs/${runId}/report`}>Open results <Icon name="arrow" size={15} /></a> : null}
+  </WorkspaceShell>;
 }

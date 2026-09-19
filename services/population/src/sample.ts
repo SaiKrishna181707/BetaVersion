@@ -14,6 +14,10 @@ const PATIENCE: readonly PatienceLevel[] = ['LOW', 'MEDIUM', 'HIGH'];
 const READING_STYLE: readonly SyntheticPersona['reading_style'][] = ['SCANNING', 'SELECTIVE', 'THOROUGH'];
 const DEVICE_CLASS: readonly DeviceClass[] = ['DESKTOP', 'TABLET', 'MOBILE_WEB'];
 const SENSITIVITY: readonly ('LOW' | 'MEDIUM' | 'HIGH')[] = ['LOW', 'MEDIUM', 'HIGH'];
+const AGE_BANDS = ['18-24', '25-34', '35-44', '45-54', '55+'] as const;
+const LOCATION_BANDS = ['Large city', 'Mid-size city', 'Small city', 'Suburban', 'Rural'] as const;
+const OCCUPATIONS = ['Founder', 'Product manager', 'Operations lead', 'Designer', 'Independent professional', 'Team lead'] as const;
+const INCOME_BANDS = ['LOW', 'MIDDLE', 'HIGH'] as const;
 
 /** FNV-1a. Turns a run or draft seed into a stable 32-bit starting point. */
 function hashSeed(seed: string): number {
@@ -82,20 +86,38 @@ export function buildCohort(spec: PopulationSpec): SyntheticPersona[] {
   const width = Math.max(3, String(spec.size).length);
   const label = (index: number) => String(index + 1).padStart(width, '0');
 
-  return Array.from({ length: spec.size }, (_, index) => ({
-    persona_id: `${seed}-${label(index)}`,
-    population_seed: seed,
-    cohort,
-    technical_ability: pick(TECHNICAL_ABILITY, random, spec.technical_ability_mix),
-    product_familiarity: pick(PRODUCT_FAMILIARITY, random),
-    patience: pick(PATIENCE, random, spec.patience_mix),
-    reading_style: pick(READING_STYLE, random),
-    device_class: pick(DEVICE_CLASS, random, spec.device_class_mix),
-    goal_context,
-    display_name: `Synthetic ${label(index)}`,
-    price_sensitivity: pick(SENSITIVITY, random),
-    privacy_sensitivity: pick(SENSITIVITY, random),
-  }));
+  return Array.from({ length: spec.size }, (_, index) => {
+    const technicalAbility = pick(TECHNICAL_ABILITY, random, spec.technical_ability_mix);
+    const patience = pick(PATIENCE, random, spec.patience_mix);
+    const occupation = pick(OCCUPATIONS, random);
+    const audience = spec.target_audience?.trim() || cohort;
+    const product = spec.product_name?.trim() || 'the product';
+    return {
+      persona_id: `${seed}-${label(index)}`,
+      population_seed: seed,
+      cohort,
+      technical_ability: technicalAbility,
+      product_familiarity: pick(PRODUCT_FAMILIARITY, random),
+      patience,
+      reading_style: pick(READING_STYLE, random),
+      device_class: pick(DEVICE_CLASS, random, spec.device_class_mix),
+      goal_context,
+      display_name: `Agent ${label(index)}`,
+      age_band: pick(AGE_BANDS, random),
+      location_band: pick(LOCATION_BANDS, random),
+      income_band: pick(INCOME_BANDS, random),
+      customer_loyalty: pick(SENSITIVITY, random),
+      occupation,
+      biography: `${occupation} from the ${audience} audience, approaching ${product} with ${technicalAbility.toLowerCase()} technical confidence.`,
+      primary_motivation: goal_context,
+      frustration_triggers: patience === 'LOW'
+        ? ['Unclear next steps', 'Slow or repetitive flows']
+        : ['Missing feedback after an action'],
+      accessibility_needs: [],
+      price_sensitivity: pick(SENSITIVITY, random),
+      privacy_sensitivity: pick(SENSITIVITY, random),
+    } satisfies SyntheticPersona;
+  });
 }
 
 export interface CohortProfile {
