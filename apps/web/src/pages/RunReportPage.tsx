@@ -1,240 +1,184 @@
-import { useEffect, useState } from 'react';
-import { Badge, Button, Icon } from '@synthetic-beta/ui';
+import { useEffect, useMemo, useState } from 'react';
+import { Badge, Icon } from '@synthetic-beta/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
+import {
+  productApi,
+  type RichPersona,
+  type RunSummary,
+  type SessionItem,
+  type UiReport,
+} from '../lib/api';
 
-interface EvidenceItem {
-  session_id: string;
-  sequence: number;
-  elapsed_ms: number;
-  url: string;
-  action_type: string;
-  result: string;
+function rate(value: number | null | undefined): string {
+  return typeof value === 'number' ? `${value}%` : '—';
 }
 
-interface FindingItem {
-  finding_id: string;
-  kind: 'FRICTION' | 'FAILURE' | 'STRENGTH';
-  title: string;
-  detail: string;
-  metric_refs?: string[];
-  evidence?: EvidenceItem[];
+function duration(milliseconds: number | null | undefined): string {
+  if (typeof milliseconds !== 'number') return '—';
+  return milliseconds < 60_000
+    ? `${(milliseconds / 1000).toFixed(milliseconds < 10_000 ? 1 : 0)} sec`
+    : `${(milliseconds / 60_000).toFixed(1)} min`;
 }
 
-interface FunnelItem {
-  checkpoint: string;
-  reached: number;
-  of_sessions: number;
-  reached_percentage: number | null;
-}
-
-interface ReportData {
-  run_id: string;
-  generated_at: string;
-  configuration: {
-    target_url: string;
-    objective: string;
-    user_count: number;
-  };
-  metrics: {
-    session_count: number;
-    completion: { percentage: number | null; numerator: number; denominator: number };
-    abandonment: { percentage: number | null; numerator: number; denominator: number };
-    friction?: { total_signals: number; sessions_with_friction: number };
-    funnel?: FunnelItem[];
-  };
-  findings: FindingItem[];
-  limitations?: string[];
+function actionCount(session: SessionItem): number | null {
+  if (typeof session.actions_taken === 'number') return session.actions_taken;
+  if (typeof session.action_count === 'number') return session.action_count;
+  return null;
 }
 
 export function RunReportPage({ runId }: { runId: string }) {
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [report, setReport] = useState<UiReport | null>(null);
+  const [run, setRun] = useState<RunSummary | null>(null);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [personas, setPersonas] = useState<Map<string, RichPersona>>(new Map());
+  const [downloadUrl, setDownloadUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '';
-
   useEffect(() => {
     let active = true;
-    const fetchReport = async () => {
-      if (!apiBase || !runId) return;
-      try {
-        const res = await fetch(`${apiBase}/runs/${runId}/report`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        if (active) {
-          setReport(json.report);
-          setDownloadUrl(json.download_url || null);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to fetch report');
-          setLoading(false);
-        }
+    Promise.all([
+      productApi.getReport(runId),
+      productApi.getRun(runId),
+      productApi.getSessions(runId),
+      productApi.getPersonas(runId),
+    ]).then(([reportResult, runResult, sessionResult, personaResult]) => {
+      if (!active) return;
+      if (!reportResult?.report) {
+        setError('The report is not ready yet. Recorded sessions are still being finalized.');
+      } else {
+        setReport(reportResult.report);
+        setDownloadUrl(reportResult.download_url || '');
       }
-    };
-    fetchReport();
+      setRun(runResult);
+      setSessions(sessionResult);
+      setPersonas(new Map(personaResult.map(persona => [persona.persona_id, persona])));
+      setLoading(false);
+    }).catch(cause => {
+      if (!active) return;
+      setError(cause instanceof Error ? cause.message : 'Could not load the run report.');
+      setLoading(false);
+    });
     return () => { active = false; };
-  }, [apiBase, runId]);
+  }, [runId]);
 
-  return (
-    <WorkspaceShell>
-      <div className="new-run-heading">
-        <div>
-          <div className="eyebrow">DETERMINISTIC EVALUATION · PERSISTED TO S3</div>
-          <h1 tabIndex={-1}>Run Report<span>:</span> <span className="mono" style={{ fontSize: '24px' }}>{runId}</span></h1>
-          <p>{report?.configuration?.objective || 'Synthetic user evidence-grounded report.'}</p>
-        </div>
-        <div className="row" style={{ gap: '12px', alignItems: 'center' }}>
-          {downloadUrl && (
-            <a href={downloadUrl} target="_blank" rel="noreferrer" className="button button-primary">
-              <Icon name="file" size={14} /> Download S3 JSON
-            </a>
-          )}
-          <Button variant="secondary" onClick={() => { window.location.hash = `#/runs/${runId}/live`; }}>
-            <Icon name="activity" size={14} /> View Live Run
-          </Button>
-        </div>
+  const abandonmentReasons = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const session of sessions) {
+      if (!['ABANDONED', 'TIMED_OUT', 'FAILED'].includes(session.status)) continue;
+      const reason = session.stop_reason?.replaceAll('_', ' ') || session.status.replaceAll('_', ' ');
+      counts.set(reason, (counts.get(reason) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [sessions]);
+
+  if (loading) return <WorkspaceShell><div className="vision-loading-page"><span className="vision-loader" /><strong>Analyzing recorded behavior…</strong><span>Building deterministic metrics and evidence-grounded findings.</span></div></WorkspaceShell>;
+
+  const metrics = report?.metrics;
+  const findings = report?.findings || [];
+  const strengths = report?.insights?.what_users_liked
+    || findings.filter(finding => finding.kind === 'STRENGTH').map(finding => finding.title);
+  const struggles = report?.insights?.what_users_struggled_with
+    || findings.filter(finding => finding.kind !== 'STRENGTH').map(finding => finding.title);
+  const improvements = report?.insights?.quick_improvements
+    || findings.map(finding => finding.interpretation).filter((value): value is string => Boolean(value));
+  const backendReasons = report?.insights?.common_abandonment_reasons;
+  const totalActions = metrics?.outcomes?.reduce((sum, outcome) => sum + outcome.action_count, 0) ?? null;
+  const actualCost = report?.actual_cost_cents ?? run?.actual_cost_cents;
+
+  return <WorkspaceShell>
+    <div className="vision-page-heading">
+      <div>
+        <span className="eyebrow">05 / SIMULATION RESULTS</span>
+        <h1>What happened across the population.</h1>
+        <p>{report?.configuration?.objective || run?.configuration?.objective || runId}</p>
       </div>
-
-      {loading && <p>Loading deterministic report from AWS S3 & DynamoDB…</p>}
-      {error && <p className="field-error">Report not yet ready or error: {error}</p>}
-
-      {report && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', margin: '24px 0' }}>
-          {/* Topline Metrics KPI Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>COMPLETION RATE</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#0f172a', margin: '8px 0' }}>
-                {report.metrics.completion.percentage ?? 0}%
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                {report.metrics.completion.numerator} of {report.metrics.completion.denominator} sessions
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>ABANDONMENT RATE</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#e11d48', margin: '8px 0' }}>
-                {report.metrics.abandonment.percentage ?? 0}%
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                {report.metrics.abandonment.numerator} of {report.metrics.abandonment.denominator} sessions
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>FRICTION SIGNALS</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b', margin: '8px 0' }}>
-                {report.metrics.friction?.total_signals ?? 0}
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                across {report.metrics.friction?.sessions_with_friction ?? 0} sessions
-              </div>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '20px' }}>
-              <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>TOTAL POPULATION</div>
-              <div style={{ fontSize: '32px', fontWeight: 700, color: '#0284c7', margin: '8px 0' }}>
-                {report.metrics.session_count}
-              </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
-                synthetic personas evaluated
-              </div>
-            </div>
-          </div>
-
-          {/* Funnel Section */}
-          {report.metrics.funnel && report.metrics.funnel.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '24px' }}>
-              <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Behavioral Funnel Analysis</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {report.metrics.funnel.map((step, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '140px', fontSize: '14px', fontWeight: 600 }}>{step.checkpoint}</div>
-                    <div style={{ flex: 1, background: '#f1f5f9', borderRadius: '4px', height: '24px', overflow: 'hidden' }}>
-                      <div
-                        style={{
-                          background: idx === 0 ? '#0284c7' : idx === report.metrics.funnel!.length - 1 ? '#10b981' : '#f59e0b',
-                          height: '100%',
-                          width: `${step.reached_percentage || 0}%`,
-                          transition: 'width 0.5s ease',
-                        }}
-                      />
-                    </div>
-                    <div style={{ width: '100px', fontSize: '14px', textAlign: 'right' }}>
-                      <strong>{step.reached_percentage ?? 0}%</strong> ({step.reached}/{step.of_sessions})
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Findings Section */}
-          <div>
-            <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>
-              Evidence-Grounded Findings ({report.findings.length})
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {report.findings.map(finding => (
-                <div
-                  key={finding.finding_id}
-                  style={{
-                    background: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '20px',
-                    borderLeft: `4px solid ${finding.kind === 'STRENGTH' ? '#10b981' : finding.kind === 'FAILURE' ? '#ef4444' : '#f59e0b'}`,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700 }}>{finding.title}</h3>
-                    <Badge tone={finding.kind === 'STRENGTH' ? 'accent' : 'warning'}>{finding.kind}</Badge>
-                  </div>
-                  <p style={{ fontSize: '14px', color: '#334155', lineHeight: 1.6 }}>{finding.detail}</p>
-
-                  {finding.evidence && finding.evidence.length > 0 && (
-                    <div style={{ marginTop: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '8px' }}>
-                        CITING EVIDENCE SAMPLES ({finding.evidence.length})
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {finding.evidence.map((ev, eIdx) => (
-                          <div
-                            key={eIdx}
-                            style={{
-                              fontSize: '12px',
-                              background: '#f8fafc',
-                              padding: '8px 12px',
-                              borderRadius: '4px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${ev.session_id}`; }}
-                          >
-                            <span className="mono">{ev.session_id} · step #{ev.sequence}</span>
-                            <span>{ev.action_type} on {ev.url} → <strong>{ev.result}</strong> (+{ev.elapsed_ms}ms)</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginTop: '32px' }}>
-        <a href="#/new" className="text-link">
-          <Icon name="arrow" size={14} className="back-arrow" /> Start a new synthetic evaluation
-        </a>
+      <div className="vision-heading-actions">
+        {downloadUrl ? <a href={downloadUrl} target="_blank" rel="noreferrer" className="button button-secondary"><Icon name="file" size={14} /> Download JSON</a> : null}
+        <Badge tone="accent">EVIDENCE GROUNDED</Badge>
       </div>
-    </WorkspaceShell>
-  );
+    </div>
+
+    {error ? <p className="vision-error" role="alert">{error}</p> : null}
+
+    {report && metrics ? <>
+      <section className="vision-report-kpis">
+        <article><span>Completion Rate</span><strong>{rate(metrics.completion.percentage)}</strong><small>{metrics.completion.numerator} / {metrics.completion.denominator}</small></article>
+        <article><span>Abandonment Rate</span><strong>{rate(metrics.abandonment.percentage)}</strong><small>{metrics.abandonment.numerator} sessions</small></article>
+        <article><span>Technical Failure</span><strong>{rate(metrics.technical_failure.percentage)}</strong><small>{metrics.technical_failure.numerator} sessions</small></article>
+        <article><span>Timeout Rate</span><strong>{rate(metrics.timeout.percentage)}</strong><small>{metrics.timeout.numerator} sessions</small></article>
+        <article><span>Median Time to Goal</span><strong>{duration(metrics.median_time_to_value_ms)}</strong><small>{metrics.time_to_value_sample_size} samples</small></article>
+        <article><span>Total Actions</span><strong>{totalActions ?? '—'}</strong><small>{metrics.computed_from.behavior_events} behavior events</small></article>
+        <article><span>Run Cost</span><strong>{typeof actualCost === 'number' ? `$${(actualCost / 100).toFixed(2)}` : '—'}</strong><small>Actual recorded cost only</small></article>
+      </section>
+
+      {metrics.funnel.length ? <section className="vision-report-section">
+        <div className="vision-section-heading"><span>BEHAVIORAL FUNNEL</span><h2>Where users made it.</h2></div>
+        <div className="vision-funnel">
+          {metrics.funnel.map(step => <div className="vision-funnel-row" key={step.checkpoint}>
+            <span>{step.checkpoint.replaceAll('_', ' ')}</span>
+            <div><i style={{ width: `${step.reached_percentage ?? 0}%` }} /></div>
+            <strong>{step.reached} / {step.of_sessions}</strong>
+            <small>{rate(step.reached_percentage)}</small>
+          </div>)}
+        </div>
+      </section> : null}
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>TOP FRICTION</span><h2>Evidence worth investigating.</h2></div>
+        <div className="vision-findings">
+          {findings.map(finding => <article key={finding.finding_id} className={`vision-finding ${finding.kind.toLowerCase()}`}>
+            <div><Badge tone={finding.kind === 'STRENGTH' ? 'accent' : 'warning'}>{finding.kind}</Badge><span>{finding.evidence.length} evidence samples</span></div>
+            <h3>{finding.title}</h3>
+            <p>{finding.detail}</p>
+            {finding.evidence.length ? <div className="vision-evidence-links">
+              {finding.evidence.slice(0, 4).map(pointer => <button key={`${pointer.session_id}-${pointer.sequence}`} onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${pointer.session_id}`; }}>
+                {pointer.session_id} · action {pointer.sequence} <Icon name="arrow" size={12} />
+              </button>)}
+            </div> : null}
+          </article>)}
+          {!findings.length ? <div className="vision-empty-state"><strong>No evidence-grounded findings were generated.</strong><span>The report does not invent findings when recorded evidence is insufficient.</span></div> : null}
+        </div>
+      </section>
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>COHORT COMPARISON</span><h2>How different groups performed.</h2></div>
+        <div className="vision-cohort-grid">
+          {metrics.cohorts.map(cohort => <article key={cohort.cohort}><span>{cohort.cohort}</span><strong>{rate(cohort.completion.percentage)}</strong><small>{cohort.session_count} sessions · median {duration(cohort.median_elapsed_ms)}</small></article>)}
+          {!metrics.cohorts.length ? <div className="vision-empty-state"><strong>No cohort comparison available.</strong><span>There is not enough persisted cohort evidence for this run.</span></div> : null}
+        </div>
+      </section>
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>PRODUCT FEEDBACK</span><h2>What the evidence says.</h2></div>
+        <div className="vision-insight-grid">
+          <article><span>WHAT USERS LIKED</span>{strengths.length ? <ul>{strengths.map(item => <li key={item}>{item}</li>)}</ul> : <p>No measured strengths were identified.</p>}</article>
+          <article><span>WHAT USERS STRUGGLED WITH</span>{struggles.length ? <ul>{struggles.map(item => <li key={item}>{item}</li>)}</ul> : <p>No measured struggles were identified.</p>}</article>
+          <article><span>MOST COMMON ABANDONMENT REASONS</span>{(backendReasons?.length || abandonmentReasons.length) ? <ul>{backendReasons?.map(item => <li key={item.reason}>{item.reason} · {item.count}</li>) || abandonmentReasons.map(([reason, count]) => <li key={reason}>{reason} · {count}</li>)}</ul> : <p>No abandonment evidence was recorded.</p>}</article>
+          <article><span>SEGMENTS MOST AFFECTED</span>{report.insights?.segments_most_affected?.length ? <ul>{report.insights.segments_most_affected.map(item => <li key={item}>{item}</li>)}</ul> : <p>No evidence-grounded affected-segment narrative is available.</p>}</article>
+          <article><span>QUICK PRODUCT IMPROVEMENTS</span>{improvements.length ? <ul>{improvements.map(item => <li key={item}>{item}</li>)}</ul> : <p>No evidence-grounded improvement narrative is available.</p>}</article>
+        </div>
+        <p className="vision-measured-note"><strong>Measured:</strong> rates, counts, funnel, timing and session evidence. <strong>AI interpretation:</strong> only appears when grounded in those recorded sessions.</p>
+      </section>
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>WHAT EACH USER EXPERIENCED</span><h2>Open any individual journey.</h2></div>
+        <div className="vision-result-rail">
+          {sessions.map(session => {
+            const persona = session.persona || personas.get(session.persona_id);
+            const outcome = metrics.outcomes.find(item => item.session_id === session.session_id);
+            return <button key={session.session_id} className="vision-result-agent" onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${session.session_id}`; }}>
+              <div><span className="agent-avatar">{(persona?.display_name || session.persona_id).slice(0, 2).toUpperCase()}</span><Badge tone={session.status === 'COMPLETED' ? 'accent' : session.status === 'ABANDONED' ? 'warning' : 'neutral'}>{session.status}</Badge></div>
+              <h3>{persona?.display_name || session.persona_id}</h3>
+              <p>{[persona?.patience ? `${persona.patience.toLowerCase()} patience` : '', persona?.technical_ability ? `${persona.technical_ability.toLowerCase()} tech` : ''].filter(Boolean).join(' · ')}</p>
+              <dl><div><dt>Actions</dt><dd>{actionCount(session) ?? outcome?.action_count ?? '—'}</dd></div><div><dt>Duration</dt><dd>{duration(session.duration_ms ?? session.elapsed_ms ?? outcome?.elapsed_ms)}</dd></div><div><dt>Retries</dt><dd>{outcome?.retries ?? '—'}</dd></div></dl>
+              <span>View Experience <Icon name="arrow" size={13} /></span>
+            </button>;
+          })}
+        </div>
+      </section>
+
+      {report.limitations.length ? <section className="vision-limitations"><span>LIMITATIONS</span><ul>{report.limitations.map(item => <li key={item}>{item}</li>)}</ul></section> : null}
+    </> : null}
+  </WorkspaceShell>;
 }
