@@ -1,91 +1,74 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { GUARDRAILS, formatUsd } from '@synthetic-beta/contracts';
 import { Badge, Brand, Icon } from '@synthetic-beta/ui';
+import { productApi } from '../lib/api';
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
-  const [currentHash, setCurrentHash] = useState(() => (typeof window !== 'undefined' ? window.location.hash : ''));
+  const [hash, setHash] = useState(() => window.location.hash);
+  const [backend, setBackend] = useState<'CHECKING' | 'CONNECTED' | 'UNAVAILABLE'>('CHECKING');
 
   useEffect(() => {
-    const handleHashChange = () => {
-      setCurrentHash(window.location.hash);
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    const update = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', update);
+    return () => window.removeEventListener('hashchange', update);
   }, []);
 
-  const isOverview = currentHash === '' || currentHash === '#/' || currentHash === '#';
-  const isNewRun = currentHash.startsWith('#/new');
+  useEffect(() => {
+    let active = true;
+    productApi.health().then(ok => {
+      if (active) setBackend(ok ? 'CONNECTED' : 'UNAVAILABLE');
+    });
+    return () => { active = false; };
+  }, []);
 
-  return (
-    <div className="workspace-layout">
-      <aside className="workspace-sidebar">
-        <Brand />
-        <div className="workspace-selector">
-          <span className="workspace-avatar">S</span>
-          <div>
-            <strong>Sandbox workspace</strong>
-            <span>Local development</span>
-          </div>
-        </div>
-        <span className="nav-caption mono">WORKSPACE</span>
-        <nav aria-label="Workspace">
-          <a href="#/" className={isOverview ? 'active' : ''} aria-current={isOverview ? 'page' : undefined}>
-            <Icon name="grid" />
-            Overview
-            {isOverview && <span className="nav-active-dot" />}
-          </a>
-          <a href="#/new" className={isNewRun ? 'active' : ''} aria-current={isNewRun ? 'page' : undefined}>
-            <Icon name="plus" />
-            New run
-            {isNewRun && <span className="nav-active-dot" />}
-          </a>
-        </nav>
-        <div className="sidebar-empty">
-          <Icon name="terminal" size={18} />
-          <p>
-            Your first session<br />starts with a clear goal.
-          </p>
-          <span>Configure → review → run</span>
-        </div>
-        <div className="sidebar-budget">
-          <div>
-            <Icon name="shield" size={14} /> GLOBAL CEILING
-          </div>
-          <strong className="mono">
-            {formatUsd(GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100)}
-            <span>USD</span>
-          </strong>
-          <p>Configured limit · execution offline</p>
-        </div>
-        <div className="workspace-user">
-          <span className="workspace-avatar small">L</span>
-          <span>Local workspace</span>
-          <Badge>DEV</Badge>
-        </div>
-      </aside>
-      <div className="workspace-content">
-        <header className="workspace-topbar">
-          <div className="mobile-brand">
-            <Brand compact />
-          </div>
-          <div className="breadcrumbs">
-            <span>Workspace</span>
-            <Icon name="chevron" size={12} />
-            <strong>{isNewRun ? 'New run' : isOverview ? 'Overview' : 'Execution'}</strong>
-          </div>
-          <Badge tone="accent">
-            <span className="dot" />
-            Local preview
-          </Badge>
-        </header>
-        <main id="main" className="new-run-main">
-          {children}
-        </main>
-        <footer className="workspace-footer">
-          <Icon name="lock" size={12} />
-          Configuration stays in this browser. No agents are running.
-        </footer>
+  const section = hash.includes('/population')
+    ? 'Population'
+    : hash.includes('/live')
+      ? 'Live simulation'
+      : hash.includes('/report')
+        ? 'Results'
+        : hash.includes('/sessions/')
+          ? 'Agent experience'
+          : 'New run';
+
+  return <div className="workspace-layout vision-workspace">
+    <aside className="workspace-sidebar vision-sidebar">
+      <Brand />
+      <div className="workspace-selector">
+        <span className="workspace-avatar">S</span>
+        <div><strong>Synthetic Beta</strong><span>Product research workspace</span></div>
       </div>
+      <span className="nav-caption mono">WORKSPACE</span>
+      <nav aria-label="Workspace">
+        <a href="#/"><Icon name="grid" /> Home</a>
+        <a href="#/new" className={hash.startsWith('#/new') ? 'active' : ''}><Icon name="plus" /> New run</a>
+      </nav>
+      <div className="sidebar-empty">
+        <Icon name="activity" size={18} />
+        <p>Product to population.<br />Population to evidence.</p>
+        <span>BUILD → OBSERVE → LEARN</span>
+      </div>
+      <div className="sidebar-budget">
+        <div><Icon name="shield" size={14} /> GLOBAL CEILING</div>
+        <strong className="mono">{formatUsd(GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100)}<span>USD</span></strong>
+        <p>Backend-enforced safety ceiling</p>
+      </div>
+    </aside>
+
+    <div className="workspace-content">
+      <header className="workspace-topbar vision-topbar">
+        <div className="mobile-brand"><Brand compact /></div>
+        <div className="breadcrumbs"><span>Synthetic Beta</span><Icon name="chevron" size={12} /><strong>{section}</strong></div>
+        <Badge tone={backend === 'CONNECTED' ? 'accent' : backend === 'CHECKING' ? 'neutral' : 'warning'}>
+          <span className="dot" />
+          {backend === 'CONNECTED' ? 'API CONNECTED' : backend === 'CHECKING' ? 'CHECKING API' : 'API UNAVAILABLE'}
+        </Badge>
+      </header>
+      <main id="main" className="new-run-main vision-main">{children}</main>
+      <footer className="workspace-footer">
+        <Icon name="shield" size={12} />
+        Runs stay inside backend-enforced URL, time, action, concurrency and budget limits.
+      </footer>
     </div>
-  );
+  </div>;
 }
