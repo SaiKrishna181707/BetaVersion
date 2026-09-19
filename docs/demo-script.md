@@ -66,25 +66,24 @@ The judge experience follows a tight, proof-oriented progression:
 ---
 
 ### 2:15–2:45 — Scale: 100-User Funnel & Drop-Off Friction Findings
-- **Visual**: Navigate to the completed **100-User Run Report** (`run-100u-20260919-prod`).
-  - Funnel Chart: Step 1 (100%) → Step 2 (100%) → Step 3 (100%) → Step 4 (100%) → Step 5 Promo (74%) → Step 6 Completed (68%).
-  - Abandonment Breakdown: 32% abandoned.
-  - Highlight Friction Insight: *"18 low-patience personas dropped off at the multi-step checkout review, and 14 low-tech users struggled with coupon error validation."*
+- **Visual**: Navigate to the completed **100-User Run Report** (`run-mu8qcp85-ryxcm`).
+  - Funnel Chart & Session Metrics: 100 sessions attempted, 100 terminal records, 0 throttled.
+  - Friction Findings: 2 distinct friction findings identified by the deterministic analytics engine.
   - Show that every finding has clickable links directly to the supporting session IDs.
 - **Narrator**:
-  > "Here is the full 100-user population run, orchestrated across 5 controlled batches of 20 via Step Functions Distributed Map.
+  > "Here is the full 100-user population run, orchestrated across 20 controlled waves of 5 via Step Functions Distributed Map.
   > 
-  > In minutes, without burning a single real customer relationship, we uncover the exact breaking point:
-  > 68% of users completed checkout, but 32% abandoned. The drop-off didn't happen in the catalog — it happened precisely at the promo code accordion and checkout review form.
+  > In minutes, without burning a single real customer relationship, we observe authentic user behavior:
+  > 100 real sessions executed across our cross-account STS bridge with zero infrastructure throttling.
   > 
-  > Our deterministic analytics engine calculated these numbers straight from the 584 recorded events. Every finding links directly back to the video and event log of the session that proved it."
+  > Our deterministic analytics engine calculated these numbers straight from the recorded browser events. Every finding links directly back to the session trace and event log that proved it."
 
 ---
 
 ### 2:45–3:00 — Dual-Account Architecture & Close
 - **Visual**: Display the **Canonical Dual-Account Architecture Diagram** highlighting the Control Plane (643700104680) and Agent Plane (768669378827) with AWS Budgets & SNS controls.
 - **Narrator**:
-  > "Under the hood, Synthetic Beta enforces strict dual-account security: our client control plane in Account 643700104680 never exposes customer data to untrusted sites, while Bedrock AgentCore and Nova Act run in our hardened Agent Execution Plane in Account 768669378827, bounded by a $40 run cap and an $80 account ceiling.
+  > "Under the hood, Synthetic Beta enforces strict dual-account security: our client control plane in Account 643700104680 never exposes customer data to untrusted sites, while Bedrock AgentCore and Nova Act run in our hardened Agent Execution Plane in Account 768669378827, bounded by a $45 run cap and an $80 account ceiling.
   > 
   > Don’t guess what your users will do. Watch them before you launch. That is Synthetic Beta. Thank you."
 
@@ -96,5 +95,6 @@ The judge experience follows a tight, proof-oriented progression:
 - [x] Embedded demo targets accessible (`/demo-target/` and `/demo-target-checkout/`)
 - [x] Live View WebRTC streaming endpoint verified in AgentCore Browser
 - [x] Step-by-step action/event timeline verified in Session Detail page
-- [x] Preserved 100-user run (`run-100u-20260919-prod`) loaded with full funnel and friction findings
+- [x] Preserved 100-user clean run (`run-mu8qcp85-ryxcm`) loaded with full funnel and friction findings
 - [x] Dual-account architecture slide ready for closing
+
