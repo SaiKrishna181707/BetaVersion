@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SFNClient, StartExecutionCommand, StopExecutionCommand } from '@aws-sdk/client-sfn';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -11,6 +11,9 @@ import {
   type SyntheticPersona,
 } from '@synthetic-beta/contracts';
 import { buildCohort, profileCohort } from '@synthetic-beta/population';
+import { assertPublicNetworkTarget, buildProductIntelligence } from './product-intelligence';
+import { applyPersonaPatch } from './persona';
+import { getGeminiApiKey } from './secrets';
 
 const region = process.env.AWS_REGION || 'us-east-1';
 const stateTable = process.env.STATE_TABLE || 'SyntheticBetaState';
@@ -58,7 +61,7 @@ function response(statusCode: number, data: unknown, origin = amplifyOrigin): Ap
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Amz-Date,X-Api-Key',
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
       'Cache-Control': 'no-store',
     },
     body: JSON.stringify(data),
@@ -89,6 +92,39 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
       return response(200, { status: 'ok', region, execution_available: true, stateTable, artifactBucket }, allowedOrigin);
     }
 
+    if (method === 'POST' && path === '/product-intelligence') {
+      const payload = parseJson(event.body);
+      if (payload === null) return response(400, { error: 'Invalid JSON body' }, allowedOrigin);
+      try {
+        const geminiApiKey = await getGeminiApiKey();
+        const intelligence = await buildProductIntelligence(
+          payload,
+          geminiApiKey,
+          process.env.GEMINI_MODEL,
+        );
+        return response(200, { intelligence }, allowedOrigin);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : 'Product analysis failed.';
+        const unavailable = message.includes('GEMINI_SECRET_ARN') || message.includes('Gemini secret');
+        return response(unavailable ? 503 : 400, { error: message }, allowedOrigin);
+      }
+    }
+
+    if (method === 'GET' && path === '/runs') {
+      const res = await docClient.send(new ScanCommand({
+        TableName: stateTable,
+        FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix)',
+        ExpressionAttributeValues: { ':meta': 'META', ':runPrefix': 'RUN#' },
+        ProjectionExpression: 'run_id, #st, configuration, persona_count, created_at, updated_at, started_at, finished_at',
+        ExpressionAttributeNames: { '#st': 'status' },
+      }));
+      const runs = (res.Items || [])
+        .filter(item => typeof item.run_id === 'string')
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .slice(0, 50);
+      return response(200, { runs }, allowedOrigin);
+    }
+
     // POST /runs
     if (method === 'POST' && path === '/runs') {
       const payload = parseJson(event.body) as { configuration?: RunConfiguration; population?: PopulationSpec } | null;
@@ -101,9 +137,14 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
         'localhost',
         '127.0.0.1',
       ];
-      const validation = validateRunConfiguration(payload.configuration, authorizedDomains);
+      const validation = validateRunConfiguration(payload.configuration, authorizedDomains, { allowPublicHttps: true });
       if (!validation.ok) {
         return response(400, { error: 'Invalid run configuration', details: validation.errors }, allowedOrigin);
+      }
+
+      try { await assertPublicNetworkTarget(validation.value.target_url); }
+      catch (cause) {
+        return response(400, { error: cause instanceof Error ? cause.message : 'Target URL is not publicly reachable.' }, allowedOrigin);
       }
 
       const conf = validation.value;
@@ -118,6 +159,8 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
         cohort: 'General Web Users',
         goal_context: conf.objective,
         size: conf.user_count,
+        target_audience: conf.target_audience,
+        product_name: conf.product_name,
       };
 
       const personas = buildCohort(spec);
@@ -170,6 +213,11 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
     const startMatch = path.match(/^\/runs\/([^/]+)\/start$/);
     if (method === 'POST' && startMatch) {
       const runId = startMatch[1];
+      const startPayload = parseJson(event.body) as { maxConcurrency?: unknown } | null;
+      const requestedConcurrency = typeof startPayload?.maxConcurrency === 'number'
+        ? Math.floor(startPayload.maxConcurrency)
+        : 5;
+      const maxConcurrency = Math.max(1, Math.min(5, requestedConcurrency));
       const runGet = await docClient.send(new GetCommand({
         TableName: stateTable,
         Key: { pk: `RUN#${runId}`, sk: 'META' },
@@ -212,6 +260,7 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
             run_id: runId,
             session_id: session.session_id,
             persona_id: session.persona.persona_id,
+            persona: session.persona,
             status: 'QUEUED',
             created_at: new Date().toISOString(),
             ttl: Math.floor(Date.now() / 1000) + 7 * 86400,
@@ -241,6 +290,7 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
           input: JSON.stringify({
             runId,
             sessions,
+            maxConcurrency,
           }),
         }));
         executionArn = sfnRes.executionArn || '';
@@ -263,6 +313,7 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
         status: 'ACTIVE',
         execution_arn: executionArn,
         session_count: sessions.length,
+        max_concurrency: maxConcurrency,
       }, allowedOrigin);
     }
 
@@ -326,6 +377,36 @@ export async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
         ExpressionAttributeValues: { ':pk': `RUN#${runId}`, ':prefix': 'PERSONA#' },
       }));
       return response(200, { personas: (res.Items || []).map(i => i.persona) }, allowedOrigin);
+    }
+
+    const personaPatchMatch = path.match(/^\/runs\/([^/]+)\/personas\/([^/]+)$/);
+    if (method === 'PATCH' && personaPatchMatch) {
+      const [, runId, personaId] = personaPatchMatch;
+      const run = await docClient.send(new GetCommand({
+        TableName: stateTable,
+        Key: { pk: `RUN#${runId}`, sk: 'META' },
+      }));
+      if (!run.Item) return response(404, { error: 'Run not found' }, allowedOrigin);
+      if (run.Item.status !== 'QUEUED') {
+        return response(409, { error: 'Personas can only be edited before execution starts.' }, allowedOrigin);
+      }
+      const current = await docClient.send(new GetCommand({
+        TableName: stateTable,
+        Key: { pk: `RUN#${runId}`, sk: `PERSONA#${personaId}` },
+      }));
+      if (!current.Item?.persona) return response(404, { error: 'Persona not found' }, allowedOrigin);
+      try {
+        const persona = applyPersonaPatch(current.Item.persona as SyntheticPersona, parseJson(event.body));
+        await docClient.send(new UpdateCommand({
+          TableName: stateTable,
+          Key: { pk: `RUN#${runId}`, sk: `PERSONA#${personaId}` },
+          UpdateExpression: 'SET persona = :persona, updated_at = :updated',
+          ExpressionAttributeValues: { ':persona': persona, ':updated': new Date().toISOString() },
+        }));
+        return response(200, { persona }, allowedOrigin);
+      } catch (cause) {
+        return response(400, { error: cause instanceof Error ? cause.message : 'Invalid persona update.' }, allowedOrigin);
+      }
     }
 
     // GET /runs/{runId}/sessions

@@ -1,5 +1,5 @@
 import type { RunMetrics } from './metrics';
-import type { ActionType, RunConfiguration } from './model';
+import type { ActionType, RunConfiguration, SessionStatus } from './model';
 
 /** A pointer back to one recorded action. Reports cite evidence instead of asserting it. */
 export interface EvidencePointer {
@@ -35,7 +35,31 @@ export interface SyntheticBetaReport {
   generated_at: string;
   configuration: RunConfiguration;
   metrics: RunMetrics;
+  actual_cost_cents: number | null;
   findings: ReportFinding[];
+  agent_results: Array<{
+    session_id: string;
+    persona_id: string;
+    status: SessionStatus;
+    action_count: number;
+    elapsed_ms: number;
+    stop_reason?: string;
+  }>;
+  quick_improvements: Array<{
+    finding_id: string;
+    recommendation: string;
+    supporting_session_ids: string[];
+  }>;
+  agent_feedback: Array<{
+    session_id: string;
+    persona_id: string;
+    expected: string;
+    what_worked: string[];
+    what_confused_them: string[];
+    what_slowed_them_down: string[];
+    continuation_or_abandonment: string;
+    improvement_suggestion: string | null;
+  }>;
   limitations: string[];
 }
 

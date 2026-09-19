@@ -1,18 +1,53 @@
-import { Badge, Brand, Icon, type IconName } from '@synthetic-beta/ui';
-import { SessionIllustration } from '../components/SessionIllustration';
-
-const workflow: { number: string; icon: IconName; title: string; text: string; detail: string }[] = [
-  { number: '01', icon: 'globe', title: 'Give them a goal.', text: 'Your product. Your audience. One objective. Set the boundaries before a session begins.', detail: 'DEFINE THE TEST' },
-  { number: '02', icon: 'cursor', title: 'Let them find their way.', text: 'Autonomous agents explore the actual interface. They can take wrong turns, retry, or abandon.', detail: 'OBSERVE REAL INTERACTION' },
-  { number: '03', icon: 'activity', title: 'Follow the evidence.', text: 'Trace friction to recorded actions and session IDs. Decide what to fix with measured outcomes.', detail: 'INSPECT THE RESULTS' },
-];
+import { useEffect, useState, type FormEvent } from 'react';
+import { Brand, Icon } from '@synthetic-beta/ui';
+import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
 
 export function LandingPage() {
-  return <div className="landing-page"><header className="landing-header container"><Brand /><nav aria-label="Main navigation"><a className="quiet-link" href="#workflow">How it works</a><a className="button button-secondary header-cta" href="#/new">Open workspace <Icon name="arrow" size={15} /></a></nav></header>
-    <main id="main"><section className="hero container" aria-labelledby="hero-heading"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-line" />PRODUCT TESTING, WITH EVIDENCE</div><h1 id="hero-heading">Deploy synthetic users.<br /><span>Watch where your product breaks.</span></h1><p className="hero-description">Find obvious UX and product failures before spending time recruiting human beta users.</p><p className="hero-detail">Autonomous browser agents. Actual interaction.<br />Every finding tied to what happened.</p><div className="hero-actions"><a className="button button-primary button-large" href="#/new">Deploy synthetic users <Icon name="arrow" size={17} /></a><a className="text-link" href="#workflow">See the workflow <Icon name="chevron" size={13} /></a></div><div className="hero-guardrail"><Icon name="shield" size={14} /><span>Authorized targets. Explicit limits. You stay in control.</span></div></div><SessionIllustration /></section>
-    <div className="scope-strip container"><span className="scope-label"><span className="dot" /> BUILT FOR THE WEB</span><span>One objective per run</span><span>Independent browser sessions</span><span>Evidence before assumptions</span></div>
-    <section id="workflow" className="workflow container" aria-labelledby="workflow-heading"><div className="workflow-heading"><h2 id="workflow-heading">A goal in. Evidence out.</h2><Badge>THE WORKFLOW</Badge></div><div className="workflow-grid">{workflow.map(step => <article className="workflow-step" key={step.number}><div className="workflow-step-top"><span className="mono">{step.number}</span><Icon name={step.icon} size={20} /></div><h3>{step.title}</h3><p>{step.text}</p><span className="step-detail mono">{step.detail}</span></article>)}</div></section>
-    <section className="principle container"><Icon name="users" size={19} /><p><strong>An earlier signal. A better starting point.</strong><span>Synthetic sessions help you spot friction. They don’t replace research with real people.</span></p><a className="text-link" href="#/new">Create your first run <Icon name="arrow" size={16} /></a></section></main>
-    <footer className="landing-footer container"><span>Synthetic Beta <span className="footer-separator">/</span> Observe. Understand. Improve.</span><span className="footer-build mono">FOUNDATION PREVIEW <span className="dot" /></span></footer>
+  const [companyName, setCompanyName] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [building, setBuilding] = useState(false);
+  const [error, setError] = useState('');
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    productApi.listRuns().then(value => { if (active) setRuns(value); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setBuilding(true); setError('');
+    try {
+      const intelligence = await productApi.analyzeProduct({ company_name: companyName, website_url: websiteUrl });
+      window.sessionStorage.setItem(PRODUCT_INTELLIGENCE_KEY, JSON.stringify(intelligence));
+      window.location.hash = '#/new';
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not build product intelligence.');
+      setBuilding(false);
+    }
+  };
+
+  return <div className="product-landing">
+    <header className="product-nav"><Brand /></header>
+    <main id="main">
+      <section className="product-hero">
+        <div className="product-hero-copy"><span className="eyebrow">SYNTHETIC BETA</span><h1>Test before your users do.</h1><p>See how autonomous synthetic users navigate,<br />struggle, and succeed in your real product.</p></div>
+        <form className="build-product-card" onSubmit={event => void submit(event)}>
+          <label>Product / Company<input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Company name" minLength={2} maxLength={120} required /></label>
+          <label>Website<input value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder="https://yourproduct.com" type="url" required /></label>
+          {error ? <p className="field-error" role="alert">{error}</p> : null}
+          <button className="button button-primary product-build-button" disabled={building}>{building ? 'Understanding your product...' : 'Build product'} <Icon name="arrow" size={16} /></button>
+          <small>We use publicly available information from your website<br />to prefill your test setup. Everything remains editable.</small>
+        </form>
+      </section>
+      {runs.length > 0 ? <section className="recent-runs" aria-labelledby="recent-runs-title">
+        <div><span className="eyebrow">RECENT RESEARCH</span><h2 id="recent-runs-title">Continue where your agents left off.</h2></div>
+        <div className="recent-run-list">{runs.slice(0, 4).map(run => <a key={run.run_id} href={`#/runs/${run.run_id}/${run.status === 'QUEUED' ? 'population' : run.status === 'COMPLETED' ? 'report' : 'live'}`}>
+          <span><strong>{run.configuration?.product_name || run.configuration?.company_name || run.configuration?.target_url || run.run_id}</strong><small>{run.configuration?.objective || run.run_id}</small></span>
+          <span className="run-status">{run.status}<Icon name="arrow" size={14} /></span>
+        </a>)}</div>
+      </section> : null}
+    </main>
+    <footer className="product-footer"><span>Synthetic Beta</span></footer>
   </div>;
 }

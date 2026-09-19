@@ -6,6 +6,7 @@ import {
   type RunConfiguration,
   type RunMetrics,
   type SessionRecord,
+  type SyntheticPersona,
   type SyntheticBetaReport,
 } from '@synthetic-beta/contracts';
 
@@ -15,6 +16,8 @@ export interface BuildReportInput {
   sessions: readonly SessionRecord[];
   events: readonly BehaviorEvent[];
   generated_at: string;
+  personas?: readonly SyntheticPersona[];
+  actual_cost_cents?: number | null;
   /** Optional language model. Without one the report stays evidence-only. */
   narrator?: ReportNarratorPort;
   max_evidence_per_finding?: number;
@@ -249,13 +252,60 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
       : { ...finding, interpretation, interpretation_source: 'NARRATOR' });
   }
 
+  const personaById = new Map((input.personas ?? []).map(persona => [persona.persona_id, persona]));
+  const sessionById = new Map(input.sessions.map(session => [session.session_id, session]));
+  const agentFeedback = [...bySession.entries()].map(([sessionId, events]) => {
+    const session = sessionById.get(sessionId);
+    const persona = session ? personaById.get(session.persona_id) : undefined;
+    const friction = events.filter(event => event.agent_reason_code === 'CONFUSED'
+      || event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING'
+      || event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE');
+    const worked = events.filter(event => event.result === 'SUCCESS' && (event.task_checkpoint || event.target_descriptor))
+      .map(event => event.task_checkpoint ? `Reached ${event.task_checkpoint}.` : `Completed ${event.action_type} on ${event.target_descriptor}.`)
+      .slice(0, 5);
+    const labels = friction.map(event => `${event.action_type} on ${event.target_descriptor || event.route || event.url} recorded ${event.agent_reason_code}/${event.result}.`).slice(0, 5);
+    const last = events.at(-1);
+    const continuation = session?.status === 'ABANDONED'
+      ? `Abandoned with persisted reason ${session.stop_reason || 'ABANDONED'}${last ? ` after ${last.action_type} on ${last.target_descriptor || last.route || last.url}` : ''}.`
+      : `Persisted outcome: ${session?.status || 'UNKNOWN'}${session?.stop_reason ? ` (${session.stop_reason})` : ''}.`;
+    return {
+      session_id: sessionId,
+      persona_id: session?.persona_id || events[0]?.persona_id || '',
+      expected: persona?.goal_context || input.configuration.objective,
+      what_worked: worked,
+      what_confused_them: labels,
+      what_slowed_them_down: friction.filter(event => event.elapsed_ms > 0)
+        .map(event => `${event.agent_reason_code} at +${event.elapsed_ms}ms on ${event.target_descriptor || event.route || event.url}.`).slice(0, 5),
+      continuation_or_abandonment: continuation,
+      improvement_suggestion: friction[0]
+        ? `Review ${friction[0].target_descriptor || friction[0].route || friction[0].url}; the recorded event was ${friction[0].agent_reason_code}/${friction[0].result}.`
+        : null,
+    };
+  });
+
   return {
     schema_version: 1,
     run_id: input.metrics.run_id,
     generated_at: input.generated_at,
     configuration: input.configuration,
     metrics: input.metrics,
+    actual_cost_cents: input.actual_cost_cents ?? null,
     findings,
+    agent_results: input.sessions.map(session => ({
+      session_id: session.session_id,
+      persona_id: session.persona_id,
+      status: session.status,
+      action_count: session.action_count,
+      elapsed_ms: session.elapsed_ms,
+      ...(session.stop_reason ? { stop_reason: session.stop_reason } : {}),
+    })),
+    quick_improvements: findings.filter(finding => finding.kind !== 'STRENGTH' && finding.evidence.length > 0)
+      .map(finding => ({
+        finding_id: finding.finding_id,
+        recommendation: `Review and simplify the experience around "${finding.title}" using the cited sessions before the next run.`,
+        supporting_session_ids: [...new Set(finding.evidence.map(pointer => pointer.session_id))],
+      })),
+    agent_feedback: agentFeedback,
     limitations: [...REPORT_LIMITATIONS],
   };
 }

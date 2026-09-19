@@ -52,19 +52,11 @@ export async function handler(input: FinalizerInput) {
     },
   }));
   const personas: SyntheticPersona[] = (personasQuery.Items || []).map(i => {
-    const p = i.persona || {};
-    return {
-      persona_id: p.persona_id || 'unknown',
-      population_seed: p.population_seed || runMeta.seed || 'seed-default',
-      cohort: p.cohort || 'General Web Users',
-      technical_ability: p.technical_ability || 'MEDIUM',
-      product_familiarity: p.product_familiarity || 'NEW',
-      patience: p.patience || 'MEDIUM',
-      reading_style: p.reading_style || 'SCANNING',
-      device_class: p.device_class || 'DESKTOP',
-      goal_context: p.goal_context || p.goal_statement || configuration.objective,
-      display_name: p.display_name || p.name || 'User',
-    };
+    const persona = i.persona as SyntheticPersona | undefined;
+    if (!persona?.persona_id || !persona.population_seed || !persona.cohort || !persona.goal_context) {
+      throw new Error(`Run ${runId} contains a malformed persisted persona.`);
+    }
+    return persona;
   });
 
   // 3. Fetch Sessions
@@ -80,6 +72,8 @@ export async function handler(input: FinalizerInput) {
   const sessionItems = sessionsQuery.Items || [];
   const sessions: SessionRecord[] = [];
   const allEvents: BehaviorEvent[] = [];
+  let actualCostCents = 0;
+  let hasActualCost = false;
 
   for (const item of sessionItems) {
     const sessionId = item.session_id as string;
@@ -89,6 +83,10 @@ export async function handler(input: FinalizerInput) {
     }));
 
     const meta = sessionMetaGet.Item || item;
+    if (typeof meta.cost_cents === 'number' && Number.isFinite(meta.cost_cents)) {
+      actualCostCents += meta.cost_cents;
+      hasActualCost = true;
+    }
     const sessionStatus: SessionStatus = meta.status || 'COMPLETED';
     const personaId = meta.persona_id || (meta.persona ? meta.persona.persona_id : 'persona-001');
 
@@ -102,46 +100,57 @@ export async function handler(input: FinalizerInput) {
       },
     }));
 
-    const rawEvents = (eventsQuery.Items || []).map(e => e.event || {});
-    const events: BehaviorEvent[] = rawEvents.map((re, idx) => ({
+    const rawEvents = (eventsQuery.Items || []).map(e => e.event).filter(Boolean) as Record<string, unknown>[];
+    const events: BehaviorEvent[] = rawEvents.filter(re =>
+      typeof re.timestamp === 'string'
+      && typeof re.elapsed_ms === 'number'
+      && typeof re.url === 'string'
+      && typeof re.action_type === 'string'
+      && typeof re.result === 'string'
+      && typeof re.agent_reason_code === 'string',
+    ).map(re => ({
       run_id: runId,
       session_id: sessionId,
       persona_id: personaId,
-      timestamp: re.timestamp || new Date().toISOString(),
-      elapsed_ms: typeof re.elapsed_ms === 'number' ? re.elapsed_ms : idx * 1000,
-      url: re.url || configuration.target_url,
-      page_title: re.page_title || 'Demo Target',
-      route: re.route || '/',
-      action_type: (re.action_type || 'click') as ActionType,
-      target_descriptor: re.target_descriptor || null,
-      result: (re.result as 'SUCCESS' | 'ERROR' | 'NO_CHANGE' | 'BLOCKED' | 'VALIDATION_FAILURE') || 'SUCCESS',
-      screenshot_ref: re.screenshot_ref || null,
-      console_error: re.console_error || null,
-      network_error: re.network_error || null,
-      task_checkpoint: re.task_checkpoint || (idx === 0 ? 'start' : null),
-      agent_reason_code: ((re.agent_reason_code || re.agent_reason || 'GOAL_PROGRESS') as AgentReasonCode),
+      timestamp: re.timestamp as string,
+      elapsed_ms: re.elapsed_ms as number,
+      url: re.url as string,
+      page_title: typeof re.page_title === 'string' ? re.page_title : '',
+      route: typeof re.route === 'string' ? re.route : '',
+      action_type: re.action_type as ActionType,
+      target_descriptor: typeof re.target_descriptor === 'string' ? re.target_descriptor : null,
+      result: re.result as BehaviorEvent['result'],
+      screenshot_ref: typeof re.screenshot_ref === 'string' ? re.screenshot_ref : null,
+      console_error: typeof re.console_error === 'string' ? re.console_error : null,
+      network_error: typeof re.network_error === 'string' ? re.network_error : null,
+      task_checkpoint: typeof re.task_checkpoint === 'string' ? re.task_checkpoint : null,
+      agent_reason_code: re.agent_reason_code as AgentReasonCode,
     }));
     allEvents.push(...events);
 
-    const lastEventElapsed = events.length > 0 && events[events.length - 1] ? events[events.length - 1]!.elapsed_ms : 5000;
+    const lastEventElapsed = events.at(-1)?.elapsed_ms ?? 0;
     sessions.push({
       session_id: sessionId,
       run_id: runId,
       persona_id: personaId,
       status: sessionStatus,
-      started_at: meta.started_at || new Date().toISOString(),
-      finished_at: meta.completed_at || new Date().toISOString(),
-      action_count: events.length > 0 ? events.length : 1,
-      elapsed_ms: meta.duration_ms || lastEventElapsed,
-      event_log_ref: `s3://${artifactBucket}/session-events/${sessionId}.json`,
-      replay_ref: null,
+      started_at: typeof meta.started_at === 'string' ? meta.started_at : null,
+      finished_at: typeof meta.completed_at === 'string' ? meta.completed_at : null,
+      action_count: events.length,
+      elapsed_ms: typeof meta.duration_ms === 'number' ? meta.duration_ms : lastEventElapsed,
+      event_log_ref: typeof meta.trajectory_ref === 'string' ? meta.trajectory_ref : null,
+      replay_ref: typeof meta.replay_ref === 'string' ? meta.replay_ref : null,
+      ...(typeof meta.stop_reason === 'string' ? { stop_reason: meta.stop_reason } : {}),
     });
   }
 
   console.log(`[Finalizer] Loaded ${personas.length} personas, ${sessions.length} sessions, ${allEvents.length} events`);
 
   // 4. Compute Run Metrics & Build Report
-  const checkpointPlan = ['start', 'member_list', 'invite_sent'];
+  const checkpointPlan = [...new Set(allEvents
+    .filter(event => event.task_checkpoint !== null)
+    .sort((a, b) => a.elapsed_ms - b.elapsed_ms)
+    .map(event => event.task_checkpoint as string))];
   const metrics = computeRunMetrics({
     run_id: runId,
     sessions,
@@ -156,6 +165,8 @@ export async function handler(input: FinalizerInput) {
     sessions,
     events: allEvents,
     generated_at: new Date().toISOString(),
+    personas,
+    actual_cost_cents: hasActualCost ? actualCostCents : null,
   });
 
   const ttl = Math.floor(Date.now() / 1000) + 7 * 86400;
@@ -214,7 +225,7 @@ export async function handler(input: FinalizerInput) {
   await docClient.send(new UpdateCommand({
     TableName: stateTable,
     Key: { pk: `RUN#${runId}`, sk: 'META' },
-    UpdateExpression: 'SET #st = :st, completed_at = :now, total_sessions = :sc, metrics_summary = :ms',
+    UpdateExpression: 'SET #st = :st, completed_at = :now, total_sessions = :sc, metrics_summary = :ms, actual_cost_cents = :cost',
     ExpressionAttributeNames: { '#st': 'status' },
     ExpressionAttributeValues: {
       ':st': 'COMPLETED',
@@ -225,6 +236,7 @@ export async function handler(input: FinalizerInput) {
         abandonment_rate: metrics.abandonment.percentage,
         findings_count: report.findings.length,
       },
+      ':cost': hasActualCost ? actualCostCents : null,
     },
   }));
 

@@ -26,6 +26,10 @@ test('assembles findings with no interpretation when no narrator is configured',
   assert.ok(report.findings.length >= 3);
   assert.ok(report.findings.every(finding => finding.interpretation === null));
   assert.ok(report.findings.every(finding => finding.interpretation_source === 'NONE'));
+  assert.equal(report.agent_results.length, sessions.length);
+  assert.deepEqual(report.agent_results[0], {
+    session_id: 's1', persona_id: 'seed-a-001', status: 'COMPLETED', action_count: 8, elapsed_ms: 60_000,
+  });
 });
 
 test('reports a failure finding when a session recorded an error', async () => {
