@@ -3,6 +3,8 @@ import {
   beginRun,
   buildRunPlan,
   failRun,
+  estimateCost,
+  GUARDRAILS,
   runLimitsFromConfiguration,
   type RunRuntimePort,
   type RunStartInput,
@@ -16,6 +18,7 @@ export interface AwsRunRuntimeOptions {
   state_machine_arn: string;
   client: Pick<SFNClient, 'send'>;
   now?: () => number;
+  reserve_budget: (run_id: string, cents: number) => Promise<void>;
 }
 
 /**
@@ -35,6 +38,10 @@ export function createAwsRunRuntime(options: AwsRunRuntimeOptions): RunRuntimePo
     store: options.store,
 
     async start(input: RunStartInput): Promise<RunStartResponse> {
+      // Include the bounded retry allowance before admitting any work.
+      const reserved = estimateCost(input.configuration).total_cents * GUARDRAILS.MAX_SESSION_ATTEMPTS;
+      if (reserved > Math.floor(input.configuration.run_hard_cap_usd * 100)) throw new Error('The run cap cannot cover the bounded retry allowance.');
+      await options.reserve_budget(input.run_id, reserved);
       const accepted = await beginRun(options.store, input, 'AWS', now);
       const limits = runLimitsFromConfiguration(input.configuration);
       const plan = buildRunPlan({
@@ -46,6 +53,12 @@ export function createAwsRunRuntime(options: AwsRunRuntimeOptions): RunRuntimePo
         account_refs: input.account_refs,
         limits,
       });
+      const record = await options.store.getRun(input.run_id);
+      if (record !== null) await options.store.putRun({ ...record, state: 'RUNNING', started_at: new Date(now()).toISOString() });
+      await options.store.putSessions(plan.sessions.map(session => ({ run_id: input.run_id,
+        session_id: session.session_id, persona_id: session.persona.persona_id, status: 'QUEUED',
+        started_at: null, finished_at: null, action_count: 0, elapsed_ms: 0,
+        event_log_ref: null, replay_ref: null, trace_ref: null, attempts: 0, note: null })));
       try {
         await options.client.send(new StartExecutionCommand({
           stateMachineArn: options.state_machine_arn,

@@ -61,6 +61,7 @@ export function interpretSessionTrace(trace: SessionTrace): TraceInterpretation 
   let pendingNetwork: string[] = [];
   let sessionEnd: TraceSessionEnd | null = null;
   let lastAtMs = startedAtMs;
+  let lastNavigation: string | null = null;
 
   const elapsedOf = (atMs: number) => Math.max(0, Math.round(atMs - startedAtMs));
 
@@ -86,7 +87,7 @@ export function interpretSessionTrace(trace: SessionTrace): TraceInterpretation 
       target_descriptor: null,
       result,
       screenshot_ref: null,
-      console_error: consoleError,
+      console_error: mergeErrors(consoleError, openError === null ? [] : [openError]),
       network_error: null,
       task_checkpoint: null,
       agent_reason_code: result === 'ERROR' ? 'SAFETY_STOP' : 'EXPLORING',
@@ -105,6 +106,13 @@ export function interpretSessionTrace(trace: SessionTrace): TraceInterpretation 
         state.route = entry.route;
         state.page_title = entry.title;
         if (initialNavigateIndex < 0) emitInitialNavigate(entry.at_ms, 'SUCCESS', null);
+        else if (lastNavigation !== entry.url) pushEvent({
+          timestamp: new Date(entry.at_ms).toISOString(), elapsed_ms: elapsedOf(entry.at_ms),
+          ...state, action_type: 'navigate', target_descriptor: null, result: 'SUCCESS',
+          screenshot_ref: null, console_error: null, network_error: null, task_checkpoint: null,
+          agent_reason_code: entry.trigger === 'BACK' ? 'BACKTRACKING' : 'GOAL_PROGRESS',
+        });
+        lastNavigation = entry.url;
         break;
       case 'STATE':
         state.url = entry.url;
@@ -191,6 +199,13 @@ export function interpretSessionTrace(trace: SessionTrace): TraceInterpretation 
         break;
       case 'SESSION_END':
         sessionEnd = entry;
+        if (initialNavigateIndex >= 0 && (pendingConsole.length > 0 || pendingNetwork.length > 0)) {
+          pushEvent({ timestamp: new Date(entry.at_ms).toISOString(), elapsed_ms: elapsedOf(entry.at_ms),
+            ...state, action_type: 'observe', target_descriptor: null, result: 'ERROR', screenshot_ref: null,
+            console_error: mergeErrors(null, pendingConsole), network_error: mergeErrors(null, pendingNetwork),
+            task_checkpoint: null, agent_reason_code: entry.finish_reason === 'SAFETY_STOP' ? 'SAFETY_STOP' : 'LIMIT_REACHED' });
+          pendingConsole = []; pendingNetwork = [];
+        }
         break;
       default:
         break;

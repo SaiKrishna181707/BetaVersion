@@ -237,7 +237,7 @@ test('captures the browser wrote locally are moved into the run bucket and re-po
   }
 });
 
-test('a capture that does not exist is left alone rather than referred to nowhere', async () => {
+test('a capture that does not exist is counted and has no broken container reference', async () => {
   const objects = fakeObjectStore();
   const trace: SessionTrace = {
     trace_version: 1,
@@ -252,7 +252,7 @@ test('a capture that does not exist is left alone rather than referred to nowher
   };
   const uploaded = await uploadCaptures(objects, plan(), trace, []);
   const checkpoint = uploaded.trace.entries[0];
-  assert.equal(checkpoint?.kind === 'CHECKPOINT' ? checkpoint.screenshot_ref : null, 'C:/missing/does-not-exist.png');
+  assert.equal(checkpoint?.kind === 'CHECKPOINT' ? checkpoint.screenshot_ref : null, null);
   assert.equal(uploaded.uploaded, 0);
   assert.equal(uploaded.missing, 1, 'a lost capture is counted, not hidden');
 });

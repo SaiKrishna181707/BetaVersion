@@ -9,11 +9,13 @@ import { runSessionLoop } from '../browser/session-loop';
 import { assertSessionPlanWithinGuardrails } from '../session-executor';
 import { TraceRecorder } from '../trace/trace-recorder';
 import type { AgentCoreBrowserPort } from './browser-session';
+import { runNovaAct } from './nova-act-runner';
+import { interpretSessionTrace } from '../trace/trace-adapter';
 
 export interface AgentCoreSessionExecutorOptions {
   browser: AgentCoreBrowserPort;
   /** Built per session, so the decision layer can be handed the persona and the model. */
-  policy: (plan: SessionPlan) => AgentPolicyPort;
+  policy?: (plan: SessionPlan) => AgentPolicyPort;
   /** Root for the session's local work. Screenshots and the replay archive land here first. */
   artifacts_root: string;
   /** Records a replayable trace archive per session, uploaded as evidence by the worker. */
@@ -32,7 +34,7 @@ export function createAgentCoreSessionExecutor(
   options: AgentCoreSessionExecutorOptions,
 ): SessionExecutorPort {
   return {
-    kind: 'agentcore-nova-act',
+    kind: options.policy === undefined ? 'agentcore-nova-act' : 'agentcore-cdp-policy',
     available: true,
 
     async execute(plan: SessionPlan, signal: AbortSignal): Promise<SessionResult> {
@@ -44,18 +46,28 @@ export function createAgentCoreSessionExecutor(
         run_id: plan.run_id,
         session_id: plan.session_id,
         persona_id: plan.persona.persona_id,
-        source: 'AGENTCORE_NOVA_ACT',
+        source: options.policy === undefined ? 'AGENTCORE_NOVA_ACT' : 'IMPORTED',
         target_url: plan.target_url,
       });
 
       const session = await options.browser.start({
         session_name: `${plan.run_id}-${plan.session_id}`,
         timeout_seconds: plan.max_session_seconds + 30,
+        signal,
       });
       const onAbort = () => { void session.stop().catch(() => undefined); };
       signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) { await session.stop().catch(() => undefined); throw new Error('Session timed out while provisioning the browser.'); }
 
       try {
+        if (options.policy === undefined) {
+          const entries = await runNovaAct({ plan, session, artifacts_dir: sessionDir, signal });
+          const trace = { ...recorder.snapshot(), entries: [...recorder.entries, ...entries] };
+          const interpreted = interpretSessionTrace(trace);
+          return { session_id: plan.session_id, status: interpreted.status,
+            finish_reason: interpreted.finish_reason, finished_at: interpreted.finished_at,
+            events: interpreted.events, replay_ref: interpreted.replay_ref, trace_ref: null, trace };
+        }
         const page = await PlaywrightPage.connect({
           ws_endpoint: session.ws_endpoint,
           headers: session.headers,

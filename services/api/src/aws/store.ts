@@ -6,6 +6,7 @@ import {
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { readFile } from 'node:fs/promises';
 import type {
@@ -232,9 +233,10 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreP
   const client = options.client ?? new S3Client({});
   const bucket = options.bucket_name;
   const ref = (key: string) => `s3://${bucket}/${key}`;
-  const keyOf = (value: string) => (value.startsWith('s3://')
-    ? value.slice(`s3://${bucket}/`.length)
-    : value.replace(/^\/+/, ''));
+  const keyOf = (value: string) => {
+    if (value.startsWith('s3://') && !value.startsWith(`s3://${bucket}/`)) throw new Error('Evidence bucket does not match.');
+    return value.startsWith('s3://') ? value.slice(`s3://${bucket}/`.length) : value.replace(/^\/+/, '');
+  };
 
   return {
     async putJson(key, value) {
@@ -252,6 +254,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreP
         Bucket: bucket,
         Key: key,
         Body: await readFile(path),
+        ContentType: key.endsWith('.png') ? 'image/png' : key.endsWith('.zip') ? 'application/zip' : 'application/octet-stream',
       }));
       return ref(key);
     },
@@ -262,9 +265,18 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreP
         const text = await result.Body?.transformToString();
         if (text === undefined) return null;
         return JSON.parse(text) as T;
-      } catch {
-        return null;
+      } catch (error) {
+        if (error instanceof Error && (error.name === 'NoSuchKey' || error.name === 'NotFound')) return null;
+        throw error;
       }
     },
+  };
+}
+
+export function createEvidenceSigner(bucket: string, client = new S3Client({})) {
+  return async (ref: string): Promise<string | null> => {
+    const prefix = `s3://${bucket}/runs/`;
+    if (!ref.startsWith(prefix)) return null;
+    return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: ref.slice(`s3://${bucket}/`.length) }), { expiresIn: 300 });
   };
 }

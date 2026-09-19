@@ -59,7 +59,7 @@ function firstMatchingEvidence(
   limit: number,
 ): EvidencePointer[] {
   const pointers: EvidencePointer[] = [];
-  for (const sessionId of sessionIds) {
+  for (const sessionId of new Set(sessionIds)) {
     if (pointers.length >= limit) break;
     const events = bySession.get(sessionId) ?? [];
     for (let sequence = 0; sequence < events.length; sequence += 1) {
@@ -97,8 +97,10 @@ function funnelFinding(
 ): ReportFinding | null {
   const candidates = metrics.funnel
     .map((step, index) => {
-      const previous = index === 0 ? metrics.session_count : metrics.funnel[index - 1]?.reached ?? metrics.session_count;
-      return { step, previous, lost: previous - step.reached };
+      const previousIds = index === 0 ? metrics.outcomes.map(outcome => outcome.session_id)
+        : metrics.funnel[index - 1]?.supporting_session_ids ?? [];
+      const stopped = previousIds.filter(sessionId => !step.supporting_session_ids.includes(sessionId));
+      return { step, previous: previousIds.length, stopped, lost: stopped.length };
     })
     .filter(entry => entry.lost > 0)
     .sort((a, b) => b.lost - a.lost || a.step.position - b.step.position);
@@ -106,19 +108,15 @@ function funnelFinding(
   const worst = candidates[0];
   if (worst === undefined) return null;
 
-  const stopped = metrics.outcomes
-    .map(outcome => outcome.session_id)
-    .filter(sessionId => !worst.step.supporting_session_ids.includes(sessionId));
-
   return {
     finding_id: `funnel-${worst.step.position}-${worst.step.checkpoint}`,
     kind: 'FRICTION',
-    title: `${worst.lost} of ${worst.previous} sessions did not reach "${worst.step.checkpoint}"`,
+    title: `${worst.lost} of ${worst.previous} sessions did not record "${worst.step.checkpoint}"`,
     detail: `The largest recorded drop-off is at checkpoint "${worst.step.checkpoint}" `
       + `(${worst.step.reached} of ${worst.step.of_sessions} sessions reached it). `
-      + 'Each pointer below is the last recorded action for a session that stopped before this checkpoint.',
+      + 'Pointers identify sessions from the preceding step with no observation of this checkpoint; later progress does not fill missing evidence.',
     metric_refs: [`funnel.${worst.step.position}.reached`],
-    evidence: lastEventEvidence(stopped, bySession, limit),
+    evidence: lastEventEvidence(worst.stopped, bySession, limit),
     interpretation: null,
     interpretation_source: 'NONE',
   };
@@ -130,19 +128,20 @@ function technicalFailureFinding(
   limit: number,
 ): ReportFinding | null {
   if (metrics.technical_failure.numerator === 0) return null;
+  const evidence = metrics.technical_failure.supporting_session_ids.flatMap(sessionId => {
+    const matched = firstMatchingEvidence([sessionId], bySession,
+      event => event.result === 'ERROR' || event.result === 'BLOCKED' || event.console_error !== null || event.network_error !== null, 1);
+    return matched.length > 0 ? matched : lastEventEvidence([sessionId], bySession, 1);
+  }).slice(0, limit);
   return {
     finding_id: 'technical-failure',
     kind: 'FAILURE',
-    title: `${metrics.technical_failure.numerator} of ${metrics.technical_failure.denominator} sessions hit a technical failure`,
+    title: `${metrics.technical_failure.numerator} of ${metrics.technical_failure.denominator} sessions failed or recorded errors`,
     detail: 'A session counts as a technical failure when it ended FAILED or recorded a console error, '
-      + 'network error, or an action that returned ERROR. These are product defects, not user confusion.',
+      + 'network error, or an action that returned ERROR. This can include execution failures and safety stops; '
+      + 'it does not establish a product defect. Pointers cite the error or the last available browser event.',
     metric_refs: ['technical_failure'],
-    evidence: firstMatchingEvidence(
-      metrics.technical_failure.supporting_session_ids,
-      bySession,
-      event => event.result === 'ERROR' || event.console_error !== null || event.network_error !== null,
-      limit,
-    ),
+    evidence,
     interpretation: null,
     interpretation_source: 'NONE',
   };

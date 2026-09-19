@@ -1,10 +1,10 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
+import { DescribeExecutionCommand, SFNClient } from '@aws-sdk/client-sfn';
 import { computeRunMetrics } from '@synthetic-beta/analytics';
 import {
-  SESSION_ACTION_COST_CENTS,
+  HANDOFF_COST_MODEL,
   buildSessionEvidence,
-  isAgentAction,
   type BehaviorEvent,
   type RunEvidenceIndex,
   type RunExecutionLimits,
@@ -47,7 +47,7 @@ export interface FinalizeResult {
 const USABLE_STATES: readonly SessionRecord['status'][] = ['COMPLETED', 'ABANDONED', 'TIMED_OUT'];
 
 /** Outcomes that mean the session finished, whatever the product did. */
-const TERMINAL_STATES: readonly SessionRecord['status'][] = ['COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED'];
+const TERMINAL_STATES: readonly SessionRecord['status'][] = ['COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED'];
 
 function buildStore(): RunStorePort {
   const table = process.env.BETAVERSION_RUN_TABLE;
@@ -104,8 +104,15 @@ export async function finalizeRun(event: FinalizeEvent, store: RunStorePort): Pr
 
   const recorded = await store.getSessions(run_id);
   const byId = new Map(recorded.map(record => [record.session_id, record] as const));
-  const sessions: SessionRecord[] = plan.sessions.map(session =>
-    byId.get(session.session_id) ?? unstartedSession(plan, session.session_id, finishedAt));
+  const incomplete = plan.sessions.some(session => !TERMINAL_STATES.includes(byId.get(session.session_id)?.status ?? 'QUEUED'));
+  const sessions: SessionRecord[] = plan.sessions.map(session => {
+    const record = byId.get(session.session_id);
+    return record !== undefined && TERMINAL_STATES.includes(record.status) ? record : {
+      ...(record ?? unstartedSession(plan, session.session_id, finishedAt)),
+      status: record?.started_at ? 'FAILED' : 'CANCELLED', finished_at: finishedAt,
+      note: record?.started_at ? 'Worker stopped before persisting its terminal result.' : 'Session never ran: the run stopped before this session started.',
+    };
+  });
   for (const record of recorded) {
     if (!plan.sessions.some(session => session.session_id === record.session_id)) sessions.push(record);
   }
@@ -113,7 +120,9 @@ export async function finalizeRun(event: FinalizeEvent, store: RunStorePort): Pr
   await store.putSessions(sessions);
 
   const events: BehaviorEvent[] = await store.getEvents(run_id);
-  const spent_cents = events.filter(event => isAgentAction(event.action_type)).length * SESSION_ACTION_COST_CENTS;
+  const durationMs = sessions.reduce((total, session) => total + session.elapsed_ms, 0);
+  const spent_cents = Math.ceil((durationMs / 3_600_000 * HANDOFF_COST_MODEL.nova_act_hour_microusd
+    + durationMs / 60_000 * HANDOFF_COST_MODEL.browser_minute_microusd) / 10_000);
   const error = event.finalize_failed_run === true ? failureMessage(event.failure) : existing.error;
 
   if (sessions.length === 0) {
@@ -172,7 +181,7 @@ export async function finalizeRun(event: FinalizeEvent, store: RunStorePort): Pr
   const reportRef = await store.putArtifact('REPORT', run_id, 'run-report', report);
 
   const usable = sessions.filter(session => USABLE_STATES.includes(session.status)).length;
-  const state: RunState = event.finalize_failed_run === true
+  const state: RunState = event.finalize_failed_run === true || incomplete || sessions.some(session => session.status === 'CANCELLED')
     ? 'FAILED'
     : usable === 0
       ? 'FAILED'
@@ -199,6 +208,18 @@ export async function finalizeRun(event: FinalizeEvent, store: RunStorePort): Pr
 }
 
 /** The handler Step Functions invokes after the Map. */
-export async function handler(event: FinalizeEvent): Promise<FinalizeResult> {
-  return finalizeRun(event, buildStore());
+export async function finalizeInterruptedExecution(executionArn: string, store: RunStorePort, client: Pick<SFNClient, 'send'>): Promise<FinalizeResult> {
+  const execution = await client.send(new DescribeExecutionCommand({ executionArn }));
+  if (!execution.input) throw new Error('Interrupted execution has no recorded plan.');
+  const input = JSON.parse(execution.input) as FinalizeEvent;
+  const run = await store.getRun(input.run_id);
+  if (run?.finished_at) return { run_id: run.run_id, state: run.state, sessions: run.session_count, events: 0, spent_cents: run.spent_cents };
+  return finalizeRun({ ...input, finalize_failed_run: true,
+    failure: `Step Functions execution ended ${execution.status ?? 'without a terminal result'}.` }, store);
+}
+
+export async function handler(event: FinalizeEvent | { detail: { executionArn: string } }): Promise<FinalizeResult> {
+  const store = buildStore();
+  if ('detail' in event) return finalizeInterruptedExecution(event.detail.executionArn, store, new SFNClient({}));
+  return finalizeRun(event, store);
 }

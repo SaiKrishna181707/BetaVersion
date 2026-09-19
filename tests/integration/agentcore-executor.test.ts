@@ -174,7 +174,7 @@ test('the AgentCore executor drives a real browser through CDP and records what 
       }),
     });
 
-    assert.equal(executor.kind, 'agentcore-nova-act');
+    assert.equal(executor.kind, 'agentcore-cdp-policy');
     const result = await executor.execute(plan, new AbortController().signal);
 
     // The session reached the objective in the real application.
@@ -183,10 +183,10 @@ test('the AgentCore executor drives a real browser through CDP and records what 
     assert.deepEqual(opened, ['run-agentcore-browser-s-001']);
     assert.deepEqual(stopped, ['stop'], 'the AgentCore session is released even when the loop finishes cleanly');
 
-    // The trace says it was an AWS session, and it is the origin of the events.
+    // Local CDP with a local policy is explicitly not labelled as a Nova Act execution.
     const trace = result.trace ?? null;
     assert.ok(trace !== null, 'the executor must return the trace the events came from');
-    assert.equal(trace.source, 'AGENTCORE_NOVA_ACT');
+    assert.equal(trace.source, 'IMPORTED');
     assert.equal(trace.session_id, 's-001');
     assert.equal(trace.persona_id, 'seed-a-001');
     assert.deepEqual(result.events, interpretSessionTrace(trace).events, 'events are adapted from the trace, not invented');

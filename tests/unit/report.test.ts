@@ -44,8 +44,26 @@ test('points friction at the largest recorded drop-off', async () => {
   const finding = (await build()).findings.find(entry => entry.kind === 'FRICTION');
   assert.ok(finding, 'expected a FRICTION finding');
   assert.equal(finding.finding_id, 'funnel-1-CREATE_PROJECT');
-  assert.match(finding.title, /3 of 3 sessions did not reach "CREATE_PROJECT"/);
-  assert.deepEqual(finding.evidence.map(pointer => pointer.session_id), ['s1', 's2', 's3', 's4']);
+  assert.match(finding.title, /3 of 3 sessions did not record "CREATE_PROJECT"/);
+  assert.deepEqual(finding.evidence.map(pointer => pointer.session_id), ['s1', 's2', 's3']);
+});
+
+test('a safety failure cites its recorded stop without claiming a product defect', async () => {
+  const blockedEvents = events.map(event => event.session_id === 's4'
+    ? { ...event, result: 'BLOCKED' as const, console_error: null, agent_reason_code: 'SAFETY_STOP' as const }
+    : event);
+  const blockedMetrics = computeRunMetrics({ run_id: 'run-1', sessions, events: blockedEvents, personas, checkpoint_plan: CHECKPOINT_PLAN });
+  const report = await buildSyntheticBetaReport({ configuration: validConfiguration, metrics: blockedMetrics,
+    sessions, events: blockedEvents, generated_at: '2026-09-18T00:10:00.000Z' });
+  const finding = report.findings.find(entry => entry.kind === 'FAILURE');
+  assert.equal(finding?.evidence[0]?.session_id, 's4');
+  assert.equal(finding?.evidence[0]?.result, 'BLOCKED');
+  assert.match(finding?.detail ?? '', /does not establish a product defect/);
+});
+
+test('retry evidence cites each contributing session only once', async () => {
+  const finding = (await build()).findings.find(entry => entry.finding_id === 'retry-friction');
+  assert.deepEqual(finding?.evidence.map(pointer => pointer.session_id), ['s2']);
 });
 
 test('keeps numbers independent of any narrated interpretation', async () => {

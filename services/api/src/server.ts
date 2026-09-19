@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { readFile, realpath } from 'node:fs/promises';
+import { resolve, relative, isAbsolute, sep } from 'node:path';
 
 type ApiHandler = (request: {
   httpMethod: string;
@@ -12,6 +14,7 @@ export interface ApiServerOptions {
   host?: string;
   /** Origins allowed to call the API from a browser. Defaults to the local dev front end. */
   allowed_origins?: readonly string[];
+  artifacts_root?: string;
 }
 
 export interface RunningApiServer {
@@ -57,6 +60,20 @@ export async function startApiServer(options: ApiServerOptions): Promise<Running
         'Access-Control-Allow-Headers': 'Content-Type',
         'Vary': 'Origin',
       };
+      if (request.method === 'GET' && url.pathname.startsWith('/artifacts/') && options.artifacts_root !== undefined) {
+        try {
+          const root = await realpath(options.artifacts_root);
+          const file = await realpath(resolve(root, decodeURIComponent(url.pathname.slice('/artifacts/'.length))));
+          const name = relative(root, file);
+          if (isAbsolute(name) || name === '..' || name.startsWith(`..${sep}`) || !/\.(png|zip|json)$/.test(name)) throw new Error('Invalid evidence path');
+          reply.writeHead(200, { ...baseHeaders, 'Content-Type': name.endsWith('.png') ? 'image/png' : name.endsWith('.zip') ? 'application/zip' : 'application/json', 'Cache-Control': 'no-store' });
+          reply.end(await readFile(file));
+        } catch {
+          reply.writeHead(404, baseHeaders);
+          reply.end();
+        }
+        return;
+      }
       if (request.method === 'OPTIONS') {
         reply.writeHead(204, baseHeaders);
         reply.end();

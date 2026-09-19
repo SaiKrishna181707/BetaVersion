@@ -25,7 +25,8 @@ export async function loadRunStatusView(store: RunStorePort, run_id: string): Pr
     store.getArtifact<RunEvidenceIndex>('EVIDENCE', run_id, 'session-evidence'),
   ]);
   return {
-    run,
+    run: { ...run, finished_session_count: sessions.filter(session =>
+      ['COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED'].includes(session.status)).length },
     sessions,
     personas: personas ?? [],
     metrics: metrics ?? null,

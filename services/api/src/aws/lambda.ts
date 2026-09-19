@@ -4,7 +4,8 @@ import { SFNClient } from '@aws-sdk/client-sfn';
 import type { RunRuntimePort } from '@synthetic-beta/contracts';
 import { createApiHandler } from '../handler';
 import { createAwsRunRuntime } from './run-runtime';
-import { createAwsRunStore, createDynamoDocumentStore, createS3ObjectStore } from './store';
+import { createBudgetReservation } from './budget';
+import { createAwsRunStore, createDynamoDocumentStore, createS3ObjectStore, createEvidenceSigner } from './store';
 
 /**
  * The control plane as AWS runs it: API Gateway in, one Lambda out, DynamoDB/S3 behind it.
@@ -46,7 +47,8 @@ function buildRuntime(): RunRuntimePort | null {
     createDynamoDocumentStore({ table_name: table, client: new DynamoDBClient({}) }),
     createS3ObjectStore({ bucket_name: bucket, client: new S3Client({}) }),
   );
-  return createAwsRunRuntime({ store, state_machine_arn, client: new SFNClient({}) });
+  return createAwsRunRuntime({ store, state_machine_arn, client: new SFNClient({}),
+    reserve_budget: createBudgetReservation(table, new DynamoDBClient({})) });
 }
 
 export const handler = (() => {
@@ -59,6 +61,7 @@ export const handler = (() => {
         splitList(process.env.BETAVERSION_AUTHORIZED_DOMAINS, ['localhost', '127.0.0.1']),
         {
           runtime,
+          resolve_evidence_ref: process.env.BETAVERSION_EVIDENCE_BUCKET === undefined ? undefined : createEvidenceSigner(process.env.BETAVERSION_EVIDENCE_BUCKET),
           checkpoint_plan: splitList(
             process.env.BETAVERSION_CHECKPOINT_PLAN,
             ['OPEN_APP', 'CREATE_PROJECT', 'INVITE_TEAMMATE'],

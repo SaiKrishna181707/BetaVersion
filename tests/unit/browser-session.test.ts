@@ -29,6 +29,7 @@ test('signs the automation stream for the bedrock-agentcore service', async () =
 
   assert.equal(headers.host, 'bedrock-agentcore.us-east-1.amazonaws.com');
   assert.equal(headers['x-amz-date'], '20260918T000000Z');
+  assert.ok(headers.authorization);
   assert.ok(headers.authorization.startsWith('AWS4-HMAC-SHA256 '), 'the authorization header must be a SigV4 header');
   assert.ok(headers.authorization.includes('Credential=AKIDEXAMPLE/20260918/us-east-1/bedrock-agentcore/aws4_request'));
   assert.ok(headers.authorization.includes('SignedHeaders='));
@@ -63,6 +64,7 @@ test('a different region produces a different signature', async () => {
     now,
   });
   assert.notEqual(east.authorization, west.authorization);
+  assert.ok(west.authorization);
   assert.ok(west.authorization.includes('/us-west-2/bedrock-agentcore/'));
 });
 

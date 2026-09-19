@@ -1,0 +1,10 @@
+.git
+**/node_modules
+.cache
+.artifacts
+**/dist
+infra/cdk/cdk.out
+.env
+**/.env
+**/.env.*
+**/__pycache__

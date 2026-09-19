@@ -28,7 +28,7 @@ export interface BrowserSessionHandle {
 
 export interface AgentCoreBrowserPort {
   readonly kind: string;
-  start(input: { session_name: string; timeout_seconds: number }): Promise<BrowserSessionHandle>;
+  start(input: { session_name: string; timeout_seconds: number; signal?: AbortSignal }): Promise<BrowserSessionHandle>;
 }
 
 export interface AgentCoreBrowserOptions {
@@ -86,30 +86,30 @@ export function createAgentCoreBrowser(options: AgentCoreBrowserOptions): AgentC
         browserIdentifier: options.browser_id,
         name: input.session_name,
         sessionTimeoutSeconds: input.timeout_seconds,
-      }));
+      }), { abortSignal: input.signal });
       const session_id = started.sessionId;
       const endpoint = started.streams?.automationStream?.streamEndpoint;
+      const stop = async () => {
+        if (session_id !== undefined) await options.client.send(new StopBrowserSessionCommand({ browserIdentifier: options.browser_id, sessionId: session_id }));
+      };
       if (session_id === undefined || endpoint === undefined) {
         // Without an automation stream there is nothing to drive. Failing here is the honest
         // outcome: a session with no browser is not a synthetic user.
+        await stop().catch(() => undefined);
         throw new Error('AgentCore Browser did not return an automation stream for this session.');
       }
-      const headers = await signAgentCoreConnection({
+      let headers: Record<string, string>;
+      try { headers = await signAgentCoreConnection({
         ws_endpoint: endpoint,
         region: options.region,
         credentials: options.credentials,
         now: options.now,
-      });
+      }); } catch (error) { await stop().catch(() => undefined); throw error; }
       return {
         session_id,
         ws_endpoint: endpoint,
         headers,
-        async stop() {
-          await options.client.send(new StopBrowserSessionCommand({
-            browserIdentifier: options.browser_id,
-            sessionId: session_id,
-          }));
-        },
+        stop,
       };
     },
   };

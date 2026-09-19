@@ -23,7 +23,7 @@ export interface RunRecord {
   configuration: RunConfiguration;
   checkpoint_plan: string[];
   budget_cents: number;
-  /** Recorded action spend. Never an estimate. */
+  /** Local action allowance, or AWS duration-based cost estimate; never an AWS invoice. */
   spent_cents: number;
   session_count: number;
   finished_session_count: number;

@@ -139,6 +139,9 @@ dist
 
 # Session evidence written by the local executor
 .artifacts/
+__pycache__/
+*.pyc
+infra/cdk/cdk.out/
 
 # Vite files
 vite.config.js.timestamp-*

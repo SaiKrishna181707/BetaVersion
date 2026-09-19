@@ -12,7 +12,7 @@ import type { DocumentStorePort, ObjectStorePort } from '../../services/api/src/
 
 export interface FakeDocuments extends DocumentStorePort {
   readonly items: Map<string, Record<string, unknown>>;
-  readonly puts: number;
+  puts: number;
 }
 
 export function fakeDocumentStore(): FakeDocuments {

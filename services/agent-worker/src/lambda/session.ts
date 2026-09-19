@@ -1,6 +1,6 @@
 import { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
-import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { marshall } from '@aws-sdk/util-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import {
@@ -12,6 +12,7 @@ import {
 } from '@synthetic-beta/api/aws/store';
 import {
   isAgentAction,
+  GUARDRAILS,
   type BehaviorEvent,
   type RunExecutionLimits,
   type RunStorePort,
@@ -25,7 +26,6 @@ import {
 } from '@synthetic-beta/contracts';
 import { createAgentCoreSessionExecutor } from '../aws/agentcore-executor';
 import { createAgentCoreBrowser, type AgentCoreBrowserPort } from '../aws/browser-session';
-import { createNovaAgentPolicy } from '../aws/nova-policy';
 import { reviewSessionPlan } from '../session-executor';
 
 /**
@@ -60,6 +60,7 @@ export interface SessionWorkerDependencies {
   browser: AgentCoreBrowserPort;
   model_id: string;
   artifacts_root: string;
+  claim_session?: (record: SessionRecord) => Promise<void>;
 }
 
 function required(name: string): string {
@@ -78,9 +79,10 @@ export function buildDependencies(): SessionWorkerDependencies {
   const table_name = required('BETAVERSION_RUN_TABLE');
   const bucket_name = required('BETAVERSION_EVIDENCE_BUCKET');
   const objects = createS3ObjectStore({ bucket_name, client: new S3Client({}) });
+  const documents = new DynamoDBClient({});
   cached = {
     store: createAwsRunStore(
-      createDynamoDocumentStore({ table_name, client: new DynamoDBClient({}) }),
+      createDynamoDocumentStore({ table_name, client: documents }),
       objects,
     ),
     objects,
@@ -90,8 +92,16 @@ export function buildDependencies(): SessionWorkerDependencies {
       client: new BedrockAgentCoreClient({}),
       credentials: defaultProvider(),
     }),
-    model_id: process.env.BETAVERSION_NOVA_MODEL_ID ?? 'amazon.nova-lite-v1:0',
+    model_id: process.env.BETAVERSION_NOVA_MODEL_ID ?? 'nova-act-latest',
     artifacts_root: process.env.BETAVERSION_ARTIFACTS_DIR ?? '/tmp/betaversion',
+    claim_session: async record => {
+      await documents.send(new PutItemCommand({ TableName: table_name,
+        Item: marshall({ pk: `RUN#${record.run_id}`, sk: `SESSION#${record.session_id}`,
+          body: JSON.stringify(record), status: record.status, persona_id: record.persona_id }),
+        ConditionExpression: '#status = :queued', ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: marshall({ ':queued': 'QUEUED' }),
+      }));
+    },
   };
   return cached;
 }
@@ -128,8 +138,8 @@ function terminalRecord(
  *
  * Two things matter here. Every rewritten reference must point at an object that was really
  * written - a reference into a container that no longer exists is not evidence - and one lost
- * capture must not cost the session its whole trace, so a capture that cannot be read keeps its
- * original reference and is counted as missing.
+ * capture must not cost the session its whole trace, so a capture that cannot be read is
+ * counted as missing and its unavailable reference is removed.
  */
 export async function uploadCaptures(
   objects: ObjectStorePort,
@@ -153,14 +163,15 @@ export async function uploadCaptures(
       return ref;
     } catch {
       missing += 1;
-      return local;
+      return null;
     }
   };
 
   const entries: TraceEntry[] = [];
   for (const entry of trace.entries) {
     if (entry.kind === 'SCREENSHOT') {
-      entries.push({ ...entry, ref: await move(entry.ref, entry.name) ?? entry.ref });
+      const ref = await move(entry.ref, entry.name);
+      if (ref !== null) entries.push({ ...entry, ref });
     } else if (entry.kind === 'CHECKPOINT') {
       entries.push({ ...entry, screenshot_ref: await move(entry.screenshot_ref, `checkpoint-${entry.checkpoint}`) });
     } else {
@@ -192,18 +203,22 @@ async function executeWithRetries(
 ): Promise<{ result: SessionResult | null; attempts: number; error: string | null }> {
   let attempt = 0;
   let lastError: string | null = null;
-  while (attempt < limits.max_session_attempts) {
+  const deadline = Date.now() + plan.max_session_seconds * 1000;
+  while (attempt < Math.min(limits.max_session_attempts, GUARDRAILS.MAX_SESSION_ATTEMPTS)) {
     attempt += 1;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), (limits.max_session_seconds + 30) * 1000);
+    const timeout = setTimeout(() => controller.abort(), Math.max(1, deadline - Date.now()));
     try {
       const result = await executor.execute(plan, controller.signal);
-      if (result.status !== 'FAILED' || attempt >= limits.max_session_attempts) {
+      // Once the browser has acted, retain that evidence and outcome; never overwrite it
+      // with a fresh attempt. Retry only a failure to start, inside the original deadline.
+      if (result.status !== 'FAILED' || result.trace !== undefined || attempt >= limits.max_session_attempts) {
         return { result, attempts: attempt, error: null };
       }
       lastError = 'The session ended in a technical failure and was attempted again.';
     } catch (cause) {
       lastError = cause instanceof Error ? cause.message : 'The session failed without an error.';
+      if (Date.now() >= deadline) break;
       if (attempt >= limits.max_session_attempts) {
         return { result: null, attempts: attempt, error: lastError };
       }
@@ -225,6 +240,8 @@ export async function runSessionTask(
   // opened. A rejected plan never reaches AgentCore, and the session is recorded as failed
   // with the reasons, exactly as the local executor records it.
   const reasons = reviewSessionPlan(plan);
+  if (event.run_id !== plan.run_id) reasons.push('Run identifiers do not match.');
+  if (!Number.isInteger(limits.max_session_attempts) || limits.max_session_attempts < 1 || limits.max_session_attempts > GUARDRAILS.MAX_SESSION_ATTEMPTS) reasons.push('Invalid retry ceiling.');
   if (reasons.length > 0) {
     const record = terminalRecord(plan, 'FAILED', new Date().toISOString(), 0, 0, 0, reasons.join(' '));
     await deps.store.putSessions([record]);
@@ -244,13 +261,18 @@ export async function runSessionTask(
   const executor = createAgentCoreSessionExecutor({
     browser: deps.browser,
     artifacts_root: deps.artifacts_root,
-    policy: () => createNovaAgentPolicy({
-      client: new BedrockRuntimeClient({}),
-      model_id: deps.model_id,
-    }),
   });
 
   const started_at = new Date().toISOString();
+  const previous = (await deps.store.getSessions(plan.run_id)).find(record => record.session_id === plan.session_id);
+  if (previous !== undefined && previous.status !== 'QUEUED') {
+    throw new Error('Refusing to execute an already claimed session again.');
+  }
+  const running = terminalRecord(plan, 'ACTIVE', started_at, 0, 0, 1, null);
+  running.started_at = started_at;
+  running.finished_at = null;
+  if (deps.claim_session !== undefined) await deps.claim_session(running);
+  else await deps.store.putSessions([running]);
   const outcome = await executeWithRetries(plan, limits, executor);
   const finished_at = new Date().toISOString();
 
@@ -288,11 +310,13 @@ export async function runSessionTask(
   if (replay_ref !== null && replay_ref.length > 0) {
     replay_ref = await deps.objects
       .putFile(keys.replay, replay_ref)
-      .catch(() => replay_ref);
+      .catch(() => null);
   }
+  if (final_trace !== null) final_trace = { ...final_trace, entries: final_trace.entries.map(entry =>
+    entry.kind === 'SESSION_END' ? { ...entry, replay_ref } : entry) };
 
   const action_count = events.filter(entry => isAgentAction(entry.action_type)).length;
-  const elapsed_ms = events.reduce((max, entry) => Math.max(max, entry.elapsed_ms), 0);
+  const elapsed_ms = Math.max(0, Date.parse(outcome.result.finished_at) - Date.parse(started_at));
   const event_log_ref = await deps.store.putEvents(plan.run_id, plan.session_id, events);
   const trace_ref = final_trace === null ? null : await deps.store.putTrace(plan.run_id, final_trace);
 
@@ -303,7 +327,7 @@ export async function runSessionTask(
     elapsed_ms,
     action_count,
     outcome.attempts,
-    null,
+    final_trace?.entries.filter(entry => entry.kind === 'SESSION_END').at(-1)?.note ?? outcome.error,
   );
   record.started_at = started_at;
   record.event_log_ref = event_log_ref;

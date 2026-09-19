@@ -10,6 +10,7 @@ import {
 } from '@synthetic-beta/contracts';
 import { buildCohort, profileCohort } from '@synthetic-beta/population';
 import { loadRunStatusView, loadSessionDetail } from './run-view';
+import { presentEvidence } from './evidence-access';
 
 interface ApiRequest { httpMethod: string; path: string; body?: string | null }
 interface ApiResponse { statusCode: number; headers: Record<string, string>; body: string }
@@ -22,6 +23,7 @@ export interface ApiHandlerOptions {
   runtime?: RunRuntimePort | null;
   /** Checkpoints the target under test declares. Defaults to the bundled demo workflow. */
   checkpoint_plan?: readonly string[];
+  resolve_evidence_ref?: (ref: string) => Promise<string | null>;
 }
 
 const MAX_BODY_BYTES = 16_384;
@@ -212,15 +214,16 @@ export function createApiHandler(authorizedDomains: readonly string[], options: 
       if (runtime === null || !runtime.available) return unavailable();
       const detail = await loadSessionDetail(runtime.store, decodeURIComponent(sessionMatch[1] as string), decodeURIComponent(sessionMatch[2] as string));
       if (detail === null) return response(404, { code: 'SESSION_NOT_FOUND' });
-      return response(200, detail);
+      return response(200, await presentEvidence(detail, options.resolve_evidence_ref));
     }
 
     const runMatch = /^\/runs\/([^/]+)(?:\/(status|metrics|report|evidence|sessions))?$/.exec(path);
     if (runMatch !== null && httpMethod === 'GET') {
       if (runtime === null || !runtime.available) return unavailable();
       const run_id = decodeURIComponent(runMatch[1] as string);
-      const view = await loadRunStatusView(runtime.store, run_id);
-      if (view === null) return response(404, { code: 'RUN_NOT_FOUND' });
+      const stored = await loadRunStatusView(runtime.store, run_id);
+      if (stored === null) return response(404, { code: 'RUN_NOT_FOUND' });
+      const view = await presentEvidence(stored, options.resolve_evidence_ref);
 
       switch (runMatch[2]) {
         case undefined:

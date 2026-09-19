@@ -37,6 +37,7 @@ function parseTarget(targetUrl: string): URL | null {
  */
 export function reviewSessionPlan(plan: SessionPlan): string[] {
   const reasons: string[] = [];
+  if (![plan.run_id, plan.session_id].every(id => /^[A-Za-z0-9_-]{1,80}$/.test(id))) reasons.push('Run and session identifiers must be safe path segments.');
   if (!Number.isInteger(plan.max_actions) || plan.max_actions < 1 || plan.max_actions > GUARDRAILS.MAX_ACTIONS) {
     reasons.push(`Action budget must be a whole number from 1 to ${GUARDRAILS.MAX_ACTIONS}.`);
   }

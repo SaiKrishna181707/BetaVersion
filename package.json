@@ -23,7 +23,12 @@
     "dev:api": "tsx services/agent-worker/src/local-server.ts",
     "l1:run": "tsx services/agent-worker/src/l1-run.ts",
     "l2:run": "tsx services/agent-worker/src/l2-run.ts",
-    "l3:run": "tsx services/agent-worker/src/l2-run.ts --users 20 --batch 5"
+    "l3:run": "tsx services/agent-worker/src/l2-run.ts --users 20 --batch 5",
+    "test:python": "python -m unittest discover -s tests/python -v",
+    "test:nova-actuator": "tsx scripts/verify-nova-actuator.ts",
+    "test:browser": "tsx --test tests/browser/*.test.ts",
+    "aws:smoke": "tsx scripts/aws-smoke.ts",
+    "aws:deploy": "powershell -NoProfile -File scripts/deploy-aws.ps1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

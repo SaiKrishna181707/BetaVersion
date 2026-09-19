@@ -3,7 +3,7 @@ import { createApiHandler } from '@synthetic-beta/api';
 import { startApiServer } from '@synthetic-beta/api';
 import { createLocalBrowserSessionExecutor, defaultSandboxAccount } from './browser/local-executor';
 import { createLocalRunRuntime } from './local-runtime';
-import { join } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 
 /**
  * The local development control plane: the same API handler the Lambda runs, bound to
@@ -36,12 +36,18 @@ const runtime = createLocalRunRuntime({
 
 const handler = createApiHandler(authorizedDomains, {
   runtime,
+  resolve_evidence_ref: async ref => {
+    const path = relative(resolve(artifactsRoot), ref.startsWith('runs/') ? resolve(artifactsRoot, ref) : resolve(ref));
+    if (path.startsWith('..') || path.includes(':')) return null;
+    return `http://127.0.0.1:${port}/artifacts/${path.split(sep).map(encodeURIComponent).join('/')}`;
+  },
   checkpoint_plan: checkpointPlan.length > 0 ? checkpointPlan : DEFAULT_CHECKPOINT_PLAN,
 });
 
 const server = await startApiServer({
   handler,
   port,
+  artifacts_root: artifactsRoot,
   allowed_origins: ['http://127.0.0.1:5173', 'http://localhost:5173'],
 });
 

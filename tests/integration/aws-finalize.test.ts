@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SESSION_ACTION_COST_CENTS,
   beginRun,
   buildRunPlan,
   runLimitsFromConfiguration,
@@ -13,11 +12,22 @@ import {
   type SessionTrace,
   type SyntheticBetaReport,
 } from '@synthetic-beta/contracts';
-import { finalizeRun } from '../../services/api/src/aws/finalize';
+import { finalizeRun, finalizeInterruptedExecution } from '../../services/api/src/aws/finalize';
 import { createAwsRunStore } from '../../services/api/src/aws/store';
 import { fakeDocumentStore, fakeObjectStore } from '../fixtures/aws-fakes';
 import { CHECKPOINT_PLAN, personaFixture, validConfiguration } from '../fixtures/run-fixtures';
 import { at } from '../fixtures/trace-fixtures';
+
+test('a state-machine timeout finalizes partial evidence and is idempotent', async () => {
+  const { store, plan } = await seed();
+  const client = { send: async () => ({ input: JSON.stringify({ run_id: RUN_ID, plan }), status: 'TIMED_OUT' }) } as never;
+  const result = await finalizeInterruptedExecution('arn:test:execution', store, client);
+  assert.equal(result.state, 'FAILED');
+  assert.ok((await store.getRun(RUN_ID))?.error?.includes('TIMED_OUT'));
+  const again = await finalizeInterruptedExecution('arn:test:execution', store, client);
+  assert.equal(again.state, result.state);
+  assert.equal(again.spent_cents, result.spent_cents);
+});
 
 /**
  * The finalizer is what makes an AWS run produce a result: it runs after the Map and turns
@@ -206,16 +216,16 @@ test('a finished run is analysed into metrics, evidence, and a report', async ()
 
   const result = await finalizeRun({ run_id: RUN_ID, plan, limits }, store);
 
-  assert.equal(result.state, 'COMPLETED');
+  assert.equal(result.state, 'FAILED', 'a missing planned session cannot be a completed run');
   assert.equal(result.sessions, 3, 'every planned session is accounted for');
   assert.equal(result.events, 4);
-  assert.equal(result.spent_cents, 4 * SESSION_ACTION_COST_CENTS);
+  assert.equal(result.spent_cents, 1, 'duration-based cost estimate, rounded up to cents');
 
   const record = await store.getRun(RUN_ID);
-  assert.equal(record?.state, 'COMPLETED');
+  assert.equal(record?.state, 'FAILED');
   // A cancelled session never ran, so it is not a finished session. The local orchestrator
   // counts finished sessions the same way, which is what keeps the two paths comparable.
-  assert.equal(record?.finished_session_count, 2);
+  assert.equal(record?.finished_session_count, 3);
   assert.equal(record?.spent_cents, result.spent_cents);
   assert.ok(record?.report_ref?.startsWith('s3://'), 'the report is stored and referenced');
   assert.equal(record?.error, null);
