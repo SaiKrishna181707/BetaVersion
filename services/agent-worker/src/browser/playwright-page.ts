@@ -145,6 +145,30 @@ export class PlaywrightPage implements BrowserPagePort {
     return new PlaywrightPage(browser, context, page, options);
   }
 
+  /**
+   * Attaches to a browser running somewhere else over the Chrome DevTools Protocol. That is
+   * what AgentCore Browser is: the page lives in AWS, and this process only drives it. Every
+   * observation, action, and browser event is recorded exactly as it is for a local launch,
+   * so the trace of an AWS session has the same shape as the trace of a local one.
+   */
+  static async connect(options: PlaywrightPageOptions & {
+    ws_endpoint: string;
+    headers?: Record<string, string> | undefined;
+  }): Promise<PlaywrightPage> {
+    const browser = await chromium.connectOverCDP(options.ws_endpoint, {
+      headers: options.headers,
+      timeout: 30_000,
+    });
+    const context = browser.contexts()[0] ?? await browser.newContext({
+      viewport: options.viewport ?? { width: 1280, height: 800 },
+      deviceScaleFactor: 1,
+    });
+    context.setDefaultTimeout(5_000);
+    context.setDefaultNavigationTimeout(10_000);
+    const page = context.pages()[0] ?? await context.newPage();
+    return new PlaywrightPage(browser, context, page, options);
+  }
+
   /** The replay archive location, whether or not recording has finished. */
   get replayRef(): string | null { return this.replayPath; }
 

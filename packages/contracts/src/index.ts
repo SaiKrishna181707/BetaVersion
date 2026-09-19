@@ -10,3 +10,6 @@ export * from './trace';
 export * from './evidence';
 export * from './run';
 export * from './limits';
+export * from './plan';
+export * from './run-start';
+export * from './session-evidence';

@@ -1,0 +1,24 @@
+{
+  "name": "@synthetic-beta/infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BetaVersion AWS infrastructure: data, control plane, execution, and observability.",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --all --require-approval broadening",
+    "destroy": "cdk destroy --all"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.270.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "aws-cdk": "^2.1142.0",
+    "esbuild": "^0.25.12",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  }
+}
