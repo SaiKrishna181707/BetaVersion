@@ -29,7 +29,7 @@ export function createLogGroup(
  */
 export function createAlarmTopic(scope: Construct, config: BetaVersionConfig, name: string): sns.ITopic | null {
   if (config.alarm_email === undefined) return null;
-  const topic = new sns.Topic(scope, 'AlarmTopic', {
+  const topic = new sns.Topic(scope, `AlarmTopic-${name}`, {
     topicName: `${config.prefix}-${config.env_name}-${name}`,
     displayName: `BetaVersion ${config.env_name} alarms`,
   });
@@ -81,7 +81,7 @@ export function addErrorAndLatencyAlarms(
   return alarms;
 }
 
-/** A monthly cost budget so the platform ceiling is enforced by AWS, not only by the code. */
+/** Billing visibility and optional alerts; admission is enforced by atomic run reservations. */
 export function createMonthlyBudget(scope: Construct, id: string, config: BetaVersionConfig): budgets.CfnBudget {
   const subscribers = config.alarm_email === undefined
     ? []

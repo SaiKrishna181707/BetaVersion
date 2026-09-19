@@ -5,6 +5,7 @@
   "description": "BetaVersion AWS infrastructure: data, control plane, execution, and observability.",
   "scripts": {
     "build": "tsc --noEmit",
+    "test": "node --test -r ts-node/register test/*.test.ts",
     "synth": "cdk synth",
     "diff": "cdk diff",
     "deploy": "cdk deploy --all --require-approval broadening",

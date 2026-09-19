@@ -28,27 +28,27 @@ const data = new BetaVersionDataStack(app, `${base}-data`, {
   config,
   description: `${config.prefix} ${config.env_name}: run records and evidence`,
 });
+const executionConfig = { ...config, authorized_domains: [...config.authorized_domains, data.demo_domain] };
 
 const execution = new BetaVersionExecutionStack(app, `${base}-execution`, {
   env: environment,
-  config,
+  config: executionConfig,
   data,
   description: `${config.prefix} ${config.env_name}: AgentCore Browser, session worker, and Step Functions`,
 });
 
 
-const web = new BetaVersionWebStack(app, `${base}-web`, {
-  env: environment,
-  config,
-  description: `${config.prefix} ${config.env_name}: reviewer console`,
-});
 const api = new BetaVersionApiStack(app, `${base}-api`, {
   env: environment,
-  config,
+  config: executionConfig,
   data,
   execution,
-  web_origin: web.site_url,
   description: `${config.prefix} ${config.env_name}: control plane`,
+});
+const web = new BetaVersionWebStack(app, `${base}-web`, {
+  env: environment,
+  config: { ...executionConfig, web_api_base_url: api.api_url },
+  description: `${config.prefix} ${config.env_name}: reviewer console`,
 });
 
 // The account-level cost guard sits with the control plane that starts the spend.

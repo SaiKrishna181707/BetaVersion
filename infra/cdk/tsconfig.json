@@ -12,5 +12,5 @@
     "declaration": false,
     "types": ["node"]
   },
-  "include": ["bin", "lib"]
+  "include": ["bin", "lib", "test"]
 }

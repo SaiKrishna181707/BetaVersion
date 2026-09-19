@@ -1,4 +1,4 @@
-import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Duration, RemovalPolicy, SecretValue, Stack, type StackProps } from 'aws-cdk-lib';
 import * as amplify from 'aws-cdk-lib/aws-amplify';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
@@ -16,10 +16,8 @@ export interface WebStackProps extends StackProps {
 /**
  * The reviewer's console.
  *
- * Two hosting models, never both: when a Git repository is configured the Amplify app builds
- * and serves the site from source; otherwise the built `apps/web/dist` is published to S3
- * behind CloudFront. Which one is in use is visible in the stack outputs, so nobody has to
- * guess whether the deployment is the branch or a snapshot of it.
+ * The connected application uses Amplify, with optional Git builds or a manual upload.
+ * The existing static CloudFront fallback remains available for standalone builds.
  */
 export class BetaVersionWebStack extends Stack {
   readonly site_url: string;
@@ -28,14 +26,19 @@ export class BetaVersionWebStack extends Stack {
     super(scope, id, props);
     const { config } = props;
 
-    if (config.amplify_repository !== undefined) {
+    if (config.amplify_repository !== undefined || config.web_api_base_url.length > 0) {
       const app = new amplify.CfnApp(this, 'AmplifyApp', {
         name: `${config.prefix}-${config.env_name}-web`,
         description: `${config.prefix} synthetic QA console`,
         repository: config.amplify_repository,
-        oauthToken: config.amplify_oauth_token_secret_arn,
+        oauthToken: config.amplify_oauth_token_secret_arn === undefined ? undefined : SecretValue.secretsManager(config.amplify_oauth_token_secret_arn).unsafeUnwrap(),
         environmentVariables: [
-          { name: 'VITE_API_BASE_URL', value: config.web_api_base_url },
+          { name: 'VITE_API_BASE_URL', value: '/api' },
+          { name: 'VITE_AUTHORIZED_DOMAINS', value: config.authorized_domains.join(',') },
+        ],
+        customRules: [
+          { source: '/api/<*>', target: `${config.web_api_base_url}/<*>`, status: '200' },
+          { source: '</^[^.]+$|\\.(?!(css|gif|ico|jpg|jpeg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>', target: '/index.html', status: '200' },
         ],
         buildSpec: [
           'version: 1',
@@ -59,10 +62,10 @@ export class BetaVersionWebStack extends Stack {
       new amplify.CfnBranch(this, 'AmplifyBranch', {
         appId: app.attrAppId,
         branchName: config.amplify_branch,
-        enableAutoBuild: true,
+        enableAutoBuild: config.amplify_repository !== undefined,
         stage: config.env_name === 'prod' ? 'PRODUCTION' : 'DEVELOPMENT',
       });
-      this.site_url = `https://${config.amplify_branch}.${app.attrDefaultDomain}`;
+      this.site_url = `https://${config.amplify_branch.replace(/\//g, '-')}.${app.attrDefaultDomain}`;
       new CfnOutput(this, 'SiteUrl', {
         value: this.site_url,
         exportName: `${config.prefix}-SiteUrl`,
@@ -73,6 +76,7 @@ export class BetaVersionWebStack extends Stack {
         exportName: `${config.prefix}-AmplifyAppId`,
         description: 'Amplify app id, for wiring a custom domain or a webhook.',
       });
+      new CfnOutput(this, 'AmplifyBranchName', { value: config.amplify_branch });
       return;
     }
 

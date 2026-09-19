@@ -3,6 +3,8 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import type * as logs from 'aws-cdk-lib/aws-logs';
 import type { Construct } from 'constructs';
+import { join } from 'node:path';
+import { REPO_ROOT } from './config';
 
 export interface BundledFunctionProps {
   /** Absolute path to the TypeScript entry point inside this repository. */
@@ -25,6 +27,8 @@ export interface BundledFunctionProps {
 export function bundledFunction(scope: Construct, id: string, props: BundledFunctionProps): NodejsFunction {
   return new NodejsFunction(scope, id, {
     entry: props.entry,
+    projectRoot: REPO_ROOT,
+    depsLockFilePath: join(REPO_ROOT, 'package-lock.json'),
     handler: 'handler',
     runtime: lambda.Runtime.NODEJS_22_X,
     architecture: lambda.Architecture.ARM_64,
@@ -40,6 +44,7 @@ export function bundledFunction(scope: Construct, id: string, props: BundledFunc
       minify: false,
       sourcesContent: false,
       keepNames: true,
+      externalModules: [],
     },
   });
 }

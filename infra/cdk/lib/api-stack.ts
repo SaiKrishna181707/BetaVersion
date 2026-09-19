@@ -48,15 +48,11 @@ export class BetaVersionApiStack extends Stack {
 
     // The control plane owns run records and the artefacts a reviewer reads, and it may start
     // exactly one state machine. It cannot touch a browser, a model, or any other resource.
-    data.run_table.grantReadWriteData(this.api_function);
-    data.evidence_bucket.grantReadWrite(this.api_function);
+    data.run_table.grant(this.api_function, 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query', 'dynamodb:UpdateItem');
+    this.api_function.addToRolePolicy(new iam.PolicyStatement({ actions: ['s3:GetObject', 's3:PutObject'], resources: [data.evidence_bucket.arnForObjects('runs/*')] }));
     this.api_function.addToRolePolicy(new iam.PolicyStatement({
       actions: ['states:StartExecution'],
       resources: [execution.state_machine.stateMachineArn],
-    }));
-    this.api_function.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['states:DescribeExecution', 'states:StopExecution'],
-      resources: [`arn:aws:states:${this.region}:${this.account}:execution:${execution.state_machine.stateMachineName}:*`],
     }));
 
     const integration = new integrations.HttpLambdaIntegration('ApiIntegration', this.api_function, {

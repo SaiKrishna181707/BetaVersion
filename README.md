@@ -11,43 +11,34 @@ and do not replace research with real people. They are an earlier, cheaper signa
 
 ---
 
-## Status: foundation plus the L1 browser session
+## Execution status
 
-This repository contains the foundation and the first end-to-end milestone: **one synthetic user** that
-operates the demo product in a real local browser, decides its own actions from what is visible on screen,
-and writes a structured, inspectable event log. AWS execution is still deliberately absent, and nothing in
-this repository pretends otherwise.
+Local L1 and independent multi-session runs are operational. The existing UI creates runs,
+shows session progress and deterministic metrics, and opens screenshots, replay archives and reports.
 
-**Built and verified**
+The AWS path uses API Gateway/Lambda, Step Functions, the Nova Act Python SDK, isolated AgentCore
+Browser sessions, DynamoDB and S3. The existing CDK stacks synthesize and the session container builds.
+Nova Act actuator calls are recorded as browser facts, then passed through the shared trace adapter.
+Completion requires the demo's observed final checkpoint; model return text cannot declare success.
 
-- Monorepo skeleton with npm workspaces (`apps`, `packages`, `services`).
-- `packages/contracts` — the single source of truth for every shared type, guardrail, and validation rule.
-- `packages/ui` — design system: icons, brand, buttons, badges, fields, and the base stylesheet.
-- `services/population` — deterministic synthetic cohort sampling (seeded, reproducible, no model).
-- `services/analytics` — deterministic metrics from recorded sessions and events.
-- `services/report` — evidence-grounded report assembly from metrics plus citations.
-- `services/agent-worker` — guardrail review, the executor port, a persona-aware local policy, and
-  the deterministic session loop (timers, action budget, remaining-budget guard, duplicate-state detection,
-  origin allowlist, cancellation, checkpoint capture, and outcome classification). A session that repeats
-  one screen for `MAX_RETRIES_SAME_STATE` actions ends as `ABANDONED`, not as a timeout.
-- `local-playwright` — a **local** executor that drives an installed Chrome or Edge against an
-  authorized target and writes `session.json`, `events.json`, and screenshots to `.artifacts/`.
-- `services/api` — transport skeleton for API Gateway/Lambda doing deterministic work only.
-- Landing page and New Run page, with an honest routing foundation and a real not-found surface.
-- 99 tests covering contracts, cost arithmetic, sampling, analytics, guardrails, reports, routing, the API,
-  the agent policy, the session loop, and session artefact redaction.
-- `demo-target/` — an authorized local demo product with deliberate friction, used as the test target.
+**A real AWS run has not been verified:** the current AWS CLI session reports `NoCredentials`.
+Local CDP and SDK actuator tests do not constitute AWS execution.
 
-**Deliberately not built yet**
+Run `aws login` interactively to establish the AWS session, then `npm run aws:deploy` to deploy the
+existing stacks, publish the console to Amplify, and execute the five-session AWS smoke test against
+the deployed demo. The script stops on any deployment or verification failure. AWS account and region
+come from the CLI configuration, and deployed identifiers come from stack outputs.
 
-- AWS execution. No Nova Act, AgentCore Browser, Step Functions, DynamoDB, or S3 calls exist in this repo.
-  `createUnconfiguredSessionExecutor()` reports itself unavailable and throws rather than emitting
-  plausible-looking synthetic events; the local Playwright executor is a development adapter behind the same
-  `SessionExecutorPort`.
-- The Population Preview, Live Run, Session Detail, Run Report, and Cost/Settings screens. They are registered
-  in the route table as `PLANNED` and render an honest placeholder instead of a fake dashboard.
-- `infra/cdk` and `infra/policies`. See `infra/README.md` for the intended topology and the reason these are
-  documentation-only until the AWS surface can be verified against real documentation.
+- `npm run test:python`: Nova actuator evidence/guardrail tests.
+- `npm run test:browser`: real UI flow (start `dev`, `dev:api`, and `dev:demo` first).
+- `npm run test:nova-actuator`: installed SDK actuator against local CDP, without a model/AWS call.
+  Build its image with `docker build --platform linux/arm64 --provenance=false -f services/agent-worker/Dockerfile -t betaversion-session:verification .`.
+- `npm run test --prefix infra/cdk` and `npm run synth --prefix infra/cdk`: infrastructure checks.
+- `npm run aws:smoke`: real AWS-only verification using `BETAVERSION_API_URL` and `BETAVERSION_DEMO_URL`.
+
+AWS spend admission uses atomic cumulative DynamoDB reservations, including the retry allowance.
+Reservations remain charged to the $250 execution allowance after interrupted runs. Displayed AWS
+costs use the dated handoff rates and measured duration; they are estimates, not invoice amounts.
 
 ---
 
@@ -64,7 +55,7 @@ services/analytics/  Deterministic metrics computed from recorded events
 services/report/     Evidence-grounded report assembly
 demo-target/         Authorized local demo product with deliberate friction
 tests/               unit, integration, fixtures
-infra/               Intended AWS topology (documentation only, for now)
+infra/               Existing AWS CDK stacks and deployment configuration
 docs/                architecture, cost model, demo script
 ```
 
@@ -77,7 +68,7 @@ npm install
 npm run dev        # front end on http://127.0.0.1:5173
 npm run dev:demo   # demo target on http://127.0.0.1:4174
 npm run l1:run     # one synthetic user, one real browser session (needs the demo target)
-npm test           # 99 unit and integration tests
+npm test           # unit and integration tests
 npm run typecheck  # tsc --noEmit across apps, packages, services, and tests
 npm run lint       # ESLint across apps, packages, services, and tests
 npm run build      # typecheck, then a production Vite build
@@ -95,9 +86,8 @@ execution. See `docs/l1-local-session.md`.
 ## Configuration
 
 `.env.example` records the configuration surface: variable names, the handoff default where one exists, and
-the rule that a secret never goes in a `VITE_` variable. No AWS entry is read by any code in this repository
-yet, because the execution plane is not built. The only variable the front end reads today is
-`VITE_AUTHORIZED_DOMAINS`, which sits beside the front end in `apps/web/.env.example`.
+the rule that a secret never goes in a `VITE_` variable. The deployed Lambda configuration is supplied by CDK. The frontend reads
+`VITE_AUTHORIZED_DOMAINS` and `VITE_API_BASE_URL`; neither may contain a secret.
 
 ## Guardrails
 

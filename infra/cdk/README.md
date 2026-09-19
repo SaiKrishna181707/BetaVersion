@@ -1,22 +1,18 @@
-# infra/cdk
+# AWS execution
 
-Planned home of the CDK application. Not created yet: see `../README.md` for why the AWS surface is deferred
-until it can be verified against current documentation.
+This CDK application wires the existing data, execution, API, and web stacks: DynamoDB,
+S3 evidence, the hosted demo, AgentCore Browser, Nova Act, Step Functions, Lambda,
+API Gateway, Amplify, and CloudWatch. Each session uses an independent AgentCore browser session.
 
-Intended layout once it lands:
+From the repository root, install infrastructure dependencies with `npm ci --prefix infra/cdk`,
+then verify with `npm run test --prefix infra/cdk` and `npm run synth --prefix infra/cdk -- --quiet`.
 
-```
-infra/cdk/
-  bin/app.ts            stack wiring and environment selection
-  lib/network-stack.ts  (not required: API Gateway and Lambda are regional)
-  lib/data-stack.ts     DynamoDB tables, the evidence bucket, retention rules
-  lib/api-stack.ts      API Gateway routes and the control-plane Lambda
-  lib/execution-stack.ts Step Functions state machine and the session worker
-  lib/observability.ts  log groups, metrics, alarms, budget
-  cdk.json
-  package.json          aws-cdk-lib, constructs, cdk CLI
-```
+With Docker running and an authenticated AWS CLI (`aws sts get-caller-identity`), run
+`npm run aws:deploy`. The script deploys these stacks, publishes the existing UI, and runs
+the real five-session AWS smoke test against the deployed demo. Configuration is read from
+environment variables in `lib/config.ts`; no account IDs or credentials belong in source.
+CDK deployment requires the target account/region to be bootstrapped.
 
-`infra/cdk` will be its own package and will not be part of the root TypeScript project, so the front end and
-service builds stay independent of the CDK toolchain and its install size. Least-privilege roles are defined
-beside the resources they apply to, and the checks in `../policies/README.md` apply to every grant.
+Deployment outputs are saved to `.artifacts/aws-outputs.json`. Passing unit tests or synthesis
+are not proof of AWS execution: the smoke test requires real traces, downloadable evidence,
+deterministic metrics, and the final report.
