@@ -62,7 +62,7 @@ So the panel shows **$1.63** for that run. This exact value is asserted in `test
   focuses the budget field while this is true.
 - `exceeds_global_ceiling` compares a single run against `GLOBAL_SPEND_CEILING_USD`. Because the global
   ceiling is **cumulative across all runs**, one run cannot reach it with these rates: the largest permitted
-  run (100 users × 300 seconds) prices at 4,956 cents, or **$49.56**, against a $250 ceiling. In that
+  run (100 users × 300 seconds) prices at 4,956 cents, or **$49.56**, against a $80 ceiling. In that
   configuration the default $45 per-run cap is what actually binds, and `exceeds_run_cap` is true.
 
 ## What happens next

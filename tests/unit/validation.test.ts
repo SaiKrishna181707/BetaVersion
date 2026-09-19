@@ -54,7 +54,7 @@ test('bounds every numeric field', () => {
   assert.match(String(errors.user_count), /1 to 100/);
   assert.match(String(errors.batch_size), /1 to 20/);
   assert.match(String(errors.max_session_seconds), /30 to 300/);
-  assert.match(String(errors.run_hard_cap_usd), /0\.01 and \$250/);
+  assert.match(String(errors.run_hard_cap_usd), /0\.01 and \$80/);
 });
 
 test('requires run caps to be exact whole cents', () => {

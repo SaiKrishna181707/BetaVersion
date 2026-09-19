@@ -160,7 +160,7 @@ See [services/nova-worker/README.md](services/nova-worker/README.md) and
 
 | Limit | Value |
 | --- | ---: |
-| Global internal spend ceiling | $250 |
+| Global internal spend ceiling | $80 |
 | Default per-run hard cap | $45 |
 | Default session | 180 s |
 | Maximum session | 300 s |

@@ -52,10 +52,10 @@ test('flags an estimate above the run cap', () => {
 });
 
 test('keeps even a maximum-size run below the global spend ceiling', () => {
-  const largest = estimateCost({ user_count: 100, max_session_seconds: 300, run_hard_cap_usd: 250 });
+  const largest = estimateCost({ user_count: 100, max_session_seconds: 300, run_hard_cap_usd: 80 });
   // 500 browser minutes at the handoff rates, plus contingency, rounded up once.
   assert.equal(largest.total_cents, 4956);
-  // The global ceiling is cumulative across runs, so no single run can reach $250.
+  // The global ceiling is cumulative across runs, so no single run can reach $80.
   assert.equal(largest.exceeds_global_ceiling, false);
 });
 
