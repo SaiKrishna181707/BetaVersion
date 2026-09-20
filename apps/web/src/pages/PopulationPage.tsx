@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { Icon } from '@centopus/ui';
 import { AgentCard } from '../components/AgentCard';
 import { PersonaEditor } from '../components/PersonaEditor';
@@ -144,7 +144,7 @@ export function PopulationPage({ runId }: { runId: string }) {
     setActiveIndex(nextIndex);
   };
 
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
     const rail = railRef.current;
     if (!rail || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
     event.preventDefault();
