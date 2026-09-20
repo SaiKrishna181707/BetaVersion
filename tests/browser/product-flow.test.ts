@@ -31,17 +31,19 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     const s3 = new S3Client({ region: 'us-east-1', credentials: { accessKeyId: 'TEST_ONLY', secretAccessKey: 'TEST_ONLY' } });
     const model = async <T>(request: JsonModelRequest): Promise<T> => {
       const skeletons = JSON.parse(request.prompt.match(/Skeletons:\n(.+)$/s)?.[1] || '[]') as Array<{ persona_id: string }>;
-      return { personas: skeletons.map((item, index) => ({
-        persona_id: item.persona_id, display_name: `Fixture User ${index + 1}`, age: 30 + index,
+      return { personas: skeletons.map(item => {
+        const sequence = Number(item.persona_id.match(/(\d+)$/)?.[1] || 1);
+        return {
+        persona_id: item.persona_id, display_name: `Fixture User ${sequence}`, age: 18 + (sequence % 73),
         gender: 'Non-binary', location: 'Fixture City', education: 'College', income_annual: 50000,
         household_context: 'Shares a home with family', occupation: 'Operations specialist',
-        biography: `Fixture biography ${index + 1}`, backstory: `Distinct fixture story ${index + 1}`,
+        biography: `Fixture biography ${sequence}`, backstory: `Distinct fixture story ${sequence}`,
         primary_motivation: 'Complete the task', motivations: 'Save time', pain_points: 'Unclear labels',
         goals: 'Reach the goal', buying_behavior: 'Compares options', decision_style: 'Practical',
         online_behavior: 'Uses web apps daily', product_expectations: 'Clear progress',
         loyalty_likelihood: 'Depends on reliability', abandonment_triggers: 'Repeated failures',
         frustration_triggers: ['Hidden next step'], accessibility_needs: [],
-      })) } as T;
+      }; }) } as T;
     };
     const api = createProductionApi({ docClient: db.client, sfnClient: sfn, s3Client: s3, environment, assertTarget: async () => undefined, model });
     await page.route('**/centopus-test-api/**', async route => {
@@ -69,22 +71,42 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('textbox', { name: 'Website', exact: true }).fill('https://example.com');
     await page.getByRole('button', { name: 'Build Product' }).click();
     await page.waitForURL('**/#/new');
-    await page.getByRole('spinbutton', { name: 'Number of agents' }).fill('1');
+    await page.getByRole('spinbutton', { name: 'Number of agents' }).fill('100');
     await page.getByRole('button', { name: 'Build Agents' }).click();
     await page.waitForURL('**/population');
     await page.getByRole('heading', { name: 'Meet the people testing your product.' }).waitFor();
+    await page.waitForFunction(() => document.querySelectorAll('[data-carousel-card]').length === 100);
+    assert.equal(await page.locator('[data-carousel-card]').count(), 100);
+    await page.locator('[data-carousel-card]').first().getByRole('button').click();
+    await page.getByText('Distinct fixture story 1', { exact: true }).waitFor();
+    await page.getByRole('button', { name: /close/i }).click();
     await page.getByRole('button', { name: 'Run Simulation' }).click();
     await page.waitForURL('**/live');
     await page.getByRole('heading', { name: 'Simulating Individual Reactions' }).waitFor();
     assert.ok(dispatched);
     const sink = { send: async () => ({}) } as unknown as Pick<S3Client, 'send'>;
-    const worker = createSessionWorker({ docClient: db.client, s3Client: sink, environment, invoke: async () => ({
-      statusCode: 200, finish_reason: 'OBJECTIVE_COMPLETE', steps: [{
-        timestamp: '2026-09-20T00:00:00Z', elapsed_ms: 100, action: { type: 'click' }, status: 'SUCCESS',
-        observation: { url: 'https://example.com', title: 'Fixture goal', checkpoints: ['goal'] },
-      }],
-    }) });
-    await worker(dispatched.sessions[0]!);
+    const worker = createSessionWorker({ docClient: db.client, s3Client: sink, environment, invoke: async input => {
+      const sequence = Number(input.persona.persona_id.match(/(\d+)$/)?.[1] || 1);
+      const sentiment = sequence <= 74 ? 'POSITIVE' : sequence <= 94 ? 'MIXED' : 'NEGATIVE';
+      return {
+        statusCode: 200,
+        finish_reason: sentiment === 'POSITIVE' ? 'OBJECTIVE_COMPLETE' : 'ABANDONED',
+        steps: [{
+          timestamp: '2026-09-20T00:00:00Z',
+          elapsed_ms: 100 + sequence,
+          action: { type: 'click', target: sentiment === 'NEGATIVE' ? 'Hidden purchase option' : 'iPhone 18 Pro' },
+          status: sentiment === 'NEGATIVE' ? 'NO_CHANGE' : 'SUCCESS',
+          agent_reason_code: sentiment === 'POSITIVE' ? 'OBJECTIVE_COMPLETE' : sentiment === 'NEGATIVE' ? 'CONFUSED' : 'EXPLORING',
+          observation: {
+            url: 'https://example.com/iphone-18-pro',
+            title: sentiment === 'NEGATIVE' ? 'Compare iPhone' : 'Buy iPhone 18 Pro',
+            objective_matches: sentiment === 'POSITIVE' ? ['iPhone 18 Pro purchase route'] : [],
+          },
+          thought: sentiment === 'NEGATIVE' ? 'The purchase option was not obvious to this persona.' : 'The product route was visible.',
+        }],
+      };
+    } });
+    for (const session of dispatched.sessions) await worker(session);
     const reportModel = async <T>(request: JsonModelRequest): Promise<T> => {
       const drafts = JSON.parse(request.prompt.match(/Drafts:\n(.+)$/s)?.[1] || '[]') as Array<{ session_id: string; draft: { direct_feedback?: string } }>;
       return { feedback: drafts.map(item => ({ session_id: item.session_id, direct_feedback: item.draft.direct_feedback })) } as T;
@@ -95,10 +117,15 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('heading', { name: 'Agent Results' }).waitFor();
     await page.getByRole('button', { name: 'Agents', exact: true }).waitFor();
     await page.getByLabel('Filter feedback').waitFor();
-    assert.doesNotMatch(await page.locator('body').innerText(), /Synthetic Beta|BetaVersion|synthetic-beta/i);
+    assert.equal(await page.locator('.centopus-feedback-card').count(), 100);
+    const resultText = await page.locator('body').innerText();
+    assert.match(resultText, /Positive\s+74 agents/);
+    assert.match(resultText, /Mixed\s+20 agents/);
+    assert.match(resultText, /Negative\s+6 agents/);
+    assert.doesNotMatch(resultText, /Synthetic Beta|BetaVersion|synthetic-beta/i);
     await page.screenshot({ path: '.artifacts/centopus-fixture-report.png', fullPage: true });
     await page.goto(`${origin}/#/runs/${dispatched.runId}/sessions/${dispatched.sessions[0]!.session_id}`);
-    await page.getByText('Fixture goal', { exact: false }).first().waitFor();
+    await page.getByRole('heading', { name: 'Fixture User 1', exact: true, level: 1 }).waitFor();
     assert.deepEqual(errors, []);
   } finally {
     await browser.close(); await server.close();
