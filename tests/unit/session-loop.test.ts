@@ -7,12 +7,12 @@ import {
   type ObservedElement,
   type PageObservation,
   type SessionPlan,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 import {
   runSessionLoop,
   type ActionOutcome,
   type BrowserPagePort,
-} from '@synthetic-beta/agent-worker';
+} from '@centopus/agent-worker';
 import { CHECKPOINT_PLAN, personaFixture } from '../fixtures/run-fixtures';
 
 type PerformableAction = Parameters<BrowserPagePort['perform']>[0];

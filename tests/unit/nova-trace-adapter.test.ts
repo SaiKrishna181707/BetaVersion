@@ -4,7 +4,7 @@ import {
   adaptNovaTraceToBehaviorEvents,
   adaptNovaTrajectoryToSessionResult,
   type RawNovaTrajectory,
-} from '@synthetic-beta/agent-worker';
+} from '@centopus/agent-worker';
 import { CHECKPOINT_PLAN, personaFixture } from '../fixtures/run-fixtures';
 
 test('adapts raw Nova steps to valid BehaviorEvent array without hallucinated events', () => {

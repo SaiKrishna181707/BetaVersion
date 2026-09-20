@@ -3,7 +3,7 @@ import {
   type SessionExecutorPort,
   type SessionPlan,
   type SessionResult,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 export class SessionExecutorUnavailableError extends Error {
   readonly code = 'EXECUTION_NOT_CONFIGURED';

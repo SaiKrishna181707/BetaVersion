@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { GUARDRAILS, formatUsd } from '@synthetic-beta/contracts';
-import { Badge, Brand, Icon } from '@synthetic-beta/ui';
+import { GUARDRAILS, formatUsd } from '@centopus/contracts';
+import { Badge, Brand, Icon } from '@centopus/ui';
 import { productApi } from '../lib/api';
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {

@@ -4,7 +4,7 @@ import { App } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { createStacks } from '../../infra/cdk/stacks';
 import { loadDeploymentConfig, validationConfig } from '../../infra/cdk/config';
-import { GUARDRAILS } from '@synthetic-beta/contracts';
+import { GUARDRAILS } from '@centopus/contracts';
 
 test('CDK defines main storage schema, public judge API, cross-account worker and shared limits', () => {
   const app = new App();

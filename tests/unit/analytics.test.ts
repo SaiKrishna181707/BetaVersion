@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeRunMetrics, median } from '@synthetic-beta/analytics';
+import { computeRunMetrics, median } from '@centopus/analytics';
 import { CHECKPOINT_PLAN, runFixture } from '../fixtures/run-fixtures';
 
 function metrics() {

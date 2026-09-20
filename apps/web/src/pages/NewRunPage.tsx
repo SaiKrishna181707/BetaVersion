@@ -5,8 +5,8 @@ import {
   formatUsd,
   type CostEstimate,
   type RunConfiguration,
-} from '@synthetic-beta/contracts';
-import { Badge, Icon } from '@synthetic-beta/ui';
+} from '@centopus/contracts';
+import { Badge, Icon } from '@centopus/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
 import { initialConfiguration } from '../lib/config';
 import {

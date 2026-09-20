@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCohort, profileCohort } from '@synthetic-beta/population';
-import type { PopulationSpec } from '@synthetic-beta/contracts';
+import { buildCohort, profileCohort } from '@centopus/population';
+import type { PopulationSpec } from '@centopus/contracts';
 
 const spec: PopulationSpec = {
   population_seed: 'seed-a',

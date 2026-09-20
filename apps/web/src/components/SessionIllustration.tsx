@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Badge, Icon } from '@synthetic-beta/ui';
+import { Badge, Icon } from '@centopus/ui';
 import { ILLUSTRATIVE_SESSIONS } from '../data/illustration';
 
 export function SessionIllustration() {

@@ -5,7 +5,7 @@ import {
   type DecisionInput,
   type ObservedElement,
   type SyntheticPersona,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 /**
  * A local, deterministic policy. It never runs a scripted click path: every decision is

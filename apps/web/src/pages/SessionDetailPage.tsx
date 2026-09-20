@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BehaviorEvent, SyntheticBetaReport } from '@synthetic-beta/contracts';
-import { Badge, Icon } from '@synthetic-beta/ui';
+import type { BehaviorEvent, CentopusReport } from '@centopus/contracts';
+import { Badge, Icon } from '@centopus/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
 import {
   productApi,
@@ -8,7 +8,7 @@ import {
   type SessionDetail,
 } from '../lib/api';
 
-type ReportFeedback = SyntheticBetaReport['agent_feedback'][number];
+type ReportFeedback = CentopusReport['agent_feedback'][number];
 
 function formatDuration(milliseconds: number | undefined): string {
   if (typeof milliseconds !== 'number') return '—';

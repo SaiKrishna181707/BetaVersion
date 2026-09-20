@@ -6,7 +6,7 @@ import {
   type SyntheticPersona,
   type TechnicalAbility,
   type TraitMix,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 const TECHNICAL_ABILITY: readonly TechnicalAbility[] = ['LOW', 'MEDIUM', 'HIGH'];
 const PRODUCT_FAMILIARITY: readonly SyntheticPersona['product_familiarity'][] = ['NEW', 'CATEGORY_FAMILIAR', 'POWER_USER'];

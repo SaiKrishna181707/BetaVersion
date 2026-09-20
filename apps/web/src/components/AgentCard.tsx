@@ -1,4 +1,4 @@
-import { Badge, Icon } from '@synthetic-beta/ui';
+import { Badge, Icon } from '@centopus/ui';
 import type { RichPersona } from '../lib/api';
 
 function initials(name: string): string {

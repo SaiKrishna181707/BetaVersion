@@ -1,5 +1,5 @@
-import { GUARDRAILS } from '@synthetic-beta/contracts';
-import { Field, FieldsetTitle, Icon } from '@synthetic-beta/ui';
+import { GUARDRAILS } from '@centopus/contracts';
+import { Field, FieldsetTitle, Icon } from '@centopus/ui';
 import type { RunFieldsProps } from './ProductFields';
 
 export function ExecutionFields({ configuration, errors, update }: RunFieldsProps) {

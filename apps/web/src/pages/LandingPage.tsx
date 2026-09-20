@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Brand, Icon } from '@synthetic-beta/ui';
+import { Brand, Icon } from '@centopus/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
 
 const loadingMessages = [

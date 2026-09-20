@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApiHandler } from '@synthetic-beta/api';
+import { createApiHandler } from '@centopus/api';
 import { AUTHORIZED_DOMAINS, validConfiguration } from '../fixtures/run-fixtures';
 
 const handler = createApiHandler(AUTHORIZED_DOMAINS);

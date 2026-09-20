@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatUsd, type CostEstimate, type RunConfiguration } from '@synthetic-beta/contracts';
-import { Badge, Button, Icon } from '@synthetic-beta/ui';
+import { formatUsd, type CostEstimate, type RunConfiguration } from '@centopus/contracts';
+import { Badge, Button, Icon } from '@centopus/ui';
 import { productApi } from '../lib/api';
 
 export function RunReview({

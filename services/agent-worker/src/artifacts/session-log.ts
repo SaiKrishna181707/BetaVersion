@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BehaviorEvent, SessionResult } from '@synthetic-beta/contracts';
+import type { BehaviorEvent, SessionResult } from '@centopus/contracts';
 
 export interface SessionArtifactBundle {
   directory: string;

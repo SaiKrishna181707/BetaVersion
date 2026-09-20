@@ -1,5 +1,5 @@
 import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
-import { GUARDRAILS } from '@synthetic-beta/contracts';
+import { GUARDRAILS } from '@centopus/contracts';
 import type { DocumentClient } from './aws-store';
 
 /** Adapted from foundation's atomic reservations; main's records stay top-level.

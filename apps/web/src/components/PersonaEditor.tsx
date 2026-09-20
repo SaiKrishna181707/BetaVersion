@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Button, Icon } from '@synthetic-beta/ui';
+import { Button, Icon } from '@centopus/ui';
 import type { RichPersona } from '../lib/api';
 
 const levels = ['LOW', 'MEDIUM', 'HIGH'] as const;

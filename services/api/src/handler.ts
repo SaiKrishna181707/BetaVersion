@@ -1,5 +1,5 @@
-import { estimateCost, validateRunConfiguration, type PopulationSpec } from '@synthetic-beta/contracts';
-import { buildCohort, profileCohort } from '@synthetic-beta/population';
+import { estimateCost, validateRunConfiguration, type PopulationSpec } from '@centopus/contracts';
+import { buildCohort, profileCohort } from '@centopus/population';
 
 interface ApiRequest { httpMethod: string; path: string; body?: string | null }
 interface ApiResponse { statusCode: number; headers: Record<string, string>; body: string }

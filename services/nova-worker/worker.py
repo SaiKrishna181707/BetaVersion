@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 DEFAULT_REGION = "us-east-1"
 DEFAULT_MODEL_ID = "nova-act-latest"
-DEFAULT_WORKFLOW_NAME = "synthetic-beta-browser-session"
+DEFAULT_WORKFLOW_NAME = "centopus-browser-session"
 DEFAULT_BROWSER_IDENTIFIER = "aws.browser.v1"
 MAX_ACTIONS = 40
 MIN_SESSION_SECONDS = 30

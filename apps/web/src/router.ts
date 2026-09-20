@@ -4,7 +4,7 @@ import {
   type RouteDefinition,
   type RouteId,
   type RouteStatus,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 export type { RouteId, RouteStatus, RouteDefinition };
 export { FALLBACK_TITLE };

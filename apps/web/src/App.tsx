@@ -1,5 +1,5 @@
 import { Component, useEffect, useSyncExternalStore, type ReactNode } from 'react';
-import { Brand, Button } from '@synthetic-beta/ui';
+import { Brand, Button } from '@centopus/ui';
 import { LandingPage } from './pages/LandingPage';
 import { NewRunPage } from './pages/NewRunPage';
 import { PopulationPage } from './pages/PopulationPage';

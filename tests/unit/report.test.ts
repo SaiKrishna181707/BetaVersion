@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ReportNarratorPort, SyntheticBetaReport } from '@synthetic-beta/contracts';
-import { computeRunMetrics } from '@synthetic-beta/analytics';
-import { buildSyntheticBetaReport } from '@synthetic-beta/report';
+import type { ReportNarratorPort, CentopusReport } from '@centopus/contracts';
+import { computeRunMetrics } from '@centopus/analytics';
+import { buildCentopusReport } from '@centopus/report';
 import { CHECKPOINT_PLAN, runFixture, validConfiguration } from '../fixtures/run-fixtures';
 
 const { personas, sessions, events } = runFixture();
 const metrics = computeRunMetrics({ run_id: 'run-1', sessions, events, personas, checkpoint_plan: CHECKPOINT_PLAN });
 
-function build(narrator?: ReportNarratorPort): Promise<SyntheticBetaReport> {
-  return buildSyntheticBetaReport({
+function build(narrator?: ReportNarratorPort): Promise<CentopusReport> {
+  return buildCentopusReport({
     configuration: validConfiguration,
     metrics,
     sessions,

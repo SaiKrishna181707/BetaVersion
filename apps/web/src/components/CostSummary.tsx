@@ -5,8 +5,8 @@ import {
   formatUsd,
   type CostEstimate,
   type RunConfiguration,
-} from '@synthetic-beta/contracts';
-import { Badge, Field, Icon } from '@synthetic-beta/ui';
+} from '@centopus/contracts';
+import { Badge, Field, Icon } from '@centopus/ui';
 
 const model = HANDOFF_COST_MODEL;
 

@@ -10,7 +10,7 @@ import {
   type PageObservation,
   type SessionStopReason,
   type SessionStatus,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 import { assertSessionPlanWithinGuardrails } from '../session-executor';
 import type { BrowserPagePort } from './page-port';
 

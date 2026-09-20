@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRunConfiguration } from '@synthetic-beta/contracts';
+import { validateRunConfiguration } from '@centopus/contracts';
 import { AUTHORIZED_DOMAINS, expectInvalid, expectValid, validConfiguration } from '../fixtures/run-fixtures';
 
 test('accepts an authorized https target', () => {

@@ -1,4 +1,4 @@
-import type { ActionResult, PageObservation } from '@synthetic-beta/contracts';
+import type { ActionResult, PageObservation } from '@centopus/contracts';
 
 export interface ActionOutcome {
   result: ActionResult;

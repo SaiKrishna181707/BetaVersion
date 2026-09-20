@@ -1,4 +1,4 @@
-import { GUARDRAILS, type RunConfiguration } from '@synthetic-beta/contracts';
+import { GUARDRAILS, type RunConfiguration } from '@centopus/contracts';
 
 const configuredDomains = (import.meta.env.VITE_AUTHORIZED_DOMAINS ?? 'localhost,127.0.0.1')
   .split(',')

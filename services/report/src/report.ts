@@ -7,8 +7,8 @@ import {
   type RunMetrics,
   type SessionRecord,
   type SyntheticPersona,
-  type SyntheticBetaReport,
-} from '@synthetic-beta/contracts';
+  type CentopusReport,
+} from '@centopus/contracts';
 
 export interface BuildReportInput {
   configuration: RunConfiguration;
@@ -233,7 +233,7 @@ function completionFinding(
  * Assembles an evidence-grounded report. Findings and every number come from recorded
  * events; the optional narrator may only add labelled interpretation.
  */
-export async function buildSyntheticBetaReport(input: BuildReportInput): Promise<SyntheticBetaReport> {
+export async function buildCentopusReport(input: BuildReportInput): Promise<CentopusReport> {
   const limit = input.max_evidence_per_finding ?? DEFAULT_MAX_EVIDENCE;
   const bySession = indexEvents(input.events);
 

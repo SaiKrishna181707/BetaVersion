@@ -1,4 +1,4 @@
-import type { SessionExecutorPort, SessionResult } from '@synthetic-beta/contracts';
+import type { SessionExecutorPort, SessionResult } from '@centopus/contracts';
 import { createLocalAgentPolicy, type SandboxAccount } from '../policy/local-policy';
 import { assertSessionPlanWithinGuardrails } from '../session-executor';
 import { PlaywrightPage } from './playwright-page';

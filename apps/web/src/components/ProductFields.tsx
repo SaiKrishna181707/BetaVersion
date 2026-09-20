@@ -1,5 +1,5 @@
-import type { ConfigurationErrors, RunConfiguration } from '@synthetic-beta/contracts';
-import { Field, FieldsetTitle } from '@synthetic-beta/ui';
+import type { ConfigurationErrors, RunConfiguration } from '@centopus/contracts';
+import { Field, FieldsetTitle } from '@centopus/ui';
 
 export interface RunFieldsProps {
   configuration: RunConfiguration;

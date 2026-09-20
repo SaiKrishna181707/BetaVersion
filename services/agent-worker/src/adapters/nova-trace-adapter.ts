@@ -6,7 +6,7 @@ import type {
   SessionResult,
   SessionStatus,
   SessionStopReason,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 export interface RawNovaAction {
   type?: string;

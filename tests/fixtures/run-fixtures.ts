@@ -5,7 +5,7 @@ import {
   type SessionRecord,
   type SyntheticPersona,
   type ValidationResult,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 export const AUTHORIZED_DOMAINS: readonly string[] = ['localhost', '127.0.0.1', 'demo.local'];
 

@@ -1,5 +1,5 @@
 {
-  "name": "@synthetic-beta/agent-worker",
+  "name": "@centopus/agent-worker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,9 @@
   "dependencies": {
     "@aws-sdk/client-lambda": "^3.1136.0",
     "@aws-sdk/client-sts": "^3.1136.0",
-    "@synthetic-beta/analytics": "*",
-    "@synthetic-beta/contracts": "*",
-    "@synthetic-beta/population": "*",
+    "@centopus/analytics": "*",
+    "@centopus/contracts": "*",
+    "@centopus/population": "*",
     "playwright-core": "^1.49.0"
   }
 }

@@ -3,7 +3,7 @@ import { DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand } 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import { GUARDRAILS, type SessionPlan, type SyntheticPersona } from '@synthetic-beta/contracts';
+import { GUARDRAILS, type SessionPlan, type SyntheticPersona } from '@centopus/contracts';
 import type { DocumentClient } from '../../api/src/aws-store';
 import { adaptNovaTrajectoryToSessionResult, type RawNovaTrajectory } from './adapters/nova-trace-adapter';
 

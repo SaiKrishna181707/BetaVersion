@@ -10,8 +10,8 @@ import {
   type PopulationSpec,
   type RunConfiguration,
   type SyntheticPersona,
-} from '@synthetic-beta/contracts';
-import { buildCohort, profileCohort } from '@synthetic-beta/population';
+} from '@centopus/contracts';
+import { buildCohort, profileCohort } from '@centopus/population';
 import { assertPublicNetworkTarget, buildProductIntelligence } from './product-intelligence';
 import { applyPersonaPatch } from './persona';
 import { getGeminiApiKey } from './secrets';

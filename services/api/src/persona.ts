@@ -1,4 +1,4 @@
-import type { EditablePersonaFields, SyntheticPersona } from '@synthetic-beta/contracts';
+import type { EditablePersonaFields, SyntheticPersona } from '@centopus/contracts';
 
 const ENUMS = {
   technical_ability: ['LOW', 'MEDIUM', 'HIGH'],

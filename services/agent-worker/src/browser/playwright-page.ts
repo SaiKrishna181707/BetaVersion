@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright-core';
-import type { ActionResult, PageObservation } from '@synthetic-beta/contracts';
+import type { ActionResult, PageObservation } from '@centopus/contracts';
 import type { ActionOutcome, BrowserPagePort } from './page-port';
 import { OBSERVE_SOURCE } from './observation-script';
 

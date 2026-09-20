@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { DecisionInput, ObservedElement, PageObservation } from '@synthetic-beta/contracts';
+import type { DecisionInput, ObservedElement, PageObservation } from '@centopus/contracts';
 import {
   abandonThreshold,
   composeTextInput,
@@ -9,7 +9,7 @@ import {
   objectiveKeywords,
   scoreElement,
   tokenize,
-} from '@synthetic-beta/agent-worker';
+} from '@centopus/agent-worker';
 import { personaFixture } from '../fixtures/run-fixtures';
 
 const OBJECTIVE = 'Create a project and invite a teammate to collaborate.';

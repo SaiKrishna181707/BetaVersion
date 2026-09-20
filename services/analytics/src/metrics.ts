@@ -7,7 +7,7 @@ import {
   type SessionOutcome,
   type SessionRecord,
   type SyntheticPersona,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 export interface ComputeRunMetricsInput {
   run_id: string;

@@ -1,8 +1,8 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { computeRunMetrics } from '@synthetic-beta/analytics';
-import { buildSyntheticBetaReport } from '@synthetic-beta/report';
+import { computeRunMetrics } from '@centopus/analytics';
+import { buildCentopusReport } from '@centopus/report';
 import type {
   BehaviorEvent,
   SyntheticPersona,
@@ -10,7 +10,7 @@ import type {
   SessionRecord,
   SessionStatus,
 
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 import { queryAll, type DocumentClient } from '../../api/src/aws-store';
 import { SFNClient, DescribeExecutionCommand } from '@aws-sdk/client-sfn';
@@ -154,7 +154,7 @@ export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pic
     checkpoint_plan: checkpointPlan,
   });
 
-  const report = await buildSyntheticBetaReport({
+  const report = await buildCentopusReport({
     configuration,
     metrics,
     sessions,

@@ -1,4 +1,4 @@
-import { Brand, Icon } from '@synthetic-beta/ui';
+import { Brand, Icon } from '@centopus/ui';
 import type { RouteDefinition } from '../router';
 
 export function NotFoundPage({ requested, planned }: { requested: string; planned: RouteDefinition | null }) {

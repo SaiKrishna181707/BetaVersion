@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { SessionResult } from '@synthetic-beta/contracts';
-import { writeSessionArtifacts } from '@synthetic-beta/agent-worker';
+import type { SessionResult } from '@centopus/contracts';
+import { writeSessionArtifacts } from '@centopus/agent-worker';
 import { eventFixture, personaFixture } from '../fixtures/run-fixtures';
 
 const PASSWORD = 'sandbox';
@@ -29,7 +29,7 @@ function sessionResult(overrides: Partial<SessionResult> = {}): SessionResult {
 }
 
 async function withTempDirectory<T>(run: (directory: string) => Promise<T>): Promise<T> {
-  const directory = await mkdtemp(join(tmpdir(), 'synthetic-beta-artifacts-'));
+  const directory = await mkdtemp(join(tmpdir(), 'centopus-artifacts-'));
   try {
     return await run(directory);
   } finally {

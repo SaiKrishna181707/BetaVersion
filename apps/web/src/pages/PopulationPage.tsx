@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Icon } from '@synthetic-beta/ui';
+import { Badge, Icon } from '@centopus/ui';
 import { AgentCard } from '../components/AgentCard';
 import { PersonaEditor } from '../components/PersonaEditor';
 import { WorkspaceShell } from '../components/WorkspaceShell';

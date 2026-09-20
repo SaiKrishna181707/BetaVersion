@@ -53,4 +53,4 @@ Start the UI with `npm run dev`. Copy `apps/web/.env.example` to `apps/web/.env`
 - [Demo script](docs/demo-script.md)
 - [Submission packet](docs/submission-packet.md)
 
-Internal package names such as @synthetic-beta/* and the GitHub repository identifier remain unchanged.
+Internal package names use the @centopus/* scope, matching the GitHub repository at SaiKrishna181707/centopus.

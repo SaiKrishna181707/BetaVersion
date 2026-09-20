@@ -29,7 +29,7 @@ export interface ReportFinding {
   interpretation_source: 'NONE' | 'NARRATOR';
 }
 
-export interface SyntheticBetaReport {
+export interface CentopusReport {
   schema_version: 1;
   run_id: string;
   generated_at: string;

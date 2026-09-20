@@ -6,7 +6,7 @@ import {
   estimateCost,
   formatMicroUsd,
   formatUsd,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 import { validConfiguration } from '../fixtures/run-fixtures';
 
 test('prices the documented configuration deterministically', () => {

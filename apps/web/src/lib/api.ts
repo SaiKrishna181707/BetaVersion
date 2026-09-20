@@ -6,9 +6,9 @@ import type {
   RunConfiguration,
   RunMetrics,
   SessionStatus,
-  SyntheticBetaReport,
+  CentopusReport,
   SyntheticPersona,
-} from '@synthetic-beta/contracts';
+} from '@centopus/contracts';
 
 export type UiProductIntelligence = ProductIntelligence & {
   key_features?: string[];
@@ -180,7 +180,7 @@ export const productApi = {
   },
 
   getReport(runId: string) {
-    return request<{ report: SyntheticBetaReport; download_url?: string; evidence_warning?: string }>(
+    return request<{ report: CentopusReport; download_url?: string; evidence_warning?: string }>(
       `/runs/${encodeURIComponent(runId)}/report`,
       undefined,
       { allow404: true },
@@ -200,4 +200,4 @@ export const productApi = {
   },
 };
 
-export const PRODUCT_INTELLIGENCE_KEY = 'synthetic-beta:product-intelligence:v1';
+export const PRODUCT_INTELLIGENCE_KEY = 'centopus:product-intelligence:v1';

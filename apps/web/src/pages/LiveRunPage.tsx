@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Icon } from '@synthetic-beta/ui';
+import { Badge, Icon } from '@centopus/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
 import { productApi, type RichPersona, type RunSummary, type SessionItem } from '../lib/api';
 

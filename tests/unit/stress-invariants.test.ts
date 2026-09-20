@@ -5,9 +5,9 @@ import {
   estimateCost,
   validateRunConfiguration,
   type SessionPlan,
-} from '@synthetic-beta/contracts';
-import { buildCohort } from '@synthetic-beta/population';
-import { reviewSessionPlan } from '@synthetic-beta/agent-worker';
+} from '@centopus/contracts';
+import { buildCohort } from '@centopus/population';
+import { reviewSessionPlan } from '@centopus/agent-worker';
 import { AUTHORIZED_DOMAINS, CHECKPOINT_PLAN, personaFixture, validConfiguration } from '../fixtures/run-fixtures';
 
 test('cost estimate is monotonic across the full supported user/time grid', () => {

@@ -1,6 +1,6 @@
-import { estimateCost, validateRunConfiguration, type RunDraft, type RunGateway } from '@synthetic-beta/contracts';
+import { estimateCost, validateRunConfiguration, type RunDraft, type RunGateway } from '@centopus/contracts';
 
-export const DRAFT_STORAGE_KEY = 'synthetic-beta:reviewed-draft:v1';
+export const DRAFT_STORAGE_KEY = 'centopus:reviewed-draft:v1';
 type DraftStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 /** A local adapter only. It cannot launch browsers, call AWS, or generate synthetic results. */

@@ -1,5 +1,5 @@
 {
-  "name": "@synthetic-beta/api",
+  "name": "@centopus/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1136.0",
-    "@synthetic-beta/contracts": "*",
-    "@synthetic-beta/population": "*"
+    "@centopus/contracts": "*",
+    "@centopus/population": "*"
   }
 }

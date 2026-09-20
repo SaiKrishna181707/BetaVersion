@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GUARDRAILS, type SessionPlan } from '@synthetic-beta/contracts';
+import { GUARDRAILS, type SessionPlan } from '@centopus/contracts';
 import {
   SessionExecutorUnavailableError,
   SessionPlanRejectedError,
   assertSessionPlanWithinGuardrails,
   createUnconfiguredSessionExecutor,
   reviewSessionPlan,
-} from '@synthetic-beta/agent-worker';
+} from '@centopus/agent-worker';
 import { CHECKPOINT_PLAN, personaFixture } from '../fixtures/run-fixtures';
 
 function planFixture(overrides: Partial<SessionPlan> = {}): SessionPlan {

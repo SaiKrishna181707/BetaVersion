@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { SyntheticBetaReport } from '@synthetic-beta/contracts';
-import { Badge, Icon } from '@synthetic-beta/ui';
+import type { CentopusReport } from '@centopus/contracts';
+import { Badge, Icon } from '@centopus/ui';
 import { WorkspaceShell } from '../components/WorkspaceShell';
 import {
   productApi,
@@ -21,7 +21,7 @@ function duration(milliseconds: number | null | undefined): string {
 }
 
 export function RunReportPage({ runId }: { runId: string }) {
-  const [report, setReport] = useState<SyntheticBetaReport | null>(null);
+  const [report, setReport] = useState<CentopusReport | null>(null);
   const [run, setRun] = useState<RunSummary | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [personas, setPersonas] = useState<Map<string, RichPersona>>(new Map());

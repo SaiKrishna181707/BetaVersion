@@ -72,7 +72,7 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('link', { name: 'View Results' }).click({ timeout: 10000 });
     await page.waitForURL('**/report');
     await page.getByText('AWS billing evidence is not connected').waitFor();
-    assert.doesNotMatch(await page.locator('body').innerText(), /Synthetic Beta|BetaVersion/);
+    assert.doesNotMatch(await page.locator('body').innerText(), /Synthetic Beta|BetaVersion|synthetic-beta/i);
     await page.screenshot({ path: '.artifacts/centopus-fixture-report.png', fullPage: true });
     await page.goto(`${origin}/#/runs/${dispatched.runId}/sessions/${dispatched.sessions[0]!.session_id}`);
     await page.getByText('Fixture goal', { exact: false }).first().waitFor();

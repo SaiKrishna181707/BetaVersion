@@ -1,8 +1,8 @@
 {
-  "name": "@synthetic-beta/report",
+  "name": "@centopus/report",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@synthetic-beta/contracts": "*" }
+  "dependencies": { "@centopus/contracts": "*" }
 }

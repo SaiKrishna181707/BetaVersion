@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPersonaPatch, fallbackProductIntelligence, parseGeminiIntelligence, stripHtml, validateProductIntelligenceRequest } from '@synthetic-beta/api';
+import { applyPersonaPatch, fallbackProductIntelligence, parseGeminiIntelligence, stripHtml, validateProductIntelligenceRequest } from '@centopus/api';
 import { personaFixture } from '../fixtures/run-fixtures';
 
 test('accepts only public HTTPS product pages for intelligence', () => {

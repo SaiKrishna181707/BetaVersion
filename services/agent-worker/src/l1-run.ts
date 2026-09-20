@@ -1,8 +1,8 @@
-import { GUARDRAILS } from '@synthetic-beta/contracts';
+import { GUARDRAILS } from '@centopus/contracts';
 import { join } from 'node:path';
-import { computeRunMetrics } from '@synthetic-beta/analytics';
-import { buildCohort } from '@synthetic-beta/population';
-import type { RunConfiguration, RunMetrics, SessionPlan, SessionRecord } from '@synthetic-beta/contracts';
+import { computeRunMetrics } from '@centopus/analytics';
+import { buildCohort } from '@centopus/population';
+import type { RunConfiguration, RunMetrics, SessionPlan, SessionRecord } from '@centopus/contracts';
 import { writeSessionArtifacts } from './artifacts/session-log';
 import { createLocalBrowserSessionExecutor, defaultSandboxAccount } from './browser/local-executor';
 

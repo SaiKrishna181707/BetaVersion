@@ -1,4 +1,4 @@
-import type { ProductIntelligence, ProductIntelligenceRequest } from '@synthetic-beta/contracts';
+import type { ProductIntelligence, ProductIntelligenceRequest } from '@centopus/contracts';
 import { lookup } from 'node:dns/promises';
 import { get } from 'node:https';
 import { isIP } from 'node:net';
