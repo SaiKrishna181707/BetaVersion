@@ -9,6 +9,7 @@ import { SessionDetailPage } from './pages/SessionDetailPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { parseRoute, titleFor, type RouteMatch } from './router';
 import { authConfigured, beginLogin, finishLogin, tokens } from './lib/auth';
+import { apiBaseUrl } from './lib/api';
 
 const subscribe = (callback: () => void) => {
   window.addEventListener('hashchange', callback);
@@ -45,7 +46,8 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
 
 
 function AuthGate({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(() => !authConfigured() || Boolean(tokens()));
+  const productionAuthMisconfigured = import.meta.env.PROD && !authConfigured() && Boolean(apiBaseUrl());
+  const [ready, setReady] = useState(() => !productionAuthMisconfigured && (!authConfigured() || Boolean(tokens())));
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -58,6 +60,9 @@ function AuthGate({ children }: { children: ReactNode }) {
     }).catch(cause => setError(cause instanceof Error ? cause.message : 'Sign-in failed.'));
   }, []);
 
+  if (productionAuthMisconfigured) {
+    return <main className="error-page"><Brand /><h1>Authentication configuration is missing.</h1><p>This production build cannot safely connect to the protected Centopus API until Cognito PKCE settings are configured.</p></main>;
+  }
   if (!authConfigured() || ready) return <>{children}</>;
   return <main className="error-page"><Brand /><h1>{error ? 'Sign-in failed.' : 'Sign in to Centopus'}</h1><p>{error || 'Authenticate as an authorized operator to access runs and reports.'}</p><Button onClick={() => void beginLogin().catch(cause => setError(cause instanceof Error ? cause.message : 'Could not start sign-in.'))}>{error ? 'Try again' : 'Sign in'}</Button></main>;
 }
