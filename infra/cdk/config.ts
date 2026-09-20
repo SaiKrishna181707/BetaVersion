@@ -1,6 +1,6 @@
 export interface DeploymentConfig {
   controlAccount: string; agentAccount: string; region: string; prefix: string;
-  webOrigin: string; externalId: string; geminiSecretArn?: string;
+  webOrigin: string; externalId: string; cognitoDomainPrefix: string; geminiSecretArn?: string;
   existingStateTable?: string; existingArtifactBucket?: string; alarmEmail?: string;
 }
 
@@ -15,8 +15,10 @@ export function loadDeploymentConfig(env: NodeJS.ProcessEnv): DeploymentConfig {
   if (!env.CROSS_ACCOUNT_EXTERNAL_ID || env.CROSS_ACCOUNT_EXTERNAL_ID.length < 16) throw new Error('Set CROSS_ACCOUNT_EXTERNAL_ID (at least 16 characters).');
   const prefix = env.CENTOPUS_PREFIX ?? 'centopus';
   if (!/^[a-z][a-z0-9-]{2,25}$/.test(prefix)) throw new Error('Invalid CENTOPUS_PREFIX.');
+  const cognitoDomainPrefix = env.COGNITO_DOMAIN_PREFIX ?? `${prefix}-operators`;
+  if (!/^[a-z0-9-]{1,63}$/.test(cognitoDomainPrefix)) throw new Error('Invalid COGNITO_DOMAIN_PREFIX.');
   return { controlAccount: env.CENTOPUS_CONTROL_ACCOUNT!, agentAccount: env.CENTOPUS_AGENT_ACCOUNT!,
-    region: env.AWS_REGION ?? 'us-east-1', prefix, webOrigin, externalId: env.CROSS_ACCOUNT_EXTERNAL_ID,
+    region: env.AWS_REGION ?? 'us-east-1', prefix, webOrigin, externalId: env.CROSS_ACCOUNT_EXTERNAL_ID, cognitoDomainPrefix,
     geminiSecretArn: env.GEMINI_SECRET_ARN, existingStateTable: env.STATE_TABLE,
     existingArtifactBucket: env.ARTIFACT_BUCKET, alarmEmail: env.ALARM_EMAIL };
 }
@@ -24,5 +26,5 @@ export function loadDeploymentConfig(env: NodeJS.ProcessEnv): DeploymentConfig {
 /** Only used for offline synthesis/tests. These are explicitly fictitious accounts. */
 export const validationConfig: DeploymentConfig = {
   controlAccount: '111111111111', agentAccount: '222222222222', region: 'us-east-1',
-  prefix: 'centopus-validation', webOrigin: 'https://centopus.example.com', externalId: 'offline-validation-only',
+  prefix: 'centopus-validation', webOrigin: 'https://centopus.example.com', externalId: 'offline-validation-only', cognitoDomainPrefix: 'centopus-validation-operators',
 };

@@ -1,4 +1,4 @@
-import { Component, useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { Component, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Brand, Button } from '@centopus/ui';
 import { LandingPage } from './pages/LandingPage';
 import { NewRunPage } from './pages/NewRunPage';
@@ -8,6 +8,7 @@ import { RunReportPage } from './pages/RunReportPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { parseRoute, titleFor, type RouteMatch } from './router';
+import { authConfigured, beginLogin, finishLogin, tokens } from './lib/auth';
 
 const subscribe = (callback: () => void) => {
   window.addEventListener('hashchange', callback);
@@ -42,6 +43,25 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
+
+function AuthGate({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(() => !authConfigured() || Boolean(tokens()));
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code || !window.location.pathname.endsWith('/auth/callback')) return;
+    finishLogin(code).then(() => {
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+      setReady(true);
+    }).catch(cause => setError(cause instanceof Error ? cause.message : 'Sign-in failed.'));
+  }, []);
+
+  if (!authConfigured() || ready) return <>{children}</>;
+  return <main className="error-page"><Brand /><h1>{error ? 'Sign-in failed.' : 'Sign in to Centopus'}</h1><p>{error || 'Authenticate as an authorized operator to access runs and reports.'}</p><Button onClick={() => void beginLogin().catch(cause => setError(cause instanceof Error ? cause.message : 'Could not start sign-in.'))}>{error ? 'Try again' : 'Sign in'}</Button></main>;
+}
+
 function RouteSurface({ match }: { match: RouteMatch }) {
   if (match.definition?.id === 'new-run') return <NewRunPage />;
   if (match.definition?.id === 'population-preview' && match.params.runId) {
@@ -71,6 +91,6 @@ export function App() {
 
   return <AppErrorBoundary>
     <a className="skip-link" href="#main">Skip to content</a>
-    <RouteSurface match={match} />
+    <AuthGate><RouteSurface match={match} /></AuthGate>
   </AppErrorBoundary>;
 }
