@@ -73,10 +73,9 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('button', { name: 'Build Agents' }).click();
     await page.waitForURL('**/population');
     await page.getByRole('heading', { name: 'Meet the people testing your product.' }).waitFor();
-    await page.locator('.agent-card').first().click();
     await page.getByRole('button', { name: 'Run Simulation' }).click();
     await page.waitForURL('**/live');
-    await page.getByRole('heading', { name: 'Your agents are working.' }).waitFor();
+    await page.getByRole('heading', { name: 'Simulating Individual Reactions' }).waitFor();
     assert.ok(dispatched);
     const sink = { send: async () => ({}) } as unknown as Pick<S3Client, 'send'>;
     const worker = createSessionWorker({ docClient: db.client, s3Client: sink, environment, invoke: async () => ({
