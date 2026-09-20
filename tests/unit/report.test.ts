@@ -93,32 +93,28 @@ test('retry finding cites each retrying session once', async () => {
   assert.equal(finding.evidence[0]?.sequence, 1);
 });
 
-test('generates realistic actionable feedback and populated quick improvements', async () => {
+test('agent feedback is session-specific and never requires invented prose', async () => {
   const report = await build();
-  assert.ok(report.agent_feedback.length > 0);
+  assert.equal(report.agent_feedback.length, sessions.length);
   for (const fb of report.agent_feedback) {
-    assert.ok(fb.what_worked.length > 0, 'what_worked should not be empty');
-    assert.ok(fb.what_confused_them.length > 0, 'what_confused_them should not be empty');
-    assert.ok(fb.what_slowed_them_down.length > 0, 'what_slowed_them_down should not be empty');
     assert.ok(typeof fb.continuation_or_abandonment === 'string' && fb.continuation_or_abandonment.length > 0);
-    assert.ok(typeof fb.improvement_suggestion === 'string' && fb.improvement_suggestion.length > 0);
+    assert.ok(Array.isArray(fb.what_worked));
+    assert.ok(Array.isArray(fb.what_confused_them));
+    assert.ok(Array.isArray(fb.what_slowed_them_down));
+    if (fb.improvement_suggestion) {
+      assert.match(fb.improvement_suggestion, /recorded|Review the experience/i);
+    }
   }
-  assert.ok(report.quick_improvements.length > 0, 'quick_improvements should be populated');
+  assert.ok(report.quick_improvements.every(item => item.supporting_session_ids.length > 0));
 });
 
-test('no two agents produce exact same char to char matching feedback', async () => {
+test('report contains no target-specific fallback recommendations or fabricated catalog claims', async () => {
   const report = await build();
-  assert.ok(report.agent_feedback.length >= 2, 'expected multiple agents');
-  const continuations = new Set();
-  const improvements = new Set();
-  const workedJoined = new Set();
-  for (const fb of report.agent_feedback) {
-    assert.ok(!continuations.has(fb.continuation_or_abandonment), 'duplicate continuation found');
-    assert.ok(!improvements.has(fb.improvement_suggestion), 'duplicate improvement found');
-    assert.ok(!workedJoined.has(fb.what_worked.join(' | ')), 'duplicate what_worked found');
-    continuations.add(fb.continuation_or_abandonment);
-    improvements.add(fb.improvement_suggestion);
-    workedJoined.add(fb.what_worked.join(' | '));
-  }
+  const serialized = JSON.stringify({
+    findings: report.findings,
+    agent_feedback: report.agent_feedback,
+    quick_improvements: report.quick_improvements,
+  });
+  assert.doesNotMatch(serialized, /iPhone|MacBook|Apple Watch|48MP|carrier financing|Camera, Specs, Buy/i);
 });
 
