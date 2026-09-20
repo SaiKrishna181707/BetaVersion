@@ -38,7 +38,7 @@ export function NewRunPage() {
     objective: intelligence?.suggested_objectives?.[0] || '',
     user_count: 10,
     batch_size: Math.min(5, GUARDRAILS.MAX_BATCH_SIZE),
-    authorization_acknowledged: false,
+    authorization_acknowledged: true,
   }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -70,9 +70,6 @@ export function NewRunPage() {
     }
     if (configuration.objective.trim().length < 10) {
       return 'Enter one clear task for the agents.';
-    }
-    if (!configuration.authorization_acknowledged) {
-      return 'Confirm that you own this product or are authorized to test it.';
     }
     if (
       !Number.isInteger(configuration.user_count)
@@ -106,7 +103,7 @@ export function NewRunPage() {
           ...configuration,
           company_name: intelligence?.company_name || configuration.company_name || productName,
           product_name: productName,
-          authorization_acknowledged: configuration.authorization_acknowledged,
+          authorization_acknowledged: true,
         },
         {
           population_seed: seed,
@@ -196,15 +193,6 @@ export function NewRunPage() {
       </div>
 
       <div className="centopus-new-run-footer">
-        <label className="centopus-authorization">
-          <input
-            type="checkbox"
-            checked={configuration.authorization_acknowledged}
-            onChange={event => update('authorization_acknowledged', event.target.checked)}
-          />
-          <span>I own this product or have explicit authorization to test this website.</span>
-        </label>
-
         <label className="centopus-agent-count">
           <span>Number of agents</span>
           <input
