@@ -1,33 +1,33 @@
-# Centopus — three-minute demo narration
+# Centopus — timestamp-locked demo narration
 
-## 0:00–0:20 — The problem
+## 0:00–0:14 — Product entry
 
-Product teams do not need another dashboard that tells them what happened after launch. They need to know where real journeys will break before customers find the problem. Centopus turns one product URL and one customer task into a population-scale usability simulation.
+Product teams need to find broken customer journeys before launch. I start Centopus with Apple and its public website—one real product URL, ready for population-scale usability testing.
 
-## 0:20–0:45 — Start with the real product
+## 0:14–0:26 — Test configuration
 
-Here I enter Apple and its public website. Centopus researches the product context, then gives me an editable test plan. Our task is deliberately safe and measurable: find iPhone, compare the latest models, and reach the purchase configuration page without placing an order.
+Centopus turns that context into an editable plan. The safe task is precise: find iPhone, compare the latest models, and reach purchase configuration without placing an order.
 
-## 0:45–1:10 — Build the population
+## 0:26–0:45 — Population
 
-I set the population to one hundred agents. Each agent has a distinct profile—different devices, technical confidence, patience, reading style, motivations, and abandonment triggers. This is not one happy-path browser test copied a hundred times. It is a reproducible population designed to expose where different users diverge.
+I select one hundred agents and build the population. Every profile varies across device, technical confidence, patience, reading style, motivations, and abandonment triggers. This is a reproducible cross-section, not one browser script duplicated a hundred times.
 
-## 1:10–1:35 — Nova-powered execution
+## 0:45–1:06 — Nova execution
 
-Centopus uses Amazon Nova for product and persona intelligence, and the production execution path uses Nova Act to operate the browser within strict limits. Every run is bounded by an authorized domain, an action ceiling, a time ceiling, concurrency controls, and a hard budget. Agents can observe, reason, act, and stop—but they cannot leave the approved target or cross a purchase boundary.
+Now I launch the simulation. Centopus uses Amazon Nova for product and persona intelligence, while the production path uses Nova Act for browser operation. Authorized domains, action limits, time limits, concurrency controls, and a hard budget constrain every agent.
 
-## 1:35–1:55 — Evidence, not vibes
+## 1:06–1:37 — Evidence and report
 
-As the simulation runs, Centopus records each agent separately. Status, action count, stop reason, and browser evidence remain tied to that individual session. A completion claim only counts when the browser observation supports it. Model prose alone is never treated as proof.
+The result arrives as one hundred individually inspectable journeys. Centopus preserves each session’s status, actions, stop reason, and browser evidence. Completion counts only when the recorded browser observation supports it; model prose alone is never accepted as proof. The sentiment ring makes the population-level signal readable immediately, while every card keeps the underlying experience available for review.
 
-## 1:55–2:30 — Read the result
+## 1:37–2:05 — Exact result
 
-Now the report turns one hundred journeys into a decision. In this deterministic demonstration, seventy-six agents are positive, twenty are mixed, and four are negative. The distribution is instantly readable, but the aggregate is only the starting point. I can filter the four negative experiences, open an individual journey, and see the exact friction that changed that agent’s outcome.
+For this deterministic demonstration, seventy-six agents are positive, twenty are mixed, and four are negative. I can filter the population without losing traceability. The four negative journeys are not buried inside an average: they stay visible as specific experiences with their own friction, outcome, and suggested improvement.
 
-## 2:30–2:50 — From signal to action
+## 2:05–2:23 — Aggregate feedback
 
-The feedback view uses Nova to synthesize repeated evidence into positive signals, mixed signals, negative signals, and one prioritized recommendation. That gives a product team a concrete next move while preserving the underlying sessions for review.
+I open Feedback. Nova synthesizes repeated evidence into positive, mixed, and negative themes, followed by one prioritized recommendation. This turns a hundred separate journeys into a concrete product decision without discarding the source sessions.
 
-## 2:50–3:00 — Close
+## 2:23–2:46 — Individual evidence and close
 
-For a repeatable three-minute demonstration, this recording uses a deterministic result fixture; production runs use the live Nova Act execution path. Centopus helps teams test with a hundred perspectives before they ship to millions.
+And I can still open one agent to inspect the complete profile and evidence trail behind the summary. For a repeatable three-minute presentation, this recording uses a deterministic result fixture; production runs use the live Nova Act execution path. Centopus tests with a hundred perspectives before teams ship to millions.
