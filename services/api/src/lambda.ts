@@ -546,11 +546,11 @@ export function createProductionApi(dependencies: {
     const metricsMatch = path.match(/^\/runs\/([^/]+)\/metrics$/);
     if (method === 'GET' && metricsMatch) {
       const runId = metricsMatch[1];
+      if (!res.Item) return response(404, { code: 'NO_RECORDED_EVENTS', message: 'Metrics not ready yet' }, allowedOrigin);
       const res = await docClient.send(new GetCommand({
         TableName: stateTable,
         Key: { pk: `RUN#${runId}`, sk: 'METRICS' },
       }));
-      if (!res.Item) return response(404, { code: 'NO_RECORDED_EVENTS', message: 'Metrics not ready yet' }, allowedOrigin);
       return response(200, res.Item.metrics, allowedOrigin);
     }
 
@@ -558,11 +558,11 @@ export function createProductionApi(dependencies: {
     const findingsMatch = path.match(/^\/runs\/([^/]+)\/findings$/);
     if (method === 'GET' && findingsMatch) {
       const runId = findingsMatch[1];
+      if (!res.Item) return response(404, { error: 'Findings not ready yet' }, allowedOrigin);
       const res = await docClient.send(new GetCommand({
         TableName: stateTable,
         Key: { pk: `RUN#${runId}`, sk: 'FINDINGS' },
       }));
-      if (!res.Item) return response(404, { error: 'Findings not ready yet' }, allowedOrigin);
       const run = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
       if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
       return response(200, res.Item.findings, allowedOrigin);
@@ -572,11 +572,11 @@ export function createProductionApi(dependencies: {
     const reportMatch = path.match(/^\/runs\/([^/]+)\/report$/);
     if (method === 'GET' && reportMatch) {
       const runId = reportMatch[1];
+      if (!res.Item) return response(404, { error: 'Report not ready yet' }, allowedOrigin);
       const res = await docClient.send(new GetCommand({
         TableName: stateTable,
         Key: { pk: `RUN#${runId}`, sk: 'REPORT' },
       }));
-      if (!res.Item) return response(404, { error: 'Report not ready yet' }, allowedOrigin);
       const run = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
       if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
 
