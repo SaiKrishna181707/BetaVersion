@@ -168,6 +168,8 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
         {measuredFeedback && hasDetailedReflection ? <div className="vision-feedback-grid">
           <article><span>OVERALL FEELING</span><p><strong>{measuredFeedback.overall_feeling?.replaceAll('_', ' ')}</strong></p><p>{measuredFeedback.feeling_summary}</p></article>
           <article><span>IN THEIR OWN WORDS</span><p>{measuredFeedback.direct_feedback}</p></article>
+          <article><span>JOURNEY SUMMARY</span><p>{measuredFeedback.journey_summary || measuredFeedback.continuation_or_abandonment}</p></article>
+          <article><span>UI I NOTICED</span><TextList values={measuredFeedback.ui_observations ?? []} fallback="No evidence-grounded UI observation was available." /></article>
           <article><span>FIRST IMPRESSION</span><p>{measuredFeedback.first_impression || 'There was not enough recorded interaction to establish a first impression.'}</p></article>
           <article><span>WHAT I LIKED</span><TextList values={measuredFeedback.what_i_liked ?? []} fallback="No positive product interaction was strong enough to support a synthetic preference." /></article>
           <article><span>WHAT FRUSTRATED ME</span><TextList values={measuredFeedback.what_frustrated_me ?? []} fallback="No evidence-grounded frustration was identified." /></article>

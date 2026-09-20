@@ -166,7 +166,7 @@ export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pic
   });
   let report = evidenceReport;
   try {
-    report = await refineReportWithNova(evidenceReport, personas, deps.model);
+    report = await refineReportWithNova(evidenceReport, personas, allEvents, deps.model);
   } catch (cause) {
     // Refinement is presentation-only. Deterministic evidence remains a complete safe report.
     console.warn('[Finalizer] Nova report refinement unavailable; preserving evidence-derived report.', cause);

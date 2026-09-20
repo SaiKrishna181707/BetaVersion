@@ -76,7 +76,7 @@ export function createStacks(app: App, config: DeploymentConfig) {
   bucket.grantPut(worker, 'nova-trajectories/*');
   const finalizer = makeFunction('Finalizer', 'finalizer', 180);
   bucket.grantPut(finalizer, 'reports/*');
-  finalizer.addEnvironment('NOVA_REPORT_MODEL_ID', 'amazon.nova-micro-v1:0');
+  finalizer.addEnvironment('NOVA_REPORT_MODEL_ID', 'amazon.nova-lite-v1:0');
   if (config.bedrockRoleArn) {
     finalizer.addEnvironment('BEDROCK_ROLE_ARN', config.bedrockRoleArn);
     finalizer.addToRolePolicy(new iam.PolicyStatement({ actions: ['sts:AssumeRole'], resources: [config.bedrockRoleArn] }));
