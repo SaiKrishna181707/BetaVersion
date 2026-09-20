@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 
 async function main() {
   console.log('Building web app...');
@@ -7,7 +7,28 @@ async function main() {
 
   const zipPath = 'amplify.zip';
   if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-  execSync(`powershell -command "Compress-Archive -Path 'apps/web/dist/*' -DestinationPath '${zipPath}'"`, { stdio: 'inherit' });
+  const pyScript = `import os, zipfile, stat
+with zipfile.ZipFile('amplify.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk('apps/web/dist'):
+        for d in sorted(dirs):
+            full = os.path.join(root, d)
+            rel = os.path.relpath(full, 'apps/web/dist').replace('\\\\', '/') + '/'
+            zinfo = zipfile.ZipInfo(rel)
+            zinfo.create_system = 3
+            zinfo.external_attr = (stat.S_IFDIR | 0o755) << 16
+            z.writestr(zinfo, '')
+        for f in sorted(files):
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, 'apps/web/dist').replace('\\\\', '/')
+            with open(full, 'rb') as fp:
+                data = fp.read()
+            zinfo = zipfile.ZipInfo(rel)
+            zinfo.create_system = 3
+            zinfo.external_attr = (stat.S_IFREG | 0o644) << 16
+            z.writestr(zinfo, data)
+print('Packaged amplify.zip:', os.path.getsize('amplify.zip'), 'bytes')
+`;
+  execFileSync('python', ['-c', pyScript], { stdio: 'inherit' });
 
   console.log('Creating Amplify deployment...');
   const createOutput = execSync('aws amplify create-deployment --app-id d1s2dm4wj8xxb --branch-name main --region us-east-1').toString();

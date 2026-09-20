@@ -126,7 +126,7 @@ export function cleanseTargetDescriptor(
     }
   }
 
-  return 'Interactive control';
+  return null;
 }
 
 /** Adapt only explicit, observed action records. Missing evidence is never filled in. */
