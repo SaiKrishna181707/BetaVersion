@@ -1,7 +1,11 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from '@centopus/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
-import { authConfigured, beginLogin, signOut, tokens } from '../lib/auth';
+import { authConfigured, beginLogin, tokens } from '../lib/auth';
+
+const PENDING_LANDING_ACTION_KEY = 'centopus:landing-pending-action';
+const PENDING_LANDING_DRAFT_KEY = 'centopus:landing-pending-draft';
+const AUTH_CHANGED_EVENT = 'centopus-auth-changed';
 
 const loadingMessages = [
   'Understanding your product…',
@@ -10,6 +14,20 @@ const loadingMessages = [
   'Finding important workflows…',
   'Preparing your simulation…',
 ];
+
+type LandingDraft = {
+  companyName: string;
+  websiteUrl: string;
+};
+
+function readPendingDraft(): LandingDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_LANDING_DRAFT_KEY);
+    return raw ? JSON.parse(raw) as LandingDraft : null;
+  } catch {
+    return null;
+  }
+}
 
 type BarStyle = CSSProperties & {
   '--bar-scale': string;
@@ -29,8 +47,9 @@ const gradientBarStyles: BarStyle[] = Array.from({ length: 20 }, (_, index) => {
 });
 
 export function LandingPage() {
-  const [companyName, setCompanyName] = useState('');
-  const [websiteUrl, setWebsiteUrl] = useState('');
+  const pendingDraft = readPendingDraft();
+  const [companyName, setCompanyName] = useState(pendingDraft?.companyName || '');
+  const [websiteUrl, setWebsiteUrl] = useState(pendingDraft?.websiteUrl || '');
   const [building, setBuilding] = useState(false);
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState('');
@@ -39,11 +58,54 @@ export function LandingPage() {
 
   useEffect(() => {
     let active = true;
-    if (!tokens()) return () => { active = false; };
-    productApi.listRuns()
-      .then(value => { if (active) setRuns(value); })
-      .catch(() => undefined);
-    return () => { active = false; };
+
+    const syncAuthenticatedLanding = async () => {
+      if (authConfigured() && !tokens()) return;
+
+      productApi.listRuns()
+        .then(value => { if (active) setRuns(value); })
+        .catch(() => undefined);
+
+      const pendingAction = window.sessionStorage.getItem(PENDING_LANDING_ACTION_KEY);
+      if (pendingAction === 'previous') {
+        window.sessionStorage.removeItem(PENDING_LANDING_ACTION_KEY);
+        if (active) setPreviousOpen(true);
+        return;
+      }
+
+      if (pendingAction !== 'build') return;
+      const draft = readPendingDraft();
+      window.sessionStorage.removeItem(PENDING_LANDING_ACTION_KEY);
+      window.sessionStorage.removeItem(PENDING_LANDING_DRAFT_KEY);
+      if (!draft || !active) return;
+
+      setCompanyName(draft.companyName);
+      setWebsiteUrl(draft.websiteUrl);
+      setBuilding(true);
+      setMessageIndex(0);
+      setError('');
+
+      try {
+        const intelligence = await productApi.analyzeProduct({
+          company_name: draft.companyName.trim(),
+          website_url: draft.websiteUrl.trim(),
+        });
+        if (!active) return;
+        window.sessionStorage.setItem(PRODUCT_INTELLIGENCE_KEY, JSON.stringify(intelligence));
+        window.location.hash = '#/new';
+      } catch (cause) {
+        if (!active) return;
+        setError(cause instanceof Error ? cause.message : 'Could not analyze this product.');
+        setBuilding(false);
+      }
+    };
+
+    void syncAuthenticatedLanding();
+    window.addEventListener(AUTH_CHANGED_EVENT, syncAuthenticatedLanding);
+    return () => {
+      active = false;
+      window.removeEventListener(AUTH_CHANGED_EVENT, syncAuthenticatedLanding);
+    };
   }, []);
 
   useEffect(() => {
@@ -64,15 +126,43 @@ export function LandingPage() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [previousOpen]);
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const handlePrevious = async () => {
+    setError('');
     if (authConfigured() && !tokens()) {
-      setError('Sign in as an operator before starting a product analysis.');
+      window.sessionStorage.setItem(PENDING_LANDING_ACTION_KEY, 'previous');
+      try {
+        await beginLogin();
+      } catch (cause) {
+        window.sessionStorage.removeItem(PENDING_LANDING_ACTION_KEY);
+        setError(cause instanceof Error ? cause.message : 'Could not open previous runs.');
+      }
       return;
     }
+
+    setPreviousOpen(true);
+    productApi.listRuns()
+      .then(setRuns)
+      .catch(cause => setError(cause instanceof Error ? cause.message : 'Could not load previous runs.'));
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+
+    if (authConfigured() && !tokens()) {
+      window.sessionStorage.setItem(PENDING_LANDING_ACTION_KEY, 'build');
+      window.sessionStorage.setItem(PENDING_LANDING_DRAFT_KEY, JSON.stringify({ companyName, websiteUrl }));
+      try {
+        await beginLogin();
+      } catch (cause) {
+        window.sessionStorage.removeItem(PENDING_LANDING_ACTION_KEY);
+        setError(cause instanceof Error ? cause.message : 'Could not start authentication.');
+      }
+      return;
+    }
+
     setBuilding(true);
     setMessageIndex(0);
-    setError('');
     try {
       const intelligence = await productApi.analyzeProduct({
         company_name: companyName.trim(),
@@ -96,7 +186,7 @@ export function LandingPage() {
       <button
         type="button"
         className="centopus-previous-button"
-        onClick={() => setPreviousOpen(true)}
+        onClick={() => void handlePrevious()}
         aria-expanded={previousOpen}
         aria-controls="previous-runs-panel"
       >
@@ -108,14 +198,6 @@ export function LandingPage() {
         <img src="/centopus-mark.svg" alt="" />
         <span>centopus</span>
       </a>
-
-      {authConfigured() ? (
-        tokens() ? (
-          <button type="button" className="centopus-auth-button" onClick={() => signOut()}>Sign out</button>
-        ) : (
-          <button type="button" className="centopus-auth-button" onClick={() => void beginLogin()}>Operator sign in</button>
-        )
-      ) : null}
     </header>
 
     <main id="main" className="centopus-landing-main">
