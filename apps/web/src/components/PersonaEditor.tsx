@@ -28,11 +28,15 @@ export function PersonaEditor({
   saving,
   onClose,
   onSave,
+  onRun,
+  running = false,
 }: {
   persona: RichPersona;
   saving: boolean;
   onClose?: () => void;
   onSave: (persona: RichPersona) => Promise<void>;
+  onRun?: () => void;
+  running?: boolean;
 }) {
   const [draft, setDraft] = useState<RichPersona>(persona);
   const [error, setError] = useState('');
@@ -104,7 +108,12 @@ export function PersonaEditor({
       {error ? <p className="field-error" role="alert">{error}</p> : null}
       <div className="persona-actions">
         <span>Saved persona fields are persisted before execution; unsupported fields must remain visible as a backend integration error, never silently fabricated.</span>
-        <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save agent'} <Icon name="check" size={15} /></Button>
+        <div className="persona-actions-buttons">
+          {onRun ? <Button type="button" variant="secondary" disabled={running} onClick={onRun}>
+            {running ? 'Starting…' : 'Run Simulation'} <Icon name="activity" size={15} />
+          </Button> : null}
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save agent'} <Icon name="check" size={15} /></Button>
+        </div>
       </div>
     </form>
   </section>;
