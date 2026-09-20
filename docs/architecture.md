@@ -20,7 +20,7 @@ React frontend (Amplify build configuration)
   -> DynamoDB report + private S3 report -> authenticated API -> React
 ```
 
-Cognito provides a shared operator workspace with self-sign-up disabled; tenant isolation is not implemented. Health reports configuration availability, not a live AWS probe. Product intelligence separately uses Gemini through Secrets Manager; it never supplies behavioral events.
+Cognito provides an operator workspace. Health reports configuration availability, not a live AWS probe. Product intelligence and editable persona narratives use low-cost Amazon Nova models through Bedrock; they never supply behavioral events. Only Nova Act browser evidence can affect measured outcomes.
 
 ## Authoritative storage
 

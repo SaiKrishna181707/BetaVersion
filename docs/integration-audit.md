@@ -71,8 +71,8 @@ remain separate histories after selective adaptation.
 - Execution: Step Functions -> TypeScript worker -> cross-account role -> Python
   Nova worker. Direct Python CLI execution is diagnostic and bypasses API reservations.
 - Frontend HTTP: `apps/web/src/lib/api.ts`, connected directly to the production API.
-- Backend infrastructure: `infra/cdk/`; Gemini is retrieved server-side through
-  Secrets Manager, and GitHub Actions deploys merged `main` builds to Amplify with
+- Backend infrastructure: `infra/cdk/`; Bedrock Nova is invoked server-side with
+  IAM-scoped model permissions, and GitHub Actions deploys merged `main` builds to Amplify with
   repository-and-branch-restricted AWS OIDC credentials.
 
 No mascot asset exists in the inspected branch history at the requested path; the

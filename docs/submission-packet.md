@@ -4,7 +4,7 @@
 **Repository:** SaiKrishna181707/centopus
 **Description:** Synthetic usability sessions that turn observed browser actions into evidence-linked product findings.
 
-An operator describes an authorized product, creates and edits a synthetic population, and starts independent browser sessions with bounded time, actions, parallelism and estimated spend. React displays persisted session states, actions and deterministic reports. Product intelligence uses Gemini; browser execution uses Nova Act connected to AgentCore Browser.
+An operator enters a company and authorized product URL, reviews Bedrock Nova-extracted public facts, creates and edits a Nova-generated synthetic population, and starts independent browser sessions with bounded time, actions, parallelism and estimated spend. React displays persisted session states, actions and evidence-grounded reports refined by Nova. Browser execution uses Nova Act connected to AgentCore Browser.
 
 The control and agent planes use separately configured AWS accounts. CDK backend definitions, explicit Lambda bundles, an Amplify build configuration, SDK checks and offline contract tests are included. This source tree is not proof of a current deployment.
 

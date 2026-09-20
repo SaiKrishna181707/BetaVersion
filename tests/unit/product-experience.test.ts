@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPersonaPatch, discoverFirstPartyUrls, fallbackProductIntelligence, parseGeminiIntelligence, stripHtml, validateProductIntelligenceRequest } from '@centopus/api';
+import { applyPersonaPatch, discoverFirstPartyUrls, fallbackProductIntelligence, parseNovaIntelligence, stripHtml, validateProductIntelligenceRequest } from '@centopus/api';
 import { personaFixture } from '../fixtures/run-fixtures';
 
 test('accepts only public HTTPS product pages for intelligence', () => {
@@ -11,9 +11,9 @@ test('accepts only public HTTPS product pages for intelligence', () => {
   assert.throws(() => validateProductIntelligenceRequest({ company_name: 'A', website_url: 'https://example.com' }), /Company name/);
 });
 
-test('turns Gemini JSON into bounded product intelligence', () => {
+test('turns Nova JSON into bounded product intelligence', () => {
   const request = { company_name: 'Acme', website_url: 'https://example.com/' };
-  const result = parseGeminiIntelligence(request, 'Acme home', JSON.stringify({
+  const result = parseNovaIntelligence(request, 'Acme home', JSON.stringify({
     product_name: 'Acme Flow', category: 'Collaboration', summary: 'A workspace for distributed product teams.',
     what_product_does: 'Helps distributed teams plan product launches in one workspace.',
     target_audience: 'Product teams coordinating launches.',

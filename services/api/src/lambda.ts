@@ -11,10 +11,11 @@ import {
   type RunConfiguration,
   type SyntheticPersona,
 } from '@centopus/contracts';
-import { buildCohort, profileCohort } from '@centopus/population';
+import { profileCohort } from '@centopus/population';
+import { invokeNovaJson, type JsonModel } from '@centopus/ai';
 import { assertPublicNetworkTarget, buildProductIntelligence, ProductIntelligenceServiceError } from './product-intelligence';
 import { applyPersonaPatch } from './persona';
-import { getGeminiApiKey } from './secrets';
+import { buildNovaCohort } from './nova-personas';
 import { queryAll, scanAll, type DocumentClient } from './aws-store';
 import { reserveRunBudget } from './budget';
 
@@ -92,6 +93,7 @@ export function createProductionApi(dependencies: {
   s3Client: S3Client;
   environment?: NodeJS.ProcessEnv;
   assertTarget?: typeof assertPublicNetworkTarget;
+  model?: JsonModel;
 }) {
   const { docClient, sfnClient, s3Client } = dependencies;
   const env = dependencies.environment ?? process.env;
@@ -101,6 +103,7 @@ export function createProductionApi(dependencies: {
   const stateMachineArn = env.RUN_STATE_MACHINE_ARN || '';
   const amplifyOrigin = env.AMPLIFY_ORIGIN || '';
   const assertTarget = dependencies.assertTarget ?? assertPublicNetworkTarget;
+  const model = dependencies.model ?? invokeNovaJson;
   return async function handler(event: ApiGatewayEvent): Promise<ApiResponse> {
 
   const method = event.requestContext?.http?.method || 'GET';
@@ -138,18 +141,16 @@ export function createProductionApi(dependencies: {
       const payload = parseJson(body);
       if (payload === null) return response(400, { error: 'Invalid JSON body' }, allowedOrigin);
       try {
-        const geminiApiKey = await getGeminiApiKey();
         const intelligence = await buildProductIntelligence(
           payload,
-          geminiApiKey,
-          process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite',
+          model,
+          env.NOVA_INTELLIGENCE_MODEL_ID || 'amazon.nova-micro-v1:0',
         );
         return response(200, { intelligence }, allowedOrigin);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Product analysis failed.';
         const unavailable = cause instanceof ProductIntelligenceServiceError
-          || message.includes('GEMINI_SECRET_ARN')
-          || message.includes('Gemini secret');
+          || message.includes('Bedrock') || message.includes('Nova');
         return response(unavailable ? 503 : 400, { error: message }, allowedOrigin);
       }
     }
@@ -209,8 +210,11 @@ export function createProductionApi(dependencies: {
 
       if (spec.size !== conf.user_count) return response(400, { error: 'Population size must match the configured user count.' }, allowedOrigin);
       let personas: SyntheticPersona[];
-      try { personas = buildCohort(spec); }
-      catch { return response(400, { error: 'Invalid population specification.' }, allowedOrigin); }
+      try { personas = await buildNovaCohort(spec, model, env.NOVA_PERSONA_MODEL_ID || 'amazon.nova-lite-v1:0'); }
+      catch (cause) {
+        const message = cause instanceof Error ? cause.message : 'Nova could not create this population.';
+        return response(503, { error: message }, allowedOrigin);
+      }
       const profile = profileCohort(personas);
       const createdAt = new Date().toISOString();
 

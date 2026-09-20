@@ -8,6 +8,7 @@ import { createProductionApi } from '../../services/api/src/lambda';
 import { createSessionWorker, type SessionWorkerInput } from '../../services/agent-worker/src/worker-lambda';
 import { createFinalizer } from '../../services/report/src/finalizer';
 import { memoryDynamo } from '../fixtures/memory-dynamo';
+import type { JsonModelRequest } from '@centopus/ai';
 
 test('browser: Centopus product -> population -> execution -> evidence/report using explicit offline fixtures', async () => {
   const server = await createServer({ root: 'apps/web', configFile: false,
@@ -28,7 +29,21 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
       return { executionArn: 'fixture-execution' };
     } } as unknown as Pick<SFNClient, 'send'>;
     const s3 = new S3Client({ region: 'us-east-1', credentials: { accessKeyId: 'TEST_ONLY', secretAccessKey: 'TEST_ONLY' } });
-    const api = createProductionApi({ docClient: db.client, sfnClient: sfn, s3Client: s3, environment, assertTarget: async () => undefined });
+    const model = async <T>(request: JsonModelRequest): Promise<T> => {
+      const skeletons = JSON.parse(request.prompt.match(/Skeletons:\n(.+)$/s)?.[1] || '[]') as Array<{ persona_id: string }>;
+      return { personas: skeletons.map((item, index) => ({
+        persona_id: item.persona_id, display_name: `Fixture User ${index + 1}`, age: 30 + index,
+        gender: 'Non-binary', location: 'Fixture City', education: 'College', income_annual: 50000,
+        household_context: 'Shares a home with family', occupation: 'Operations specialist',
+        biography: `Fixture biography ${index + 1}`, backstory: `Distinct fixture story ${index + 1}`,
+        primary_motivation: 'Complete the task', motivations: 'Save time', pain_points: 'Unclear labels',
+        goals: 'Reach the goal', buying_behavior: 'Compares options', decision_style: 'Practical',
+        online_behavior: 'Uses web apps daily', product_expectations: 'Clear progress',
+        loyalty_likelihood: 'Depends on reliability', abandonment_triggers: 'Repeated failures',
+        frustration_triggers: ['Hidden next step'], accessibility_needs: [],
+      })) } as T;
+    };
+    const api = createProductionApi({ docClient: db.client, sfnClient: sfn, s3Client: s3, environment, assertTarget: async () => undefined, model });
     await page.route('**/centopus-test-api/**', async route => {
       const request = route.request();
       const path = new URL(request.url()).pathname.replace('/centopus-test-api', '');
@@ -69,7 +84,11 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
       }],
     }) });
     await worker(dispatched.sessions[0]!);
-    await createFinalizer({ docClient: db.client, s3Client: sink, environment })({ runId: dispatched.runId });
+    const reportModel = async <T>(request: JsonModelRequest): Promise<T> => {
+      const drafts = JSON.parse(request.prompt.match(/Drafts:\n(.+)$/s)?.[1] || '[]') as Array<{ session_id: string; draft: { direct_feedback?: string } }>;
+      return { feedback: drafts.map(item => ({ session_id: item.session_id, direct_feedback: item.draft.direct_feedback })) } as T;
+    };
+    await createFinalizer({ docClient: db.client, s3Client: sink, environment, model: reportModel })({ runId: dispatched.runId });
     await page.getByRole('link', { name: 'View Results' }).click({ timeout: 10000 });
     await page.waitForURL('**/report');
     await page.getByText('AWS billing evidence is not connected').waitFor();
