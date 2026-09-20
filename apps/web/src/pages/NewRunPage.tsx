@@ -2,12 +2,10 @@ import { useState, type FormEvent } from 'react';
 import {
   GUARDRAILS,
   estimateCost,
-  formatUsd,
   type CostEstimate,
   type RunConfiguration,
 } from '@centopus/contracts';
-import { Badge, Icon } from '@centopus/ui';
-import { WorkspaceShell } from '../components/WorkspaceShell';
+import { Icon } from '@centopus/ui';
 import { initialConfiguration } from '../lib/config';
 import {
   PRODUCT_INTELLIGENCE_KEY,
@@ -26,11 +24,10 @@ function loadIntelligence(): UiProductIntelligence | null {
 
 export function NewRunPage() {
   const [intelligence] = useState(loadIntelligence);
-  const [productName, setProductName] = useState(intelligence?.product_name || intelligence?.company_name || '');
-  const [category, setCategory] = useState(intelligence?.category || '');
-  const [features, setFeatures] = useState<string[]>(
-    intelligence?.key_features || intelligence?.value_propositions || [],
+  const [productName, setProductName] = useState(
+    intelligence?.product_name || intelligence?.company_name || '',
   );
+  const [category, setCategory] = useState(intelligence?.category || '');
   const [configuration, setConfiguration] = useState<RunConfiguration>(() => ({
     ...initialConfiguration,
     company_name: intelligence?.company_name,
@@ -41,11 +38,10 @@ export function NewRunPage() {
     objective: intelligence?.suggested_objectives?.[0] || '',
     user_count: 10,
     batch_size: Math.min(5, GUARDRAILS.MAX_BATCH_SIZE),
-    authorization_acknowledged: false,
+    authorization_acknowledged: true,
   }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [checkpointText, setCheckpointText] = useState('');
 
   let estimate: CostEstimate | null = null;
   try {
@@ -58,10 +54,6 @@ export function NewRunPage() {
     setConfiguration(current => ({ ...current, [key]: value }));
   };
 
-  const toggleFeature = (feature: string) => {
-    setFeatures(current => current.includes(feature) ? current.filter(item => item !== feature) : [...current, feature]);
-  };
-
   const validate = (): string | null => {
     if (!productName.trim()) return 'Enter a product name.';
     try {
@@ -70,21 +62,33 @@ export function NewRunPage() {
     } catch {
       return 'Enter a complete product website URL.';
     }
-    if (configuration.product_description.trim().length < 10) return 'Describe what the product does.';
-    if (configuration.target_audience.trim().length < 10) return 'Describe the target audience.';
-    if (configuration.objective.trim().length < 10) return 'Choose or enter one clear objective.';
-    if (!configuration.authorization_acknowledged) return 'Confirm that you own or are authorized to test this target.';
-    if (!Number.isInteger(configuration.user_count) || configuration.user_count < 1 || configuration.user_count > 100) {
-      return 'Synthetic users must be between 1 and 100.';
+    if (configuration.product_description.trim().length < 10) {
+      return 'Describe what the product does.';
     }
-    if (!estimate) return 'Complete the run limits before building the population.';
-    if (estimate.exceeds_run_cap || estimate.exceeds_global_ceiling) return 'The estimated run exceeds the configured budget limit.';
+    if (configuration.target_audience.trim().length < 10) {
+      return 'Describe the target audience.';
+    }
+    if (configuration.objective.trim().length < 10) {
+      return 'Enter one clear task for the agents.';
+    }
+    if (
+      !Number.isInteger(configuration.user_count)
+      || configuration.user_count < 1
+      || configuration.user_count > 100
+    ) {
+      return 'Number of agents must be between 1 and 100.';
+    }
+    if (!estimate) return 'Check the test details before building agents.';
+    if (estimate.exceeds_run_cap || estimate.exceeds_global_ceiling) {
+      return 'This run exceeds the configured budget limit.';
+    }
     return null;
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+
     const problem = validate();
     if (problem) {
       setError(problem);
@@ -99,6 +103,7 @@ export function NewRunPage() {
           ...configuration,
           company_name: intelligence?.company_name || configuration.company_name || productName,
           product_name: productName,
+          authorization_acknowledged: true,
         },
         {
           population_seed: seed,
@@ -109,106 +114,109 @@ export function NewRunPage() {
           product_name: productName,
         },
       );
+
       window.location.hash = `#/runs/${created.run_id}/population`;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not build the population.');
+      setError(cause instanceof Error ? cause.message : 'Could not build the agents.');
       setSubmitting(false);
     }
   };
 
-  const publicFeatures = intelligence?.key_features || intelligence?.value_propositions || features;
+  return <main id="main" className="centopus-new-run-minimal">
+    <form className="centopus-new-run-card" onSubmit={event => void submit(event)} noValidate>
+      <header className="centopus-new-run-heading">
+        <h1>Product</h1>
+        <p>Everything below can be changed before the run.</p>
+      </header>
 
-  return <WorkspaceShell>
-    <div className="vision-page-heading">
-      <div>
-        <span className="eyebrow">02 / NEW RUN</span>
-        <h1>Set up the test.</h1>
-        <p>Review what we learned from the public product, then choose exactly what your synthetic users should try to accomplish.</p>
-      </div>
-      {intelligence ? <Badge tone="accent">PREFILLED · EDITABLE</Badge> : <Badge>NEW PRODUCT</Badge>}
-    </div>
+      <div className="centopus-new-run-grid two">
+        <label>
+          <span>Product</span>
+          <input
+            value={productName}
+            onChange={event => setProductName(event.target.value)}
+            placeholder="Product name"
+            autoComplete="organization"
+          />
+        </label>
 
-    <form className="vision-run-layout" onSubmit={event => void submit(event)} noValidate>
-      <div className="vision-run-form">
-        <section className="vision-form-section">
-          <div className="vision-form-title"><span>01</span><div><h2>Product</h2><p>Everything below can be changed before the run.</p></div></div>
-          <div className="vision-fields-grid two">
-            <label><span>Product</span><input value={productName} onChange={event => setProductName(event.target.value)} placeholder="Product name" /></label>
-            <label><span>Website</span><input type="url" value={configuration.target_url} onChange={event => update('target_url', event.target.value)} placeholder="https://yourproduct.com" /></label>
-          </div>
-          <label className="vision-field-full"><span>What does this product do?</span><textarea value={configuration.product_description} onChange={event => update('product_description', event.target.value)} /></label>
-          <label className="vision-field-full"><span>Target audience</span><textarea value={configuration.target_audience} onChange={event => update('target_audience', event.target.value)} /></label>
-          <div className="vision-fields-grid two">
-            <label><span>Product category</span><input value={category} onChange={event => setCategory(event.target.value)} placeholder="Product category" /></label>
-            <div className="vision-feature-field">
-              <span>Key public product features</span>
-              <div className="vision-feature-list">
-                {publicFeatures.length
-                  ? publicFeatures.map(feature => <button type="button" className={features.includes(feature) ? 'active' : ''} key={feature} onClick={() => toggleFeature(feature)}>{feature}</button>)
-                  : <small>No public features were confidently extracted. You can continue without them.</small>}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="vision-form-section">
-          <div className="vision-form-title"><span>02</span><div><h2>Objective</h2><p>One observable task per run. Agents choose their own path.</p></div></div>
-          {intelligence?.suggested_objectives?.length ? <label className="vision-field-full">
-            <span>Suggested objectives</span>
-            <select value={configuration.objective} onChange={event => update('objective', event.target.value)}>
-              {intelligence.suggested_objectives.map(objective => <option key={objective} value={objective}>{objective}</option>)}
-              <option value="">Custom objective…</option>
-            </select>
-          </label> : null}
-          <label className="vision-field-full"><span>Objective</span><textarea value={configuration.objective} onChange={event => update('objective', event.target.value)} placeholder="e.g. Create an account and complete onboarding" /></label>
-        </section>
-
-        <section className="vision-form-section">
-          <div className="vision-form-title"><span>03</span><div><h2>Simulation size</h2><p>Choose the population and execution boundaries.</p></div></div>
-          <div className="vision-fields-grid three">
-            <label><span>Synthetic users</span><input type="number" min={1} max={100} value={configuration.user_count} onChange={event => update('user_count', event.target.valueAsNumber)} /></label>
-            <label><span>Batch size</span><input type="number" min={1} max={GUARDRAILS.MAX_BATCH_SIZE} value={configuration.batch_size} onChange={event => update('batch_size', event.target.valueAsNumber)} /></label>
-            <label><span>Session limit</span><select value={configuration.max_session_seconds} onChange={event => update('max_session_seconds', Number(event.target.value))}><option value={60}>60 sec</option><option value={120}>120 sec</option><option value={180}>180 sec</option><option value={240}>240 sec</option><option value={300}>300 sec</option></select></label>
-          </div>
-        </section>
-
-        <section className="vision-form-section">
-          <label className="vision-consent">
-            <input
-              type="checkbox"
-              checked={configuration.authorization_acknowledged}
-              onChange={event => update('authorization_acknowledged', event.target.checked)}
-            />
-            <span>I confirm that I own this product or have explicit authorization to test the target website.</span>
-          </label>
-          <p>Centopus only runs browser sessions against targets you are authorized to test.</p>
-        </section>
-
-        <section className="vision-form-section">
-          <label><span>Evidence checkpoints (optional)</span><input type="text" value={checkpointText}
-            onChange={event => { setCheckpointText(event.target.value); update('checkpoint_plan', event.target.value.split(',').map(value => value.trim()).filter(Boolean)); }}
-            placeholder="OPEN_APP, CREATE_PROJECT, INVITE_TEAMMATE" /></label>
-          <p>For an instrumented target, enter its DOM checkpoint names in order. Only an observed final checkpoint verifies task completion. Other runs still record actions and friction.</p>
-        </section>
-        {error ? <p className="vision-error" role="alert">{error}</p> : null}
-        <div className="vision-primary-action">
-          <div><strong>Next: meet the population</strong><span>You can inspect, search, filter and edit every agent before execution.</span></div>
-          <button className="button button-primary button-large" disabled={submitting}>{submitting ? 'Building population…' : 'Build Population'} <Icon name="arrow" size={16} /></button>
-        </div>
+        <label>
+          <span>Product Website</span>
+          <input
+            type="url"
+            value={configuration.target_url}
+            onChange={event => update('target_url', event.target.value)}
+            placeholder="https://yourproduct.com"
+            autoComplete="url"
+          />
+        </label>
       </div>
 
-      <aside className="vision-cost-panel">
-        <span className="eyebrow">RUN ESTIMATE</span>
-        <strong>{estimate ? formatUsd(estimate.total_cents) : '—'}</strong>
-        <small>Planning estimate</small>
-        <dl>
-          <div><dt>Users</dt><dd>{configuration.user_count}</dd></div>
-          <div><dt>Session limit</dt><dd>{configuration.max_session_seconds}s</dd></div>
-          <div><dt>Batch size</dt><dd>{configuration.batch_size}</dd></div>
-        </dl>
-        <label><span>Run estimate allowance</span><div className="vision-money-input"><span>$</span><input type="number" min={0.01} max={GUARDRAILS.GLOBAL_SPEND_CEILING_USD} step={0.01} value={configuration.run_hard_cap_usd} onChange={event => update('run_hard_cap_usd', event.target.valueAsNumber)} /></div></label>
-        <p>Execution reserves the planning estimate before launch. This allowance does not measure or cap your AWS bill.</p>
-      </aside>
+      <div className="centopus-new-run-grid two">
+        <label>
+          <span>What does this product do?</span>
+          <textarea
+            value={configuration.product_description}
+            onChange={event => update('product_description', event.target.value)}
+            placeholder="Describe the product in a few lines"
+          />
+        </label>
+
+        <label>
+          <span>Target audience</span>
+          <textarea
+            value={configuration.target_audience}
+            onChange={event => update('target_audience', event.target.value)}
+            placeholder="Who should the agents represent?"
+          />
+        </label>
+      </div>
+
+      <div className="centopus-new-run-grid category-objective">
+        <label>
+          <span>Product category</span>
+          <input
+            value={category}
+            onChange={event => setCategory(event.target.value)}
+            placeholder="e.g. E-commerce"
+          />
+        </label>
+
+        <label>
+          <span>What should agents do?</span>
+          <textarea
+            value={configuration.objective}
+            onChange={event => update('objective', event.target.value)}
+            placeholder="e.g. Find a product and complete checkout up to the payment step"
+          />
+        </label>
+      </div>
+
+      <div className="centopus-new-run-footer">
+        <label className="centopus-agent-count">
+          <span>Number of agents</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            value={configuration.user_count}
+            onChange={event => {
+              const value = event.target.valueAsNumber;
+              if (Number.isFinite(value)) {
+                update('user_count', Math.min(100, Math.max(1, Math.trunc(value))));
+              }
+            }}
+          />
+        </label>
+
+        <button className="centopus-build-agents" type="submit" disabled={submitting}>
+          <span>{submitting ? 'Building agents…' : 'Build Agents'}</span>
+          {!submitting ? <Icon name="arrow" size={17} /> : null}
+        </button>
+      </div>
+
+      {error ? <p className="centopus-new-run-error" role="alert">{error}</p> : null}
     </form>
-  </WorkspaceShell>;
+  </main>;
 }
