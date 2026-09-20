@@ -151,7 +151,11 @@ export function createProductionApi(dependencies: {
         const message = cause instanceof Error ? cause.message : 'Product analysis failed.';
         const unavailable = cause instanceof ProductIntelligenceServiceError
           || message.includes('Bedrock') || message.includes('Nova');
-        return response(unavailable ? 503 : 400, { error: message }, allowedOrigin);
+        if (unavailable) {
+          console.warn('[Api] Product research is unavailable.', cause);
+          return response(503, { code: 'PRODUCT_RESEARCH_UNAVAILABLE', error: 'Product research is temporarily unavailable. Please try again shortly.' }, allowedOrigin);
+        }
+        return response(400, { error: message }, allowedOrigin);
       }
     }
 
@@ -212,8 +216,8 @@ export function createProductionApi(dependencies: {
       let personas: SyntheticPersona[];
       try { personas = await buildNovaCohort(spec, model, env.NOVA_PERSONA_MODEL_ID || 'amazon.nova-lite-v1:0'); }
       catch (cause) {
-        const message = cause instanceof Error ? cause.message : 'Nova could not create this population.';
-        return response(503, { error: message }, allowedOrigin);
+        console.warn('[Api] Population generation is unavailable.', cause);
+        return response(503, { code: 'POPULATION_GENERATION_UNAVAILABLE', error: 'The synthetic population could not be prepared right now. Please try again shortly.' }, allowedOrigin);
       }
       const profile = profileCohort(personas);
       const createdAt = new Date().toISOString();

@@ -101,6 +101,22 @@ test('production API fails closed for missing execution config, unauthenticated 
   assert.equal((await f.api({ ...event('POST', '/runs'), body: 'x'.repeat(65537) })).statusCode, 413);
 });
 
+test('production API does not expose model-provider failures to the operator', async () => {
+  const db = memoryDynamo();
+  const api = createProductionApi({ docClient: db.client, s3Client: new S3Client({}), environment,
+    assertTarget: async () => undefined, sfnClient: { send: async () => ({}) } as never,
+    model: async () => { throw new Error('provider account detail must remain private'); } });
+  const response = await api(event('POST', '/runs', { configuration: {
+    ...validConfiguration, target_url: 'https://example.com', user_count: 1,
+  } }));
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(JSON.parse(response.body), {
+    code: 'POPULATION_GENERATION_UNAVAILABLE',
+    error: 'The synthetic population could not be prepared right now. Please try again shortly.',
+  });
+  assert.doesNotMatch(response.body, /provider account detail/i);
+});
+
 test('a worker failure retains no invented success, cost or S3 reference', async () => {
   const db = memoryDynamo([{ pk: 'RUN#r', sk: 'META', status: 'ACTIVE', reserved_cost_cents: 100 },
     { pk: 'SESSION#s', sk: 'META', run_id: 'r', persona_id: 'p', status: 'QUEUED' },
