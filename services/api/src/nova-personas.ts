@@ -54,8 +54,14 @@ export async function buildNovaCohort(
   const chunks: SyntheticPersona[][] = [];
   for (let index = 0; index < bases.length; index += 20) chunks.push(bases.slice(index, index + 20));
 
-  const generated = await Promise.all(chunks.map(async (chunk, chunkIndex) => {
-    const payload = await model<{ personas?: Record<string, unknown>[] }>({
+  const generated: SyntheticPersona[][] = [];
+  // Enrich batches sequentially. A 100-person population previously launched five
+  // large Bedrock requests at once, so one throttled or truncated response failed
+  // the entire run. The deterministic skeletons are already complete personas;
+  // model enrichment is optional and may safely fall back per batch.
+  for (const [chunkIndex, chunk] of chunks.entries()) {
+    try {
+      const payload = await model<{ personas?: Record<string, unknown>[] }>({
       modelId,
       system: 'Create realistic, respectful synthetic beta-user profiles. Return valid JSON only. Never copy a story, name, or phrasing between people.',
       prompt: `Create one distinct ordinary person for each skeleton below for usability testing of ${spec.product_name || 'the product'}.
@@ -78,12 +84,16 @@ Skeletons:\n${JSON.stringify(chunk.map(persona => ({
       maxTokens: Math.min(9000, 1000 + chunk.length * 380),
       temperature: 0.65,
     });
-    if (!Array.isArray(payload.personas) || payload.personas.length !== chunk.length) {
-      throw new Error('Nova returned an incomplete persona population.');
+      if (!Array.isArray(payload.personas) || payload.personas.length !== chunk.length) {
+        throw new Error('Nova returned an incomplete persona population.');
+      }
+      const byId = new Map<string, Record<string, unknown>>(payload.personas.map((persona: Record<string, unknown>) => [String(persona.persona_id), persona]));
+      generated.push(chunk.map(base => applyNarrative(base, byId.get(base.persona_id) || Object.create(null) as Record<string, unknown>)));
+    } catch (cause) {
+      console.warn(`[Population] Nova enrichment batch ${chunkIndex + 1} failed; using deterministic complete profiles.`, cause instanceof Error ? cause.name : 'UnknownError');
+      generated.push(chunk);
     }
-    const byId = new Map<string, Record<string, unknown>>(payload.personas.map((persona: Record<string, unknown>) => [String(persona.persona_id), persona]));
-    return chunk.map(base => applyNarrative(base, byId.get(base.persona_id) || Object.create(null) as Record<string, unknown>));
-  }));
+  }
 
   const personas = generated.flat();
   const signatures = personas.map(persona => `${persona.display_name}|${persona.backstory}`.toLowerCase());

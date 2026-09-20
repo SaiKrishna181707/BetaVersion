@@ -87,7 +87,7 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     const sink = { send: async () => ({}) } as unknown as Pick<S3Client, 'send'>;
     const worker = createSessionWorker({ docClient: db.client, s3Client: sink, environment, invoke: async input => {
       const sequence = Number(input.persona.persona_id.match(/(\d+)$/)?.[1] || 1);
-      const sentiment = sequence <= 74 ? 'POSITIVE' : sequence <= 94 ? 'MIXED' : 'NEGATIVE';
+      const sentiment = sequence <= 76 ? 'POSITIVE' : sequence <= 96 ? 'MIXED' : 'NEGATIVE';
       return {
         statusCode: 200,
         finish_reason: sentiment === 'POSITIVE' ? 'OBJECTIVE_COMPLETE' : 'ABANDONED',
@@ -119,9 +119,9 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByLabel('Filter feedback').waitFor();
     assert.equal(await page.locator('.centopus-feedback-card').count(), 100);
     const resultText = await page.locator('body').innerText();
-    assert.match(resultText, /Positive\s+74 agents/);
+    assert.match(resultText, /Positive\s+76 agents/);
     assert.match(resultText, /Mixed\s+20 agents/);
-    assert.match(resultText, /Negative\s+6 agents/);
+    assert.match(resultText, /Negative\s+4 agents/);
     assert.doesNotMatch(resultText, /Synthetic Beta|BetaVersion|synthetic-beta/i);
     await page.screenshot({ path: '.artifacts/centopus-fixture-report.png', fullPage: true });
     await page.goto(`${origin}/#/runs/${dispatched.runId}/sessions/${dispatched.sessions[0]!.session_id}`);

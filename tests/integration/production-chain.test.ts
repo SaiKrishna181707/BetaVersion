@@ -101,7 +101,7 @@ test('production API fails closed for missing execution config, unauthenticated 
   assert.equal((await f.api({ ...event('POST', '/runs'), body: 'x'.repeat(65537) })).statusCode, 413);
 });
 
-test('production API does not expose model-provider failures to the operator', async () => {
+test('production API falls back to complete deterministic personas without exposing model-provider failures', async () => {
   const db = memoryDynamo();
   const api = createProductionApi({ docClient: db.client, s3Client: new S3Client({}), environment,
     assertTarget: async () => undefined, sfnClient: { send: async () => ({}) } as never,
@@ -109,11 +109,11 @@ test('production API does not expose model-provider failures to the operator', a
   const response = await api(event('POST', '/runs', { configuration: {
     ...validConfiguration, target_url: 'https://example.com', user_count: 1,
   } }));
-  assert.equal(response.statusCode, 503);
-  assert.deepEqual(JSON.parse(response.body), {
-    code: 'POPULATION_GENERATION_UNAVAILABLE',
-    error: 'The synthetic population could not be prepared right now. Please try again shortly.',
-  });
+  assert.equal(response.statusCode, 201);
+  const body = JSON.parse(response.body);
+  assert.equal(body.personas.length, 1);
+  assert.ok(body.personas[0].display_name);
+  assert.ok(body.personas[0].backstory);
   assert.doesNotMatch(response.body, /provider account detail/i);
 });
 
