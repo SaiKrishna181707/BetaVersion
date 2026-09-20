@@ -107,7 +107,15 @@ export function createProductionApi(dependencies: {
 
   try {
     if (method === 'GET' && path === '/health') {
-      return response(200, { status: 'ok', region, execution_available: Boolean(stateTable && artifactBucket && stateMachineArn), mode: 'AWS', live_view_available: false }, allowedOrigin);
+      const releaseSha = env.RELEASE_SHA || env.APP_COMMIT_SHA || env.BUILD_SHA;
+      return response(200, {
+        status: 'ok',
+        region,
+        execution_available: Boolean(stateTable && artifactBucket && stateMachineArn),
+        mode: 'AWS',
+        live_view_available: false,
+        ...(releaseSha ? { release_sha: releaseSha } : {}),
+      }, allowedOrigin);
     }
 
     if (!stateTable || !artifactBucket) return response(503, { error: 'Storage is not configured.' }, allowedOrigin);

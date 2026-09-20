@@ -42,7 +42,7 @@ async function invokeNova(input: SessionWorkerInput, env: NodeJS.ProcessEnv) {
   console.log('[invokeNova] Response StatusCode:', result.StatusCode, 'FunctionError:', result.FunctionError || 'none');
   if (result.FunctionError || !result.Payload) throw new Error(`Nova worker invocation failed (${result.FunctionError}): ${payloadStr}`);
   const parsed = JSON.parse(payloadStr) as Record<string, unknown>;
-  return validateNovaResponse(parsed, input, false);
+  return validateNovaResponse(parsed, input, true);
 }
 
 export function createSessionWorker(deps: {

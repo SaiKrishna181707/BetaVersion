@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { ReportNarratorPort, SyntheticBetaReport } from '@synthetic-beta/contracts';
 import { computeRunMetrics } from '@synthetic-beta/analytics';
 import { buildSyntheticBetaReport } from '@synthetic-beta/report';
-import { CHECKPOINT_PLAN, runFixture, validConfiguration } from '../fixtures/run-fixtures';
+import { CHECKPOINT_PLAN, runFixture, validConfiguration, sessionFixture } from '../fixtures/run-fixtures';
 
 const { personas, sessions, events } = runFixture();
 const metrics = computeRunMetrics({ run_id: 'run-1', sessions, events, personas, checkpoint_plan: CHECKPOINT_PLAN });
@@ -110,11 +110,47 @@ test('agent feedback is session-specific and never requires invented prose', asy
 
 test('report contains no target-specific fallback recommendations or fabricated catalog claims', async () => {
   const report = await build();
-  const serialized = JSON.stringify({
-    findings: report.findings,
-    agent_feedback: report.agent_feedback,
-    quick_improvements: report.quick_improvements,
-  });
-  assert.doesNotMatch(serialized, /iPhone|MacBook|Apple Watch|48MP|carrier financing|Camera, Specs, Buy/i);
+  const serialized = JSON.stringify(report);
+  assert.doesNotMatch(serialized, /iPhone|MacBook|Apple Watch|48MP|carrier financing|sticky sub-navigation|device pricing/i);
 });
+
+test('empty, failed, and uninstrumented sessions produce generic evidence-only feedback without device claims', async () => {
+  const customSessions = [
+    sessionFixture('s-empty', personas[0]!.persona_id, {
+      run_id: 'run-empty',
+      status: 'FAILED',
+      action_count: 0,
+      elapsed_ms: 0,
+      stop_reason: 'TECHNICAL_ERROR',
+    }),
+    sessionFixture('s-timeout', personas[1]!.persona_id, {
+      run_id: 'run-empty',
+      status: 'TIMED_OUT',
+      action_count: 5,
+      elapsed_ms: 60000,
+      stop_reason: 'LIMIT_REACHED',
+    }),
+  ];
+  const customMetrics = computeRunMetrics({
+    run_id: 'run-empty',
+    sessions: customSessions,
+    events: [],
+    personas: personas.slice(0, 2),
+    checkpoint_plan: CHECKPOINT_PLAN,
+  });
+  const emptyReport = await buildSyntheticBetaReport({
+    configuration: validConfiguration,
+    metrics: customMetrics,
+    sessions: customSessions,
+    events: [],
+    generated_at: '2026-09-18T00:10:00.000Z',
+  });
+  const serialized = JSON.stringify(emptyReport);
+  assert.doesNotMatch(serialized, /iPhone|MacBook|Apple Watch|48MP|carrier financing|sticky sub-navigation|device pricing/i);
+  for (const fb of emptyReport.agent_feedback) {
+    assert.ok(fb.continuation_or_abandonment.includes('FAILED') || fb.continuation_or_abandonment.includes('TIMED_OUT'));
+    assert.equal(fb.what_worked.length, 0);
+  }
+});
+
 
