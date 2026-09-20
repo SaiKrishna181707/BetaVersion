@@ -79,6 +79,15 @@ async function updateApiEnvironment(fnName, releaseSha) {
   console.log(`✓ ${fnName} environment updated with RELEASE_SHA=${releaseSha}`);
 }
 
+async function resolveFunctionName(preferredName, fallbackName) {
+  try {
+    await client.send(new GetFunctionConfigurationCommand({ FunctionName: preferredName }));
+    return preferredName;
+  } catch {
+    return fallbackName;
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let commitSha = process.env.RELEASE_SHA || process.env.GITHUB_SHA || process.env.APP_COMMIT_SHA || '';
@@ -90,25 +99,29 @@ async function main() {
 
   console.log(`Starting backend deployment (target commit: ${commitSha || 'unspecified'})...`);
 
+  const workerFn = await resolveFunctionName('centopus-session-worker', 'synthetic-beta-session-worker');
+  const finalizerFn = await resolveFunctionName('centopus-finalizer', 'synthetic-beta-finalizer');
+  const apiFn = await resolveFunctionName('centopus-api', 'synthetic-beta-api');
+
   // Deployment order: worker -> finalizer -> api
-  console.log('\n[1/3] Deploying session worker Lambda...');
-  const workerInfo = await deployCode('centopus-session-worker', '.artifacts/lambda-bundles/worker');
+  console.log(`\n[1/3] Deploying session worker Lambda (${workerFn})...`);
+  const workerInfo = await deployCode(workerFn, '.artifacts/lambda-bundles/worker');
 
-  console.log('\n[2/3] Deploying finalizer Lambda...');
-  const finalizerInfo = await deployCode('centopus-finalizer', '.artifacts/lambda-bundles/finalizer');
+  console.log(`\n[2/3] Deploying finalizer Lambda (${finalizerFn})...`);
+  const finalizerInfo = await deployCode(finalizerFn, '.artifacts/lambda-bundles/finalizer');
 
-  console.log('\n[3/3] Deploying API Lambda...');
-  const apiInfo = await deployCode('centopus-api', '.artifacts/lambda-bundles/api');
+  console.log(`\n[3/3] Deploying API Lambda (${apiFn})...`);
+  const apiInfo = await deployCode(apiFn, '.artifacts/lambda-bundles/api');
 
   if (commitSha) {
-    await updateApiEnvironment('centopus-api', commitSha);
+    await updateApiEnvironment(apiFn, commitSha);
   }
 
   console.log('\n========================================');
   console.log('DEPLOYMENT SUMMARY:');
-  console.log(`centopus-session-worker: CodeSha256=${workerInfo.CodeSha256} LastModified=${workerInfo.LastModified}`);
-  console.log(`centopus-finalizer:      CodeSha256=${finalizerInfo.CodeSha256} LastModified=${finalizerInfo.LastModified}`);
-  console.log(`centopus-api:            CodeSha256=${apiInfo.CodeSha256} LastModified=${apiInfo.LastModified}`);
+  console.log(`${workerFn}: CodeSha256=${workerInfo.CodeSha256} LastModified=${workerInfo.LastModified}`);
+  console.log(`${finalizerFn}:      CodeSha256=${finalizerInfo.CodeSha256} LastModified=${finalizerInfo.LastModified}`);
+  console.log(`${apiFn}:            CodeSha256=${apiInfo.CodeSha256} LastModified=${apiInfo.LastModified}`);
   if (commitSha) console.log(`API RELEASE_SHA:               ${commitSha}`);
   console.log('========================================\n');
 }

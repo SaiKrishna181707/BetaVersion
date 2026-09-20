@@ -413,7 +413,7 @@ async function requestGemini(
 export async function buildProductIntelligence(
   input: unknown,
   apiKey: string | undefined,
-  model = 'gemini-2.5-flash',
+  model = 'gemini-2.5-flash-lite',
 ): Promise<ProductIntelligence> {
   const request = validateProductIntelligenceRequest(input);
   if (!apiKey) throw new ProductIntelligenceServiceError('GEMINI_API_KEY is not configured on the API Lambda.');
@@ -440,23 +440,36 @@ Canonical public URL: ${crawl.canonicalUrl}
 
 ${corpus}`;
 
+  const candidateModels = [
+    model,
+    'gemini-2.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.5-flash',
+  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const raw = await requestGemini(
-        apiKey,
-        model,
-        attempt === 0 ? prompt : `${prompt}\n\nVALIDATION RETRY: ensure every required JSON key is present and values are supported by the source text.`,
-      );
-      return parseGeminiIntelligence(
-        canonicalRequest,
-        crawl.pages[0]?.title || new URL(crawl.canonicalUrl).hostname,
-        raw,
-        new Date().toISOString(),
-        pagesCrawled,
-      );
-    } catch (cause) {
-      lastError = cause;
+  for (const candidateModel of candidateModels) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const raw = await requestGemini(
+          apiKey,
+          candidateModel,
+          attempt === 0 ? prompt : `${prompt}\n\nVALIDATION RETRY: ensure every required JSON key is present and values are supported by the source text.`,
+        );
+        return parseGeminiIntelligence(
+          canonicalRequest,
+          crawl.pages[0]?.title || new URL(crawl.canonicalUrl).hostname,
+          raw,
+          new Date().toISOString(),
+          pagesCrawled,
+        );
+      } catch (cause) {
+        lastError = cause;
+        const msg = cause instanceof Error ? cause.message : String(cause);
+        if (msg.includes('HTTP 429') || msg.includes('HTTP 503')) {
+          break;
+        }
+      }
     }
   }
 

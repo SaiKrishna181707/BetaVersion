@@ -38,17 +38,27 @@ async function verifyHealthEndpoint(expectedSha) {
   return data;
 }
 
+async function resolveFunctionName(client, preferredName, fallbackName) {
+  try {
+    await client.send(new GetFunctionConfigurationCommand({ FunctionName: preferredName }));
+    return preferredName;
+  } catch {
+    return fallbackName;
+  }
+}
+
 async function verifyLambdaMetadata() {
   console.log('\nVerifying deployed Lambda configurations in AWS...');
   const client = new LambdaClient({ region });
-  const functions = [
-    'centopus-api',
-    'centopus-session-worker',
-    'centopus-finalizer',
+  const rawFunctions = [
+    ['centopus-api', 'synthetic-beta-api'],
+    ['centopus-session-worker', 'synthetic-beta-session-worker'],
+    ['centopus-finalizer', 'synthetic-beta-finalizer'],
   ];
 
   const results = {};
-  for (const fnName of functions) {
+  for (const [preferred, fallback] of rawFunctions) {
+    const fnName = await resolveFunctionName(client, preferred, fallback);
     try {
       const config = await client.send(new GetFunctionConfigurationCommand({ FunctionName: fnName }));
       if (config.LastUpdateStatus && config.LastUpdateStatus !== 'Successful') {

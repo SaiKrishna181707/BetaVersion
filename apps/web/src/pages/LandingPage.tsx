@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from '@centopus/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
+import { authConfigured, beginLogin, signOut, tokens } from '../lib/auth';
 
 const loadingMessages = [
   'Understanding your product…',
@@ -102,6 +103,26 @@ export function LandingPage() {
         <img src="/favicon.svg" alt="" />
         <span>centopus</span>
       </a>
+
+      {authConfigured() && (
+        tokens() ? (
+          <button
+            type="button"
+            className="centopus-auth-button"
+            onClick={() => signOut()}
+          >
+            Sign out
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="centopus-auth-button"
+            onClick={() => void beginLogin()}
+          >
+            Operator sign in
+          </button>
+        )
+      )}
     </header>
 
     <main id="main" className="centopus-landing-main">
