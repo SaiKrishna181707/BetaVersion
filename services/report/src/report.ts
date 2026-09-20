@@ -36,6 +36,7 @@ export const REPORT_LIMITATIONS: readonly string[] = [
   'Synthetic users are simulated agents. They are not real beta users and do not represent market demand or purchasing intent.',
   'Every number here is computed from recorded session events. Interpretation is labelled and never replaces the evidence.',
   'Findings describe only the objective, population, and target configured for this run.',
+  'First-person agent reflection is a synthetic, evidence-derived interpretation of the recorded journey and persona context; it is not human-reported sentiment.',
 ];
 
 function indexEvents(events: readonly BehaviorEvent[]): Map<string, BehaviorEvent[]> {
@@ -257,6 +258,11 @@ export async function buildCentopusReport(input: BuildReportInput): Promise<Cent
     event.target_descriptor || event.page_title || event.route || event.url;
 
   const unique = (values: string[]): string[] => [...new Set(values)];
+  const productName = input.configuration.product_name?.trim()
+    || input.configuration.company_name?.trim()
+    || (() => {
+      try { return new URL(input.configuration.target_url).hostname; } catch { return 'this product'; }
+    })();
 
   // Every expected session receives a feedback record, including sessions with no
   // usable events. Missing evidence stays explicit instead of being backfilled with
@@ -320,6 +326,109 @@ export async function buildCentopusReport(input: BuildReportInput): Promise<Cent
       ? `Review the experience around "${describeEvent(firstFriction)}", where this session recorded ${firstFriction.result.toLowerCase()} / ${firstFriction.agent_reason_code.replaceAll('_', ' ').toLowerCase()}.`
       : null;
 
+    const meaningful = events.filter(event => event.action_type !== 'wait');
+    const firstMeaningful = meaningful[0] ?? events[0];
+    const lastSuccessful = successful.at(-1);
+    const personaName = persona?.display_name?.trim() || 'This synthetic user';
+    const completed = session.status === 'COMPLETED';
+    const progressed = events.some(event => event.agent_reason_code === 'GOAL_PROGRESS'
+      || event.agent_reason_code === 'OBJECTIVE_COMPLETE'
+      || event.task_checkpoint !== null);
+
+    let overallFeeling: 'POSITIVE' | 'MIXED' | 'NEGATIVE' | 'NEUTRAL' | 'INSUFFICIENT_EVIDENCE';
+    if (events.length === 0) overallFeeling = 'INSUFFICIENT_EVIDENCE';
+    else if (completed && friction.length === 0) overallFeeling = 'POSITIVE';
+    else if (completed) overallFeeling = 'MIXED';
+    else if (session.status === 'FAILED' || friction.length > 0) overallFeeling = 'NEGATIVE';
+    else if (session.status === 'ABANDONED' || session.status === 'TIMED_OUT') overallFeeling = 'MIXED';
+    else overallFeeling = 'NEUTRAL';
+
+    let feelingSummary: string;
+    if (events.length === 0) {
+      feelingSummary = `I do not have enough recorded interaction with ${productName} to form a reliable impression.`;
+    } else if (overallFeeling === 'POSITIVE') {
+      feelingSummary = `Using ${productName} felt straightforward in this run because I reached the configured objective without a recorded friction signal.`;
+    } else if (overallFeeling === 'NEGATIVE' && firstFriction) {
+      feelingSummary = `My experience with ${productName} felt frustrating around "${describeEvent(firstFriction)}", where the recorded ${firstFriction.action_type} ended as ${firstFriction.result.toLowerCase()}.`;
+    } else if (!completed) {
+      feelingSummary = `My experience with ${productName} felt incomplete: I could interact with the product, but I did not validate the configured objective before the session ended.`;
+    } else {
+      feelingSummary = `My experience with ${productName} was mixed: the objective was completed, but the journey also contained recorded friction.`;
+    }
+
+    const firstImpression = firstMeaningful
+      ? `My first recorded interaction with ${productName} was a ${firstMeaningful.action_type} on "${describeEvent(firstMeaningful)}" at ${firstMeaningful.route || '/'}; it was recorded as ${firstMeaningful.result.toLowerCase()}.`
+      : null;
+
+    const whatILiked = unique(successful
+      .filter(event => event.action_type !== 'wait')
+      .map(event => `I could ${event.action_type} "${describeEvent(event)}" successfully in ${productName} without a recorded error on that action.`))
+      .slice(0, 4);
+
+    const whatFrustratedMe = unique(friction.map(event =>
+      `I got stuck around "${describeEvent(event)}" when my ${event.action_type} was recorded as ${event.result.toLowerCase()} / ${event.agent_reason_code.replaceAll('_', ' ').toLowerCase()}.`,
+    )).slice(0, 4);
+    if (!whatFrustratedMe.length && !completed && events.length > 0) {
+      whatFrustratedMe.push(`I did not hit an explicit recorded error, but I still could not validate the objective in ${productName} before the session ended.`);
+    }
+
+    const personaExpectation = persona?.product_expectations?.trim();
+    let normalizedExpectation = personaExpectation?.replace(/^expects?\s+/i, '').replace(/\.$/, '') || '';
+    const productPrefix = `${productName.toLowerCase()} to `;
+    if (normalizedExpectation.toLowerCase().startsWith(productPrefix)) {
+      normalizedExpectation = normalizedExpectation.slice(productPrefix.length);
+    }
+    normalizedExpectation = normalizedExpectation.replace(/^to\s+/i, '');
+    const expectationGap = personaExpectation
+      ? completed
+        ? `I expected ${productName} to ${normalizedExpectation}; this run ultimately validated the objective after ${events.length} recorded events.`
+        : `I expected ${productName} to ${normalizedExpectation}; however, this run ended ${session.status.toLowerCase()} without validated objective completion.`
+      : `My configured goal was "${persona?.goal_context || input.configuration.objective}". ${completed ? 'The recorded journey validated it.' : 'The recorded journey did not validate it.'}`;
+
+    let taskConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+    if (events.length === 0) taskConfidence = 'NONE';
+    else if (completed) taskConfidence = 'HIGH';
+    else if (progressed) taskConfidence = 'MEDIUM';
+    else taskConfidence = 'LOW';
+
+    const taskConfidenceReason = taskConfidence === 'HIGH'
+      ? `I have high confidence because ${productName} recorded validated objective completion.`
+      : taskConfidence === 'MEDIUM'
+        ? `I made recorded progress in ${productName}, but the evidence does not validate full objective completion.`
+        : taskConfidence === 'LOW'
+          ? `I interacted with ${productName}, but the recorded journey contains no validated completion evidence.`
+          : `There are no recorded product interactions from which to judge task completion.`;
+
+    let wouldUseAgain: 'YES' | 'MAYBE' | 'NO' | 'NOT_ENOUGH_EVIDENCE';
+    let wouldUseAgainReason: string;
+    if (events.length === 0 || session.status === 'FAILED' || session.status === 'CANCELLED') {
+      wouldUseAgain = 'NOT_ENOUGH_EVIDENCE';
+      wouldUseAgainReason = `This session does not contain enough reliable product-use evidence to infer a future-use preference for ${productName}.`;
+    } else if (completed && friction.length === 0) {
+      wouldUseAgain = 'YES';
+      wouldUseAgainReason = `This synthetic reflection leans yes because the recorded journey completed the objective without a friction signal.`;
+    } else if (completed || (successful.length > 0 && friction.length === 0)) {
+      wouldUseAgain = 'MAYBE';
+      wouldUseAgainReason = `This synthetic reflection is tentative because some interactions succeeded, but the evidence is not uniformly positive.`;
+    } else if (friction.length > 0) {
+      wouldUseAgain = 'NO';
+      wouldUseAgainReason = `This synthetic reflection leans no because the session did not complete the objective and recorded explicit friction.`;
+    } else {
+      wouldUseAgain = 'MAYBE';
+      wouldUseAgainReason = `This synthetic reflection remains uncertain because the session interacted with the product but did not validate the objective.`;
+    }
+
+    let directFeedback: string;
+    if (events.length === 0) {
+      directFeedback = `I cannot give reliable feedback on ${productName} because my session contains no recorded product interaction.`;
+    } else if (completed) {
+      directFeedback = `I was able to complete my objective in ${productName} after ${events.length} recorded events.${firstFriction ? ` The main point I would improve is around "${describeEvent(firstFriction)}".` : ` The smoothest recorded interaction was "${lastSuccessful ? describeEvent(lastSuccessful) : describeEvent(events.at(-1)!)}".`}`;
+    } else if (firstFriction) {
+      directFeedback = `I could use parts of ${productName}, but I did not finish my objective. I would first improve the experience around "${describeEvent(firstFriction)}", because that is where my recorded journey showed friction.`;
+    } else {
+      directFeedback = `I could interact with ${productName}${lastSuccessful ? `, including "${describeEvent(lastSuccessful)}"` : ''}, but I still could not verify my objective before the session ended. I would make the next step toward "${persona?.goal_context || input.configuration.objective}" clearer.`;
+    }
+
     return {
       session_id: session.session_id,
       persona_id: session.persona_id,
@@ -329,6 +438,19 @@ export async function buildCentopusReport(input: BuildReportInput): Promise<Cent
       what_slowed_them_down: slowdownSignals,
       continuation_or_abandonment: continuation,
       improvement_suggestion: improvement,
+      reflection_basis: 'EVIDENCE_DERIVED_SYNTHETIC_REFLECTION' as const,
+      overall_feeling: overallFeeling,
+      feeling_summary: feelingSummary,
+      first_impression: firstImpression,
+      what_i_liked: whatILiked,
+      what_frustrated_me: whatFrustratedMe,
+      expectation_gap: expectationGap,
+      task_confidence: taskConfidence,
+      task_confidence_reason: taskConfidenceReason,
+      would_use_again: wouldUseAgain,
+      would_use_again_reason: wouldUseAgainReason,
+      direct_feedback: `${personaName}: ${directFeedback}`,
+      evidence_event_count: events.length,
     };
   });
 
