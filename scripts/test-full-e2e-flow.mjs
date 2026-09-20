@@ -2,13 +2,13 @@ const API = 'https://fkvvrndb17.execute-api.us-east-1.amazonaws.com';
 
 async function main() {
   console.log('=== STEP 1: TEST GEMINI PRODUCT INTELLIGENCE ===');
-  console.log('Scraping and analyzing https://www.apple.com/ with Gemini...');
+  console.log('Scraping and analyzing https://main.d1s2dm4wj8xxb.amplifyapp.com/ with Gemini...');
   const intelRes = await fetch(`${API}/product-intelligence`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      company_name: 'Apple',
-      website_url: 'https://www.apple.com/'
+      company_name: 'Centopus',
+      website_url: 'https://main.d1s2dm4wj8xxb.amplifyapp.com/'
     })
   });
   if (!intelRes.ok) {
@@ -32,7 +32,7 @@ async function main() {
       target_url: intel.website_url,
       product_description: intel.summary,
       target_audience: intel.target_audience,
-      objective: intel.suggested_objectives?.[0] || 'Explore iPhone models and technical specifications',
+      objective: intel.suggested_objectives?.[0] || 'Explore the Centopus product and find what it does and how a new product test is started.',
       user_count: agentCount,
       batch_size: agentCount,
       max_session_seconds: 60,
@@ -42,7 +42,7 @@ async function main() {
     population_spec: {
       population_seed: `pop-${Date.now()}`,
       cohort: intel.target_audience.slice(0, 80),
-      goal_context: intel.suggested_objectives?.[0] || 'Explore iPhone models and technical specifications',
+      goal_context: intel.suggested_objectives?.[0] || 'Explore the Centopus product and find what it does and how a new product test is started.',
       size: agentCount,
       target_audience: intel.target_audience,
       product_name: intel.product_name
@@ -71,7 +71,7 @@ async function main() {
     body: JSON.stringify({
       display_name: 'Verified Tester',
       patience: 'HIGH',
-      goals: 'Verify all hardware specs and evaluate camera capabilities'
+      goals: 'Verify how synthetic testing works and evaluate evidence reporting'
     })
   });
   if (!patchRes.ok) throw new Error(`Update persona failed: ${patchRes.status} ${await patchRes.text()}`);

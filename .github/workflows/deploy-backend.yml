@@ -1,0 +1,49 @@
+name: Deploy production backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-production-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build production lambda bundles
+        run: npm run build:lambdas
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::643700104680:role/CentopusBackendGitHubDeployRole
+          aws-region: us-east-1
+
+      - name: Deploy backend Lambdas
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/deploy-lambdas.mjs --commit-sha "$GITHUB_SHA"
+
+      - name: Verify production backend deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-production-backend.mjs --expected-sha "$GITHUB_SHA"
