@@ -52,6 +52,7 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('button', { name: 'Build Product' }).click();
     await page.waitForURL('**/#/new');
     await page.getByRole('spinbutton', { name: 'Synthetic users' }).fill('1');
+    await page.getByRole('checkbox', { name: /I confirm that I own this product or have explicit authorization/i }).check();
     const checkpoint = page.getByRole('textbox', { name: 'Evidence checkpoints (optional)' });
     await checkpoint.pressSequentially('start, goal');
     assert.equal(await checkpoint.inputValue(), 'start, goal');
