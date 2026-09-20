@@ -67,7 +67,12 @@ function operatorSubject(event: ApiGatewayEvent): string | null {
 }
 
 function ownsRecord(item: Record<string, unknown> | undefined, subject: string | null): boolean {
-  return Boolean(subject && item && item.owner_sub === subject);
+  if (!subject || !item) return false;
+  if (item.owner_sub === subject) return true;
+  // Preserve access to historical records created before owner_sub existed only in
+  // explicit no-auth/local mode. Authenticated operators never inherit unowned data.
+  return subject === 'local-operator'
+    && (item.owner_sub === undefined || item.owner_sub === null || item.owner_sub === '');
 }
 
 function parseJson(body: string | undefined): unknown {
@@ -157,7 +162,6 @@ export function createProductionApi(dependencies: {
     if (method === 'GET' && path === '/runs') {
       const items = await scanAll(docClient, {
         TableName: stateTable,
-        FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix)',
         ExpressionAttributeValues: { ':meta': 'META', ':runPrefix': 'RUN#', ':owner': operatorSub },
         FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix) AND owner_sub = :owner',
         ProjectionExpression: 'run_id, #st, configuration, persona_count, created_at, updated_at, started_at, finished_at, owner_sub',
