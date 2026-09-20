@@ -105,43 +105,60 @@ Amazon Nova helps with product understanding, persona language, and final feedba
 
 ## AWS architecture
 
-AWS is not just where Centopus is hosted. It is the execution engine.
+AWS is not just where Centopus is hosted. **AWS is the execution engine that turns one usability task into a controlled population of independent browser agents.**
 
 ```mermaid
 flowchart TB
-    USER["Product Team"]
-    WEB["Centopus Web App<br/>React + Vite"]
-    API["Amazon API Gateway<br/>+ AWS Lambda"]
-    ORCH["AWS Step Functions<br/>Population Orchestration"]
-    WORKER["Session Worker<br/>AWS Lambda"]
-    AUTH["AWS IAM + STS<br/>Cross-account execution"]
-    NOVA["Amazon Nova Act<br/>Python Worker"]
-    BROWSER["Amazon Bedrock<br/>AgentCore Browser"]
-    EVIDENCE["Browser Evidence Recorder<br/>actions · checkpoints · timing · failures"]
-    STORE["Amazon DynamoDB + Amazon S3<br/>events · session state · raw trajectories"]
-    FINAL["Report Finalizer<br/>AWS Lambda"]
-    SYNTH["Amazon Bedrock / Amazon Nova<br/>evidence-grounded synthesis"]
-    RESULT["Centopus Results<br/>population signal + individual evidence"]
-    OPS["CloudWatch · EventBridge · SNS · Budgets<br/>monitoring · reconciliation · spend guardrails"]
+    USER["Product Team<br/>URL + task + population"]
+
+    subgraph CONTROL["1 · CONTROL PLANE"]
+      direction LR
+      WEB["Centopus Web App<br/>React + Vite"]
+      API["API Gateway<br/>+ Lambda"]
+      ORCH["Step Functions<br/>population orchestration"]
+      WEB --> API --> ORCH
+    end
+
+    subgraph AGENT["2 · INDEPENDENT AGENT SESSION"]
+      direction LR
+      WORKER["Session Worker<br/>AWS Lambda"]
+      NOVA["Amazon Nova Act"]
+      BROWSER["AgentCore Browser<br/>real rendered website"]
+      WORKER --> NOVA --> BROWSER
+    end
+
+    subgraph EVIDENCE["3 · EVIDENCE LAYER"]
+      direction LR
+      REC["Browser Evidence Recorder<br/>actions · checkpoints · timing · failures"]
+      DDB["DynamoDB<br/>session + events"]
+      S3["Amazon S3<br/>raw trajectories"]
+      REC --> DDB
+      REC --> S3
+    end
+
+    subgraph RESULT["4 · DECISION LAYER"]
+      direction LR
+      METRICS["Deterministic Metrics"]
+      SYNTH["Amazon Bedrock + Nova<br/>evidence-grounded synthesis"]
+      OUT["Centopus Results<br/>population signal → individual evidence"]
+      METRICS --> SYNTH --> OUT
+    end
 
     USER --> WEB
-    WEB --> API
-    API --> ORCH
     ORCH --> WORKER
-    WORKER --> AUTH
-    AUTH --> NOVA
-    NOVA --> BROWSER
-    BROWSER --> EVIDENCE
-    EVIDENCE --> STORE
-    STORE --> FINAL
-    FINAL --> SYNTH
-    SYNTH --> RESULT
-    RESULT --> WEB
+    BROWSER --> REC
+    DDB --> METRICS
+    S3 --> METRICS
+    OUT --> WEB
 
-    OPS -. protects .-> ORCH
-    OPS -. monitors .-> WORKER
-    OPS -. reconciles .-> FINAL
+    SECURITY["IAM + STS<br/>cross-account security"] -.-> WORKER
+    OPS["CloudWatch · EventBridge · SNS · Budgets<br/>monitoring · reconciliation · spend guardrails"] -.-> ORCH
+    OPS -.-> METRICS
 ```
+
+**One persona = one persisted session = one independent browser journey.**  
+Step Functions controls concurrency; Nova Act drives the browser; the evidence layer records what happened; deterministic analytics computes the outcome; Nova only explains the evidence afterward.
+
 
 ### AWS services in the product
 
@@ -214,23 +231,6 @@ That bridge from **population signal → individual evidence** is the core produ
 
 ---
 
-## What we learned building it
-
-The hardest part was not making an agent click a website. It was making browser-agent behavior trustworthy enough to use as product evidence.
-
-Three lessons shaped the architecture:
-
-**Model output is not evidence.**  
-We built an instrumented browser boundary so the measured outcome comes from observed actions and states rather than the agent's final prose.
-
-**Agent scale needs operational boundaries.**  
-Independent sessions require concurrency limits, spend controls, idempotency, cancellation/reconciliation logic, and careful retry behavior because browser actions have real side effects.
-
-**AI and analytics should have different jobs.**  
-Deterministic code computes the outcome. Nova improves product context and the language of the final explanation without changing the recorded result.
-
----
-
 ## Real-world use
 
 Centopus is designed for product managers, UX teams, designers, founders, QA teams, and engineers who need to test more often than they can recruit.
@@ -280,20 +280,6 @@ The Nova worker's direct Python runtime dependencies are pinned in `services/nov
 
 ---
 
-## Team
-
-### Sai Krishna — Project Lead & Product / Architecture Lead
-
-Led the product vision, system architecture, UX direction, feature planning, integration, testing, and final delivery. Worked across the population flow, Nova-powered intelligence, reporting experience, frontend, AWS architecture, and end-to-end product integration.
-
-### Vivek — Technical Co-Lead & AWS / Agent Systems Lead
-
-Worked across the same core product with a strong focus on Nova Act, Amazon Bedrock, AgentCore Browser, cross-account AWS execution, Lambda/session infrastructure, browser evidence, reliability, debugging, and integration between the agent runtime and the product.
-
-Both leads collaborated across architecture, implementation, testing, debugging, and final integration.
-
----
-
 ## Technical documentation
 
 For judges or engineers who want to inspect the implementation deeper:
@@ -306,16 +292,8 @@ Other audit, local-development, and submission-preparation files are indexed in 
 
 ---
 
-## Responsible use
-
-Centopus is intended for web products you own or are authorized to test.
-
-Synthetic users are simulated agents, not real customers. The browser worker is bounded by target validation, host restrictions, time/action ceilings, and protections around destructive, credential, CAPTCHA, and real-payment interactions.
-
----
-
 <p align="center">
   <strong>Centopus</strong><br/>
   Don't ask AI what a user might do.<br/>
-  <strong>Give the user a browser and find out.</strong>
+  <strong>Give every user a browser journey — and find out.</strong>
 </p>
