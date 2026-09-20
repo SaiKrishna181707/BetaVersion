@@ -67,6 +67,8 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('button', { name: 'Build Product' }).click();
     await page.waitForURL('**/#/new');
     await page.getByRole('spinbutton', { name: 'Number of agents' }).fill('1');
+    const authorization = page.getByRole('checkbox', { name: /I own this product or have explicit authorization/i });
+    if (await authorization.count()) await authorization.check();
     await page.getByRole('button', { name: 'Build Agents' }).click();
     await page.waitForURL('**/population');
     await page.getByRole('heading', { name: 'Meet the people testing your product.' }).waitFor();
