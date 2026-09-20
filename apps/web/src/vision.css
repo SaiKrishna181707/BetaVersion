@@ -1421,3 +1421,8 @@
 .vision-recent-runs, .vision-section, .vision-main { color: #f5f1ff; }
 .vision-session-outcome { background: #171027; border-color: #3a2d50; }
 .vision-checkpoint, .vision-evidence-ref { background: #24163d; color: #bca9ff; }
+
+
+.vision-consent { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.vision-consent input { width: 16px; height: 16px; margin: 2px 0 0; flex: 0 0 auto; accent-color: var(--purple, #7c5cff); }
+.vision-consent span { font-size: 13px; line-height: 1.5; }
