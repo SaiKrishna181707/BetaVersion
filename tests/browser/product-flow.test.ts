@@ -69,6 +69,8 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('spinbutton', { name: 'Number of agents' }).fill('1');
     await page.getByRole('button', { name: 'Build Agents' }).click();
     await page.waitForURL('**/population');
+    await page.getByRole('heading', { name: 'Meet the people testing your product.' }).waitFor();
+    await page.locator('.agent-card').first().click();
     await page.getByRole('button', { name: 'Run Simulation' }).click();
     await page.waitForURL('**/live');
     assert.ok(dispatched);
