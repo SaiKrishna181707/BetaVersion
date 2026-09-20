@@ -15,6 +15,19 @@
   Built for <a href="https://www.wemakedevs.org/aws/first-commit">First Commit — Bharat Builds Tour</a> by WeMakeDevs in collaboration with AWS Builder Center.
 </p>
 
+## 🎬 3-Minute Demo
+
+<p align="center">
+  <a href="https://youtu.be/OIuQfNFQq1U">
+    <img src="https://img.youtube.com/vi/OIuQfNFQq1U/maxresdefault.jpg" alt="Watch the Centopus 3-minute demo" width="860" />
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://youtu.be/OIuQfNFQq1U">▶ Watch Centopus in action</a></strong><br/>
+  From product URL → synthetic population → independent Nova Act browser journeys → evidence-backed results.
+</p>
+
 ---
 
 ## The problem
