@@ -9,6 +9,8 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as gateway from 'aws-cdk-lib/aws-apigatewayv2';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
+import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
 import * as sns from 'aws-cdk-lib/aws-sns';
@@ -109,17 +111,44 @@ export function createStacks(app: App, config: DeploymentConfig) {
   const apiFunction = makeFunction('Api', 'api', 45);
   apiFunction.addEnvironment('RUN_STATE_MACHINE_ARN', machine.stateMachineArn);
   apiFunction.addEnvironment('AMPLIFY_ORIGIN', config.webOrigin);
+  apiFunction.addEnvironment('REQUIRE_AUTH', 'true');
   if (config.geminiSecretArn) {
     apiFunction.addEnvironment('GEMINI_SECRET_ARN', config.geminiSecretArn);
     apiFunction.addToRolePolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue'], resources: [config.geminiSecretArn] }));
   }
   machine.grantStartExecution(apiFunction); machine.grantExecution(apiFunction, 'states:StopExecution');
   bucket.grantRead(apiFunction, 'reports/*'); bucket.grantRead(apiFunction, 'nova-trajectories/*');
+  const operatorPool = new cognito.UserPool(control, 'Operators', {
+    userPoolName: prefix + '-operators',
+    selfSignUpEnabled: true,
+    signInAliases: { email: true },
+    passwordPolicy: { minLength: 12, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true },
+    accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+    removalPolicy: RemovalPolicy.RETAIN,
+  });
+  const operatorClient = operatorPool.addClient('WebClient', {
+    generateSecret: false,
+    preventUserExistenceErrors: true,
+    oAuth: {
+      flows: { authorizationCodeGrant: true },
+      callbackUrls: [config.webOrigin + '/auth/callback'],
+      logoutUrls: [config.webOrigin],
+    },
+  });
+  operatorPool.addDomain('HostedUi', { cognitoDomain: { domainPrefix: config.cognitoDomainPrefix } });
+
   const integration = new HttpLambdaIntegration('ProductionApi', apiFunction);
+  const operatorAuthorizer = new HttpUserPoolAuthorizer('OperatorAuthorizer', operatorPool, {
+    userPoolClients: [operatorClient],
+  });
   const api = new gateway.HttpApi(control, 'HttpApi', { corsPreflight: { allowOrigins: [config.webOrigin],
-    allowMethods: [gateway.CorsHttpMethod.GET, gateway.CorsHttpMethod.POST, gateway.CorsHttpMethod.PATCH, gateway.CorsHttpMethod.OPTIONS], allowHeaders: ['content-type'] } });
+    allowMethods: [gateway.CorsHttpMethod.GET, gateway.CorsHttpMethod.POST, gateway.CorsHttpMethod.PATCH, gateway.CorsHttpMethod.OPTIONS],
+    allowHeaders: ['content-type', 'authorization'] } });
   api.addRoutes({ path: '/health', methods: [gateway.HttpMethod.GET], integration });
-  api.addRoutes({ path: '/{proxy+}', integration });
+  api.addRoutes({ path: '/{proxy+}', integration, authorizer: operatorAuthorizer });
+  new CfnOutput(control, 'OperatorUserPoolId', { value: operatorPool.userPoolId });
+  new CfnOutput(control, 'OperatorClientId', { value: operatorClient.userPoolClientId });
+  new CfnOutput(control, 'OperatorHostedUi', { value: 'https://' + config.cognitoDomainPrefix + '.auth.' + region + '.amazoncognito.com' });
 
   const workflow = new nova.CfnWorkflowDefinition(agent, 'NovaWorkflow', { name: `${prefix}-browser-session` });
   const novaWorker = new lambda.DockerImageFunction(agent, 'NovaWorker', { functionName: novaFunctionName,
