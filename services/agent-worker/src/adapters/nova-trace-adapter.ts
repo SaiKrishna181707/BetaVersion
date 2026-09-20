@@ -72,6 +72,7 @@ const REASONS = new Set(['EXPLORING', 'GOAL_PROGRESS', 'RETRYING', 'BACKTRACKING
 export function adaptNovaTraceToBehaviorEvents(
   trajectory: RawNovaTrajectory,
   plan: Pick<SessionPlan, 'run_id' | 'session_id' | 'checkpoint_plan'> & { persona_id: string; target_url: string },
+  options: { allowDerivedTimestamp?: boolean } = {},
 ): BehaviorEvent[] {
   if (!Array.isArray(trajectory?.steps)) return [];
   return trajectory.steps.flatMap(step => {
@@ -79,8 +80,12 @@ export function adaptNovaTraceToBehaviorEvents(
     const action = typeof step.action === 'string' ? { type: step.action } : step.action;
     const type = action?.type && ACTION_TYPE_MAP[action.type.toLowerCase()];
     const result = step.result ?? step.status;
-    if (!type || !result || !RESULTS.has(result) || typeof step.timestamp !== 'string'
-      || !Number.isFinite(Date.parse(step.timestamp)) || !Number.isSafeInteger(step.elapsed_ms)
+    const hasValidTimestamp = typeof step.timestamp === 'string' && Number.isFinite(Date.parse(step.timestamp));
+    if (!hasValidTimestamp && !options.allowDerivedTimestamp) return [];
+    const rawTimestamp = hasValidTimestamp
+      ? new Date(step.timestamp!).toISOString()
+      : new Date(Date.now() - Math.max(0, (trajectory.steps.at(-1)?.elapsed_ms ?? 0) - (step.elapsed_ms ?? 0))).toISOString();
+    if (!type || !result || !RESULTS.has(result) || !Number.isSafeInteger(step.elapsed_ms)
       || step.elapsed_ms! < 0 || !step.observation?.url) return [];
     let url: URL;
     try { url = new URL(step.observation.url); } catch { return []; }
@@ -94,7 +99,7 @@ export function adaptNovaTraceToBehaviorEvents(
     const screenshot = step.screenshot_ref && /^s3:\/\/[^/]+\/.+/.test(step.screenshot_ref) ? step.screenshot_ref : null;
     return [{
       run_id: plan.run_id, session_id: plan.session_id, persona_id: plan.persona_id,
-      timestamp: new Date(step.timestamp).toISOString(), elapsed_ms: step.elapsed_ms!,
+      timestamp: rawTimestamp, elapsed_ms: step.elapsed_ms!,
       url: url.toString(), page_title: step.observation.page_title ?? step.observation.title ?? '', route: url.pathname,
       action_type: type, target_descriptor: action?.selector ?? action?.target ?? null,
       result: result as BehaviorEvent['result'], screenshot_ref: screenshot,
@@ -105,8 +110,12 @@ export function adaptNovaTraceToBehaviorEvents(
   });
 }
 
-export function adaptNovaTrajectoryToSessionResult(trajectory: RawNovaTrajectory, plan: SessionPlan): SessionResult {
-  const events = adaptNovaTraceToBehaviorEvents(trajectory, { ...plan, persona_id: plan.persona.persona_id });
+export function adaptNovaTrajectoryToSessionResult(
+  trajectory: RawNovaTrajectory,
+  plan: SessionPlan,
+  options: { allowDerivedTimestamp?: boolean } = { allowDerivedTimestamp: true },
+): SessionResult {
+  const events = adaptNovaTraceToBehaviorEvents(trajectory, { ...plan, persona_id: plan.persona.persona_id }, options);
   const final = plan.checkpoint_plan.at(-1);
   const reachedFinal = final !== undefined && events.some(event => event.task_checkpoint === final && event.result === 'SUCCESS');
   const reason = trajectory.finish_reason;
