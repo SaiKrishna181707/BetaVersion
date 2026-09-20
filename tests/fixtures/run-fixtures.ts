@@ -19,7 +19,7 @@ export const validConfiguration: RunConfiguration = {
   user_count: 5,
   batch_size: 3,
   max_session_seconds: 180,
-  run_hard_cap_usd: 45,
+  run_hard_cap_usd: 40,
   authorization_acknowledged: true,
 };
 

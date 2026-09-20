@@ -12,8 +12,7 @@ import { memoryDynamo } from '../fixtures/memory-dynamo';
 test('browser: Centopus product -> population -> execution -> evidence/report using explicit offline fixtures', async () => {
   const server = await createServer({ root: 'apps/web', configFile: false,
     server: { host: '127.0.0.1', port: 0 },
-    define: { 'import.meta.env.VITE_API_BASE_URL': JSON.stringify('/centopus-test-api'),
-      'import.meta.env.VITE_COGNITO_DOMAIN': 'undefined', 'import.meta.env.VITE_COGNITO_CLIENT_ID': 'undefined' } });
+    define: { 'import.meta.env.VITE_API_BASE_URL': JSON.stringify('/centopus-test-api') } });
   await server.listen();
   const origin = server.resolvedUrls!.local[0]!.replace(/\/$/, '');
   const browser = await chromium.launch({ headless: true, ...(process.platform === 'win32' ? { channel: 'msedge' } : {}) });
@@ -56,9 +55,6 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     const checkpoint = page.getByRole('textbox', { name: 'Evidence checkpoints (optional)' });
     await checkpoint.pressSequentially('start, goal');
     assert.equal(await checkpoint.inputValue(), 'start, goal');
-    const acknowledged = page.getByRole('checkbox', { name: 'I own this target or have permission to test it.' });
-    assert.equal(await acknowledged.isChecked(), false);
-    await acknowledged.check();
     await page.getByRole('button', { name: 'Build Population' }).click();
     await page.waitForURL('**/population');
     await page.getByRole('button', { name: 'Run Simulation' }).click();

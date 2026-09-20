@@ -27,12 +27,23 @@ test('turns Gemini JSON into bounded product intelligence', () => {
 test('updates editable persona fields without changing identity', () => {
   const original = personaFixture('agent-001', 'FOUNDERS');
   const updated = applyPersonaPatch(original, {
-    display_name: 'Maya', occupation: 'Founder', technical_ability: 'HIGH',
-    frustration_triggers: ['Unclear pricing'], accessibility_needs: [],
+    display_name: 'Maya',
+    age: 32,
+    occupation: 'Founder',
+    technical_ability: 'HIGH',
+    income_annual: 150000,
+    backstory: 'A technical founder with 10 years of software engineering experience.',
+    buying_behavior: 'Seeks rapid prototyping tools.',
+    frustration_triggers: ['Unclear pricing'],
+    accessibility_needs: [],
   });
   assert.equal(updated.persona_id, original.persona_id);
   assert.equal(updated.display_name, 'Maya');
+  assert.equal(updated.age, 32);
   assert.equal(updated.technical_ability, 'HIGH');
+  assert.equal(updated.income_annual, 150000);
+  assert.equal(updated.backstory, 'A technical founder with 10 years of software engineering experience.');
   assert.deepEqual(updated.frustration_triggers, ['Unclear pricing']);
   assert.throws(() => applyPersonaPatch(original, { device_class: 'WATCH' }), /unsupported/);
+  assert.throws(() => applyPersonaPatch(original, { age: 12 }), /age must be an integer between 18 and 120/);
 });
