@@ -21,7 +21,7 @@ export function tokens(): AuthTokens | null {
 function base64Url(bytes: Uint8Array): string {
   let value = '';
   for (const byte of bytes) value += String.fromCharCode(byte);
-  return btoa(value).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '');
+  return btoa(value).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
 async function challenge(verifier: string): Promise<string> {
@@ -60,7 +60,7 @@ export function signOut(): void {
   sessionStorage.removeItem(TOKEN_KEY);
   const url = new URL(domain + '/logout');
   url.searchParams.set('client_id', clientId!);
-  url.searchParams.set('logout_uri', redirectUri!.replace(/\\/auth\\/callback$/, ''));
+  url.searchParams.set('logout_uri', redirectUri!.replace('/auth/callback', ''));
   window.location.assign(url.toString());
 }
 
