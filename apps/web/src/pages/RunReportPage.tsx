@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CentopusReport } from '@centopus/contracts';
-import { Badge, Icon } from '@centopus/ui';
-import { WorkspaceShell } from '../components/WorkspaceShell';
+import { Icon } from '@centopus/ui';
 import {
   productApi,
   type RichPersona,
@@ -9,15 +8,21 @@ import {
   type SessionItem,
 } from '../lib/api';
 
-function rate(value: number | null | undefined): string {
-  return typeof value === 'number' ? `${value}%` : '—';
+type ResultTab = 'AGENTS' | 'FEEDBACK';
+type SentimentFilter = 'ALL' | 'POSITIVE' | 'MIXED' | 'NEGATIVE';
+
+function sentimentOf(feeling: CentopusReport['agent_feedback'][number]['overall_feeling']): Exclude<SentimentFilter, 'ALL'> {
+  if (feeling === 'POSITIVE') return 'POSITIVE';
+  if (feeling === 'NEGATIVE') return 'NEGATIVE';
+  return 'MIXED';
 }
 
-function duration(milliseconds: number | null | undefined): string {
-  if (typeof milliseconds !== 'number') return '—';
-  return milliseconds < 60_000
-    ? `${(milliseconds / 1000).toFixed(milliseconds < 10_000 ? 1 : 0)} sec`
-    : `${(milliseconds / 60_000).toFixed(1)} min`;
+function sentimentLabel(value: Exclude<SentimentFilter, 'ALL'>): string {
+  return value === 'POSITIVE' ? 'Positive' : value === 'NEGATIVE' ? 'Negative' : 'Mixed';
+}
+
+function percent(part: number, total: number): number {
+  return total > 0 ? Math.round((part / total) * 100) : 0;
 }
 
 export function RunReportPage({ runId }: { runId: string }) {
@@ -25,13 +30,15 @@ export function RunReportPage({ runId }: { runId: string }) {
   const [run, setRun] = useState<RunSummary | null>(null);
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [personas, setPersonas] = useState<Map<string, RichPersona>>(new Map());
-  const [downloadUrl, setDownloadUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [evidenceWarning, setEvidenceWarning] = useState('');
+  const [tab, setTab] = useState<ResultTab>('AGENTS');
+  const [filter, setFilter] = useState<SentimentFilter>('ALL');
 
   useEffect(() => {
     let active = true;
+    let timer = 0;
+
     const refresh = async () => {
       try {
         const [reportResult, runResult, sessionResult, personaResult] = await Promise.all([
@@ -45,166 +52,247 @@ export function RunReportPage({ runId }: { runId: string }) {
         setRun(runResult);
         setSessions(sessionResult);
         setPersonas(new Map(personaResult.map(persona => [persona.persona_id, persona])));
-        setEvidenceWarning(reportResult?.evidence_warning || runResult.evidence_warning || '');
 
         if (reportResult?.report) {
           setReport(reportResult.report);
-          setDownloadUrl(reportResult.download_url || '');
           setError('');
           window.clearInterval(timer);
         } else {
-          setError('The report is not ready yet. Recorded sessions are still being finalized.');
+          setError('Results are still being finalized.');
         }
         setLoading(false);
       } catch (cause) {
         if (!active) return;
-        setError(cause instanceof Error ? cause.message : 'Could not load the run report.');
+        setError(cause instanceof Error ? cause.message : 'Could not load the run results.');
         setLoading(false);
       }
     };
 
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 2500);
+    timer = window.setInterval(() => void refresh(), 2500);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
   }, [runId]);
 
-  const abandonmentReasons = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const session of sessions) {
-      if (!['ABANDONED', 'TIMED_OUT', 'FAILED'].includes(session.status)) continue;
-      const reason = session.stop_reason?.replaceAll('_', ' ') || session.status.replaceAll('_', ' ');
-      counts.set(reason, (counts.get(reason) || 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [sessions]);
+  const results = useMemo(() => {
+    if (!report) return [];
+    return report.agent_feedback.map(feedback => {
+      const result = report.agent_results.find(item => item.session_id === feedback.session_id);
+      const session = sessions.find(item => item.session_id === feedback.session_id);
+      const persona = session?.persona || personas.get(feedback.persona_id);
+      return {
+        feedback,
+        result,
+        persona,
+        sentiment: sentimentOf(feedback.overall_feeling),
+      };
+    });
+  }, [personas, report, sessions]);
 
-  if (loading) return <WorkspaceShell><div className="vision-loading-page"><span className="vision-loader" /><strong>Analyzing recorded behavior…</strong><span>Building deterministic metrics and evidence-grounded findings.</span></div></WorkspaceShell>;
+  const counts = useMemo(() => {
+    const next = { POSITIVE: 0, MIXED: 0, NEGATIVE: 0 };
+    for (const item of results) next[item.sentiment] += 1;
+    return next;
+  }, [results]);
 
-  const metrics = report?.metrics;
-  const findings = report?.findings || [];
-  const strengths = findings.filter(finding => finding.kind === 'STRENGTH').map(finding => finding.title);
-  const struggles = findings.filter(finding => finding.kind !== 'STRENGTH').map(finding => finding.title);
-  const improvements = report?.quick_improvements.map(item => item.recommendation) || [];
-  const mostAffectedCohorts = metrics
-    ? [...metrics.cohorts]
-      .filter(cohort => cohort.completion.percentage !== null)
-      .sort((a, b) => (a.completion.percentage ?? 100) - (b.completion.percentage ?? 100))
-      .slice(0, 3)
-    : [];
-  const totalActions = metrics?.outcomes.reduce((sum, outcome) => sum + outcome.action_count, 0) ?? null;
-  const actualCost = report?.actual_cost_cents ?? run?.actual_cost_cents ?? null;
+  const filtered = useMemo(
+    () => filter === 'ALL' ? results : results.filter(item => item.sentiment === filter),
+    [filter, results],
+  );
 
-  return <WorkspaceShell>
-    <div className="vision-page-heading">
+  if (loading && !report) {
+    return <main className="centopus-results-loading">
+      <span className="vision-loader" />
+      <strong>Preparing agent results…</strong>
+    </main>;
+  }
+
+  if (!report) {
+    return <main className="centopus-results-loading">
+      <strong>Results are still being prepared.</strong>
+      <span>{error || 'This page will update automatically.'}</span>
+    </main>;
+  }
+
+  const total = results.length;
+  const positiveStop = total ? (counts.POSITIVE / total) * 360 : 0;
+  const mixedStop = total ? ((counts.POSITIVE + counts.MIXED) / total) * 360 : 0;
+  const donutBackground = total
+    ? `conic-gradient(#35d7a0 0deg ${positiveStop}deg, #f2b84b ${positiveStop}deg ${mixedStop}deg, #ff5b72 ${mixedStop}deg 360deg)`
+    : 'conic-gradient(#262233 0deg 360deg)';
+  const objective = report.configuration.objective || run?.configuration?.objective || 'Simulation results';
+
+  const aggregate = report.aggregate_feedback;
+  const fallbackSummary = report.findings.length
+    ? report.findings.slice(0, 3).map(item => item.detail).join(' ')
+    : 'No model-generated aggregate summary is available for this historical run.';
+
+  return <main id="main" className="centopus-results-page">
+    <header className="centopus-results-header">
       <div>
-        <span className="eyebrow">05 / SIMULATION RESULTS</span>
-        <h1>What happened across the population.</h1>
-        <p>{report?.configuration.objective || run?.configuration?.objective || runId}</p>
+        <span className="centopus-results-eyebrow">RESULTS</span>
+        <h1>Agent Results</h1>
+        <p>{objective}</p>
       </div>
-      <div className="vision-heading-actions">
-        {downloadUrl ? <a href={downloadUrl} target="_blank" rel="noreferrer" className="button button-secondary"><Icon name="file" size={14} /> Download JSON</a> : null}
-        <Badge tone={evidenceWarning ? 'warning' : 'accent'}>{evidenceWarning ? 'HISTORICAL / UNVERIFIED' : 'RECORDED EVIDENCE'}</Badge>
-      </div>
-    </div>
 
-    {error ? <p className="vision-error" role="alert">{error}</p> : null}
-    {evidenceWarning ? <p className="vision-error" role="status">{evidenceWarning}</p> : null}
+      <nav className="centopus-results-tabs" aria-label="Result view">
+        <button
+          type="button"
+          className={tab === 'AGENTS' ? 'active' : ''}
+          aria-pressed={tab === 'AGENTS'}
+          onClick={() => setTab('AGENTS')}
+        >
+          Agents
+        </button>
+        <button
+          type="button"
+          className={tab === 'FEEDBACK' ? 'active' : ''}
+          aria-pressed={tab === 'FEEDBACK'}
+          onClick={() => setTab('FEEDBACK')}
+        >
+          Feedback
+        </button>
+      </nav>
+    </header>
 
-    {report && metrics ? <>
-      <section className="vision-report-kpis">
-        <article><span>Completion Rate</span><strong>{rate(metrics.completion.percentage)}</strong><small>{metrics.completion.numerator} / {metrics.completion.denominator}</small></article>
-        <article><span>Abandonment Rate</span><strong>{rate(metrics.abandonment.percentage)}</strong><small>{metrics.abandonment.numerator} sessions</small></article>
-        <article><span>Technical Failure</span><strong>{rate(metrics.technical_failure.percentage)}</strong><small>{metrics.technical_failure.numerator} sessions</small></article>
-        <article><span>Timeout Rate</span><strong>{rate(metrics.timeout.percentage)}</strong><small>{metrics.timeout.numerator} sessions</small></article>
-        <article><span>Median Time to Goal</span><strong>{duration(metrics.median_time_to_value_ms)}</strong><small>{metrics.time_to_value_sample_size} samples</small></article>
-        <article><span>Total Actions</span><strong>{totalActions ?? '—'}</strong><small>{metrics.computed_from.behavior_events} behavior events</small></article>
-        <article><span>Actual Cost</span><strong>{typeof actualCost === 'number' ? `$${(actualCost / 100).toFixed(2)}` : '—'}</strong><small>AWS billing evidence is not connected</small></article>
-      </section>
+    {error ? <p className="centopus-results-error" role="status">{error}</p> : null}
 
-      {metrics.funnel.length ? <section className="vision-report-section">
-        <div className="vision-section-heading"><span>BEHAVIORAL FUNNEL</span><h2>Where users made it.</h2></div>
-        <div className="vision-funnel">
-          {metrics.funnel.map(step => <div className="vision-funnel-row" key={step.checkpoint}>
-            <span>{step.checkpoint.replaceAll('_', ' ')}</span>
-            <div><i style={{ width: `${step.reached_percentage ?? 0}%` }} /></div>
-            <strong>{step.reached} / {step.of_sessions}</strong>
-            <small>{rate(step.reached_percentage)}</small>
-          </div>)}
+    {tab === 'AGENTS' ? <>
+      <section className="centopus-sentiment-summary" aria-label="Agent sentiment summary">
+        <div className="centopus-sentiment-donut-wrap">
+          <div className="centopus-sentiment-donut" style={{ background: donutBackground }}>
+            <div>
+              <strong>{total}</strong>
+              <span>AGENTS</span>
+            </div>
+          </div>
         </div>
-      </section> : null}
 
-      <section className="vision-report-section">
-        <div className="vision-section-heading"><span>TOP FRICTION</span><h2>Evidence worth investigating.</h2></div>
-        <div className="vision-findings">
-          {findings.map(finding => <article key={finding.finding_id} className={`vision-finding ${finding.kind.toLowerCase()}`}>
-            <div><Badge tone={finding.kind === 'STRENGTH' ? 'accent' : 'warning'}>{finding.kind}</Badge><span>{finding.evidence.length} evidence samples</span></div>
-            <h3>{finding.title}</h3>
-            <p>{finding.detail}</p>
-            {finding.evidence.length ? <div className="vision-evidence-links">
-              {finding.evidence.slice(0, 4).map(pointer => <button key={`${pointer.session_id}-${pointer.sequence}`} onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${pointer.session_id}`; }}>
-                {pointer.session_id} · action {pointer.sequence} <Icon name="arrow" size={12} />
-              </button>)}
-            </div> : null}
-          </article>)}
-          {!findings.length ? <div className="vision-empty-state"><strong>No evidence-grounded findings were generated.</strong><span>The report does not invent findings when recorded evidence is insufficient.</span></div> : null}
-        </div>
-      </section>
-
-      <section className="vision-report-section">
-        <div className="vision-section-heading"><span>COHORT COMPARISON</span><h2>How different groups performed.</h2></div>
-        <div className="vision-cohort-grid">
-          {metrics.cohorts.map(cohort => <article key={cohort.cohort}><span>{cohort.cohort}</span><strong>{rate(cohort.completion.percentage)}</strong><small>{cohort.session_count} sessions · median {duration(cohort.median_elapsed_ms)}</small></article>)}
-          {!metrics.cohorts.length ? <div className="vision-empty-state"><strong>No cohort comparison available.</strong><span>There is not enough persisted cohort evidence for this run.</span></div> : null}
+        <div className="centopus-sentiment-legend">
+          {(['POSITIVE', 'MIXED', 'NEGATIVE'] as const).map(sentiment => (
+            <button
+              key={sentiment}
+              type="button"
+              className={`centopus-sentiment-row ${sentiment.toLowerCase()}`}
+              onClick={() => setFilter(sentiment)}
+            >
+              <span className="centopus-sentiment-dot" />
+              <span>
+                <strong>{sentimentLabel(sentiment)}</strong>
+                <small>{counts[sentiment]} agent{counts[sentiment] === 1 ? '' : 's'}</small>
+              </span>
+              <b>{percent(counts[sentiment], total)}%</b>
+            </button>
+          ))}
         </div>
       </section>
 
-      <section className="vision-report-section">
-        <div className="vision-section-heading"><span>PRODUCT FEEDBACK</span><h2>What the evidence says.</h2></div>
-        <div className="vision-insight-grid">
-          <article><span>WHAT USERS LIKED</span>{strengths.length ? <ul>{strengths.map(item => <li key={item}>{item}</li>)}</ul> : <p>No measured strengths were identified.</p>}</article>
-          <article><span>WHAT USERS STRUGGLED WITH</span>{struggles.length ? <ul>{struggles.map(item => <li key={item}>{item}</li>)}</ul> : <p>No measured struggles were identified.</p>}</article>
-          <article><span>MOST COMMON ABANDONMENT REASONS</span>{abandonmentReasons.length ? <ul>{abandonmentReasons.map(([reason, count]) => <li key={reason}>{reason} · {count}</li>)}</ul> : <p>No abandonment evidence was recorded.</p>}</article>
-          <article><span>SEGMENTS MOST AFFECTED</span>{mostAffectedCohorts.length ? <ul>{mostAffectedCohorts.map(cohort => <li key={cohort.cohort}>{cohort.cohort} · {rate(cohort.completion.percentage)} completion</li>)}</ul> : <p>No measured cohort comparison is available.</p>}</article>
-          <article><span>QUICK PRODUCT IMPROVEMENTS</span>{improvements.length ? <ul>{improvements.map(item => <li key={item}>{item}</li>)}</ul> : <p>No evidence-grounded improvement recommendation is available.</p>}</article>
-        </div>
-        <p className="vision-measured-note"><strong>Measured:</strong> rates, counts, funnel, timing and session evidence. <strong>Interpretation:</strong> only appears when tied to recorded evidence.</p>
-      </section>
+      <section className="centopus-agent-feedback-section">
+        <div className="centopus-agent-feedback-toolbar">
+          <div>
+            <span>INDIVIDUAL FEEDBACK</span>
+            <h2>What each agent experienced.</h2>
+          </div>
 
-      <section className="vision-report-section">
-        <div className="vision-section-heading"><span>WHAT EACH USER EXPERIENCED</span><h2>Open any individual journey.</h2></div>
-        <p className="vision-measured-note">Each card combines measured browser evidence with a clearly labelled synthetic first-person reflection. Reflection never changes the recorded status, metrics, or action trail.</p>
-        <div className="vision-result-rail">
-          {report.agent_results.map(result => {
-            const session = sessions.find(item => item.session_id === result.session_id);
-            const persona = session?.persona || personas.get(result.persona_id);
-            const feedback = report.agent_feedback.find(item => item.session_id === result.session_id);
-            return <button key={result.session_id} className="vision-result-agent" onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${result.session_id}`; }}>
-              <div><span className="agent-avatar">{(persona?.display_name || result.persona_id).slice(0, 2).toUpperCase()}</span><Badge tone={result.status === 'COMPLETED' ? 'accent' : result.status === 'ABANDONED' ? 'warning' : 'neutral'}>{result.status}</Badge></div>
-              <h3>{persona?.display_name || result.persona_id}</h3>
-              <p>{[persona?.patience ? `${persona.patience.toLowerCase()} patience` : '', persona?.technical_ability ? `${persona.technical_ability.toLowerCase()} tech` : ''].filter(Boolean).join(' · ')}</p>
-              <dl><div><dt>Actions</dt><dd>{result.action_count}</dd></div><div><dt>Duration</dt><dd>{duration(result.elapsed_ms)}</dd></div><div><dt>Outcome</dt><dd>{result.stop_reason?.replaceAll('_', ' ') || result.status}</dd></div></dl>
-              {feedback ? <div className="vision-result-agent-feedback">
-                <small><strong>Feeling:</strong> {feedback.overall_feeling?.replaceAll('_', ' ') || 'Historical report — detailed reflection unavailable.'}</small>
-                <small><strong>Agent says:</strong> {feedback.direct_feedback || feedback.continuation_or_abandonment}</small>
-                <small><strong>Journey:</strong> {feedback.journey_summary || feedback.first_impression || 'No detailed journey summary available.'}</small>
-                <small><strong>UI noticed:</strong> {feedback.ui_observations?.[0] || feedback.first_impression || 'No evidence-grounded UI observation.'}</small>
-                <small><strong>Liked:</strong> {feedback.what_i_liked?.[0] || feedback.what_worked[0] || 'No positive interaction established.'}</small>
-                <small><strong>Frustration:</strong> {feedback.what_frustrated_me?.[0] || feedback.what_confused_them[0] || 'No evidence-grounded frustration recorded.'}</small>
-                <small><strong>Confidence:</strong> {feedback.task_confidence || '—'}{feedback.task_confidence_reason ? ` · ${feedback.task_confidence_reason}` : ''}</small>
-                <small><strong>Would use again:</strong> {feedback.would_use_again?.replaceAll('_', ' ') || '—'}</small>
-                <small><strong>Outcome:</strong> {feedback.continuation_or_abandonment}</small>
-                <small><strong>Improvement:</strong> {feedback.improvement_suggestion || 'No evidence-grounded recommendation.'}</small>
-              </div> : <small>No session-specific feedback was persisted.</small>}
-              <span>View Experience <Icon name="arrow" size={13} /></span>
-            </button>;
+          <label className="centopus-feedback-filter">
+            <span>Filter</span>
+            <select
+              aria-label="Filter feedback"
+              value={filter}
+              onChange={event => setFilter(event.target.value as SentimentFilter)}
+            >
+              <option value="ALL">All agents</option>
+              <option value="POSITIVE">Positive</option>
+              <option value="MIXED">Mixed</option>
+              <option value="NEGATIVE">Negative</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="centopus-agent-feedback-grid">
+          {filtered.map(({ feedback, result, persona, sentiment }) => {
+            const name = persona?.display_name || feedback.persona_id;
+            const initials = name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+            return <article key={feedback.session_id} className={`centopus-feedback-card ${sentiment.toLowerCase()}`}>
+              <div className="centopus-feedback-card-head">
+                <span className="centopus-feedback-avatar">{initials}</span>
+                <div>
+                  <h3>{name}</h3>
+                  <p>{[persona?.occupation, persona?.age ? `${persona.age} yrs` : ''].filter(Boolean).join(' · ')}</p>
+                </div>
+                <span className={`centopus-feedback-sentiment ${sentiment.toLowerCase()}`}>{sentimentLabel(sentiment)}</span>
+              </div>
+
+              <p className="centopus-feedback-quote">
+                {feedback.direct_feedback || feedback.feeling_summary || feedback.continuation_or_abandonment}
+              </p>
+
+              <div className="centopus-feedback-details">
+                {feedback.journey_summary ? <p><strong>Journey</strong>{feedback.journey_summary}</p> : null}
+                {feedback.improvement_suggestion ? <p><strong>Would improve</strong>{feedback.improvement_suggestion}</p> : null}
+              </div>
+
+              <button
+                type="button"
+                className="centopus-feedback-open"
+                onClick={() => { window.location.hash = `#/runs/${runId}/sessions/${feedback.session_id}`; }}
+              >
+                View full experience
+                <Icon name="arrow" size={13} />
+              </button>
+
+              {result ? <small className="centopus-feedback-outcome">
+                {result.status.replaceAll('_', ' ')} · {result.action_count} actions
+              </small> : null}
+            </article>;
           })}
+
+          {!filtered.length ? <div className="centopus-feedback-empty">
+            No agents match this feedback filter.
+          </div> : null}
         </div>
       </section>
+    </> : <section className="centopus-aggregate-feedback">
+      <div className="centopus-aggregate-model">
+        <span>AMAZON NOVA · ALL AGENTS</span>
+        <h2>Overall feedback</h2>
+        <p>{aggregate?.summary || fallbackSummary}</p>
+      </div>
 
-      {report.limitations.length ? <section className="vision-limitations"><span>LIMITATIONS</span><ul>{report.limitations.map(item => <li key={item}>{item}</li>)}</ul></section> : null}
-    </> : null}
-  </WorkspaceShell>;
+      <div className="centopus-aggregate-breakdown">
+        <article className="positive">
+          <span>POSITIVE SIGNALS</span>
+          <ul>
+            {(aggregate?.positive_themes?.length ? aggregate.positive_themes : ['No repeated positive theme was established.'])
+              .map(item => <li key={item}>{item}</li>)}
+          </ul>
+        </article>
+        <article className="mixed">
+          <span>MIXED SIGNALS</span>
+          <ul>
+            {(aggregate?.mixed_themes?.length ? aggregate.mixed_themes : ['No repeated mixed theme was established.'])
+              .map(item => <li key={item}>{item}</li>)}
+          </ul>
+        </article>
+        <article className="negative">
+          <span>NEGATIVE SIGNALS</span>
+          <ul>
+            {(aggregate?.negative_themes?.length ? aggregate.negative_themes : ['No repeated negative theme was established.'])
+              .map(item => <li key={item}>{item}</li>)}
+          </ul>
+        </article>
+      </div>
+
+      <article className="centopus-aggregate-recommendation">
+        <span>SINGLE RECOMMENDATION</span>
+        <p>{aggregate?.recommendation || report.quick_improvements[0]?.recommendation || 'No evidence-grounded recommendation is available.'}</p>
+      </article>
+
+      <p className="centopus-aggregate-note">
+        The overall feedback is a synthetic UX synthesis generated from the persisted agent feedback and recorded browser evidence. It is not human survey data.
+      </p>
+    </section>}
+  </main>;
 }
