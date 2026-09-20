@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Component, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { Brand, Button } from '@centopus/ui';
 import { LandingPage } from './pages/LandingPage';
 import { NewRunPage } from './pages/NewRunPage';
@@ -8,15 +8,12 @@ import { RunReportPage } from './pages/RunReportPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { parseRoute, titleFor, type RouteMatch } from './router';
-import { authConfigured, beginLogin, finishLogin, tokens } from './lib/auth';
-import { apiBaseUrl } from './lib/api';
 
 const subscribe = (callback: () => void) => {
   window.addEventListener('hashchange', callback);
   return () => window.removeEventListener('hashchange', callback);
 };
 
-// useSyncExternalStore requires a stable snapshot, so the parse is cached per hash value.
 let cachedHash: string | null = null;
 let cachedMatch: RouteMatch = parseRoute('');
 const getMatch = (): RouteMatch => {
@@ -42,31 +39,6 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
     }
     return this.props.children;
   }
-}
-
-
-function AuthGate({ match, children }: { match: RouteMatch; children: ReactNode }) {
-  const productionAuthMisconfigured = import.meta.env.PROD && !authConfigured() && Boolean(apiBaseUrl());
-  const [ready, setReady] = useState(() => !productionAuthMisconfigured && (!authConfigured() || Boolean(tokens())));
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    if (!code || !window.location.pathname.endsWith('/auth/callback')) return;
-    finishLogin(code).then(() => {
-      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
-      setReady(true);
-      window.dispatchEvent(new Event('centopus-auth-changed'));
-    }).catch(cause => setError(cause instanceof Error ? cause.message : 'Sign-in failed.'));
-  }, []);
-
-  if (productionAuthMisconfigured) {
-    return <main className="error-page"><Brand /><h1>Authentication configuration is missing.</h1><p>This production build cannot safely connect to the protected Centopus API until Cognito PKCE settings are configured.</p></main>;
-  }
-  if (match.definition?.status === 'READY') return <>{children}</>;
-  if (!authConfigured() || ready) return <>{children}</>;
-  return <main className="error-page"><Brand /><h1>{error ? 'Sign-in failed.' : 'Sign in to Centopus'}</h1><p>{error || 'Authenticate as an authorized operator to access runs and reports.'}</p><Button onClick={() => void beginLogin().catch(cause => setError(cause instanceof Error ? cause.message : 'Could not start sign-in.'))}>{error ? 'Try again' : 'Sign in'}</Button></main>;
 }
 
 function RouteSurface({ match }: { match: RouteMatch }) {
@@ -98,6 +70,6 @@ export function App() {
 
   return <AppErrorBoundary>
     <a className="skip-link" href="#main">Skip to content</a>
-    <AuthGate match={match}><RouteSurface match={match} /></AuthGate>
+    <RouteSurface match={match} />
   </AppErrorBoundary>;
 }
