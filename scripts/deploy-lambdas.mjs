@@ -18,6 +18,7 @@ async function deploy(fnName, dir) {
 }
 
 async function main() {
+  await deploy('synthetic-beta-api', '.artifacts/lambda-bundles/api');
   await deploy('synthetic-beta-session-worker', '.artifacts/lambda-bundles/worker');
   await deploy('synthetic-beta-finalizer', '.artifacts/lambda-bundles/finalizer');
 }
