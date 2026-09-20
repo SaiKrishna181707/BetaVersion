@@ -53,10 +53,9 @@ function AuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
-    if (!code) return;
+    if (!code || !window.location.pathname.endsWith('/auth/callback')) return;
     finishLogin(code).then(() => {
-      const cleanUrl = window.location.origin + window.location.pathname + window.location.hash;
-      window.history.replaceState({}, document.title, cleanUrl);
+      window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       setReady(true);
     }).catch(cause => setError(cause instanceof Error ? cause.message : 'Sign-in failed.'));
   }, []);

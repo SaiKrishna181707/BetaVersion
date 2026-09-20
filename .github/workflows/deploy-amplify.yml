@@ -31,7 +31,7 @@ jobs:
           VITE_API_BASE_URL: https://fkvvrndb17.execute-api.us-east-1.amazonaws.com
           VITE_COGNITO_DOMAIN: https://centopus-643700104680.auth.us-east-1.amazoncognito.com
           VITE_COGNITO_CLIENT_ID: 55sm8alrprsvtunj0ir337r9m0
-          VITE_COGNITO_REDIRECT_URI: https://main.d1s2dm4wj8xxb.amplifyapp.com/
+          VITE_COGNITO_REDIRECT_URI: https://main.d1s2dm4wj8xxb.amplifyapp.com/auth/callback
         run: |
           set -euo pipefail
           # Cognito domain/client ID/redirect URI are public OAuth client metadata, not secrets.
