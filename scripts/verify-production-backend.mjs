@@ -62,7 +62,7 @@ async function verifyLambdaMetadata() {
       };
       console.log(`✓ ${fnName}: LastUpdateStatus=${config.LastUpdateStatus || 'Successful'}, CodeSha256=${config.CodeSha256}, LastModified=${config.LastModified}`);
     } catch (err) {
-      console.warn(`Could not verify AWS Lambda metadata for ${fnName}: ${err.message}`);
+      throw new Error(`Could not verify AWS Lambda metadata for ${fnName}: ${err.message}`);
     }
   }
   return results;
