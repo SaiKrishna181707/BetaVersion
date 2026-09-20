@@ -109,7 +109,7 @@ export function LandingPage() {
 
       <form className="centopus-entry-form" onSubmit={event => void submit(event)}>
         <label>
-          <span className="centopus-visually-hidden">Company or product name</span>
+          <span className="centopus-visually-hidden">Product / Company</span>
           <input
             value={companyName}
             onChange={event => setCompanyName(event.target.value)}
@@ -122,7 +122,7 @@ export function LandingPage() {
         </label>
 
         <label>
-          <span className="centopus-visually-hidden">Website URL</span>
+          <span className="centopus-visually-hidden">Website</span>
           <input
             value={websiteUrl}
             onChange={event => setWebsiteUrl(event.target.value)}
@@ -137,8 +137,8 @@ export function LandingPage() {
           className="centopus-send-button"
           type="submit"
           disabled={building}
-          aria-label={building ? loadingMessages[messageIndex] : 'Build product'}
-          title={building ? loadingMessages[messageIndex] : 'Build product'}
+          aria-label={building ? loadingMessages[messageIndex] : 'Build Product'}
+          title={building ? loadingMessages[messageIndex] : 'Build Product'}
         >
           {building
             ? <span className="centopus-submit-loader" aria-hidden="true" />
