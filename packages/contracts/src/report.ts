@@ -70,6 +70,8 @@ export interface CentopusReport {
     first_impression?: string | null;
     what_i_liked?: string[];
     what_frustrated_me?: string[];
+    ui_observations?: string[];
+    journey_summary?: string;
     expectation_gap?: string;
     task_confidence?: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
     task_confidence_reason?: string;

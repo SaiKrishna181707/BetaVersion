@@ -189,6 +189,8 @@ export function RunReportPage({ runId }: { runId: string }) {
               {feedback ? <div className="vision-result-agent-feedback">
                 <small><strong>Feeling:</strong> {feedback.overall_feeling?.replaceAll('_', ' ') || 'Historical report — detailed reflection unavailable.'}</small>
                 <small><strong>Agent says:</strong> {feedback.direct_feedback || feedback.continuation_or_abandonment}</small>
+                <small><strong>Journey:</strong> {feedback.journey_summary || feedback.first_impression || 'No detailed journey summary available.'}</small>
+                <small><strong>UI noticed:</strong> {feedback.ui_observations?.[0] || feedback.first_impression || 'No evidence-grounded UI observation.'}</small>
                 <small><strong>Liked:</strong> {feedback.what_i_liked?.[0] || feedback.what_worked[0] || 'No positive interaction established.'}</small>
                 <small><strong>Frustration:</strong> {feedback.what_frustrated_me?.[0] || feedback.what_confused_them[0] || 'No evidence-grounded frustration recorded.'}</small>
                 <small><strong>Confidence:</strong> {feedback.task_confidence || '—'}{feedback.task_confidence_reason ? ` · ${feedback.task_confidence_reason}` : ''}</small>
