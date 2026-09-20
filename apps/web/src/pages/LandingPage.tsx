@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from '@centopus/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
-import { authConfigured, beginLogin, signOut, tokens } from '../lib/auth';
 
 const loadingMessages = [
   'Understanding your product…',
@@ -19,11 +18,11 @@ type BarStyle = CSSProperties & {
 const gradientBarStyles: BarStyle[] = Array.from({ length: 20 }, (_, index) => {
   const position = index / 19;
   const distance = Math.abs(position - 0.5);
-  const scale = 0.3 + 0.7 * Math.pow(distance * 2, 1.2);
+  const scale = 0.72 + 0.28 * Math.pow(distance * 2, 1.15);
 
   return {
     '--bar-scale': scale.toFixed(3),
-    '--bar-scale-high': Math.min(scale + 0.1, 1).toFixed(3),
+    '--bar-scale-high': Math.min(scale + 0.08, 1).toFixed(3),
     animationDelay: (index * 0.5) + 's',
   };
 });
@@ -100,29 +99,10 @@ export function LandingPage() {
       </button>
 
       <a className="centopus-centered-brand" href="#/" aria-label="Centopus home">
-        <img src="/favicon.svg" alt="" />
+        <img src="/centopus-mark.svg" alt="" />
         <span>centopus</span>
       </a>
 
-      {authConfigured() && (
-        tokens() ? (
-          <button
-            type="button"
-            className="centopus-auth-button"
-            onClick={() => signOut()}
-          >
-            Sign out
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="centopus-auth-button"
-            onClick={() => void beginLogin()}
-          >
-            Operator sign in
-          </button>
-        )
-      )}
     </header>
 
     <main id="main" className="centopus-landing-main">
