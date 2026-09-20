@@ -73,6 +73,15 @@ export function LiveRunPage({ runId }: { runId: string }) {
   const progress = denominator ? Math.round((counts.terminal / denominator) * 100) : 0;
   const complete = run?.status === 'COMPLETED' || (denominator > 0 && counts.terminal >= denominator);
 
+  useEffect(() => {
+    if (complete && run?.status === 'COMPLETED') {
+      const timer = window.setTimeout(() => {
+        window.location.hash = `#/runs/${runId}/report`;
+      }, 1200);
+      return () => window.clearTimeout(timer);
+    }
+  }, [complete, run?.status, runId]);
+
   const cancel = async () => {
     setCancelling(true);
     setError('');

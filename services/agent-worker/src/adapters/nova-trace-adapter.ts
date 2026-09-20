@@ -159,14 +159,22 @@ export function adaptNovaTraceToBehaviorEvents(
     if (reason === 'OBJECTIVE_COMPLETE' && (checkpoint !== plan.checkpoint_plan.at(-1) || result !== 'SUCCESS')) reason = 'EXPLORING';
     const screenshot = step.screenshot_ref && /^s3:\/\/[^/]+\/.+/.test(step.screenshot_ref) ? step.screenshot_ref : null;
     const cleanTarget = cleanseTargetDescriptor(action?.selector ?? action?.target ?? null, action, step, url.pathname);
+    const consoleNoise = /favicon|adservice|doubleclick|tracker|telemetry|google-analytics|gtag/i;
+    const cleanConsole = step.observation.console_errors?.filter((err: string) => !consoleNoise.test(err));
+    const consoleError = (cleanConsole && cleanConsole.length > 0 ? cleanConsole.join('; ') : null)
+      || (step.error && !consoleNoise.test(step.error) ? step.error : null)
+      || null;
+    const cleanNet = step.observation.network_errors?.filter((err: string) => !consoleNoise.test(err));
+    const networkError = cleanNet && cleanNet.length > 0 ? cleanNet.join('; ') : null;
+
     return [{
       run_id: plan.run_id, session_id: plan.session_id, persona_id: plan.persona_id,
       timestamp: rawTimestamp, elapsed_ms: step.elapsed_ms!,
       url: url.toString(), page_title: step.observation.page_title ?? step.observation.title ?? '', route: url.pathname,
       action_type: type, target_descriptor: cleanTarget,
       result: result as BehaviorEvent['result'], screenshot_ref: screenshot,
-      console_error: step.observation.console_errors?.join('; ') || step.error || null,
-      network_error: step.observation.network_errors?.join('; ') || null,
+      console_error: consoleError,
+      network_error: networkError,
       task_checkpoint: checkpoint, agent_reason_code: reason,
       thought: step.thought ?? step.reasoning ?? null,
     }];

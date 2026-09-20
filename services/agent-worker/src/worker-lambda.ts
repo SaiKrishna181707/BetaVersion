@@ -82,21 +82,49 @@ export function createSessionWorker(deps: {
       remaining_budget_cents: Number(run.Item?.reserved_cost_cents) || 0, account_ref: null };
     let result: Record<string, unknown> = {};
     let error: string | null = null;
+    let trajectory: RawNovaTrajectory = {
+      run_id, session_id, persona_id: persona.persona_id, target_url: input.target_url,
+      checkpoint_plan: [...plan.checkpoint_plan], steps: [],
+      finish_reason: !mayExecute ? 'CANCELLED' : 'TECHNICAL_ERROR',
+    };
+    let session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
+
     if (mayExecute) {
-      try {
-        result = await (deps.invoke ?? (value => invokeNova(value, env)))({ ...plan, allowed_origins: [...plan.allowed_origins], checkpoint_plan: [...plan.checkpoint_plan] });
-        console.log('[createSessionWorker] invoke returned:', JSON.stringify(result).slice(0, 500));
-      } catch (cause) {
-        console.error('[createSessionWorker] invoke failed:', cause);
-        error = cause instanceof Error ? `${cause.name}: ${cause.message}` : 'ExecutionError';
+      const maxAttempts = 2;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          result = await (deps.invoke ?? (value => invokeNova(value, env)))({
+            ...plan,
+            allowed_origins: [...plan.allowed_origins],
+            checkpoint_plan: [...plan.checkpoint_plan],
+          });
+          console.log(`[createSessionWorker] invoke attempt ${attempt} returned:`, JSON.stringify(result).slice(0, 500));
+          error = null;
+        } catch (cause) {
+          console.error(`[createSessionWorker] invoke attempt ${attempt} failed:`, cause);
+          error = cause instanceof Error ? `${cause.name}: ${cause.message}` : 'ExecutionError';
+        }
+
+        trajectory = {
+          run_id, session_id, persona_id: persona.persona_id, target_url: input.target_url,
+          checkpoint_plan: [...plan.checkpoint_plan], steps: Array.isArray(result.steps) ? result.steps : [],
+          finish_reason: error || Number(result.statusCode) >= 400 ? 'TECHNICAL_ERROR' : String(result.finish_reason ?? 'ABANDONED'),
+        };
+        session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
+
+        const hasTechnicalFailure = error !== null
+          || Number(result.statusCode) >= 400
+          || session.status === 'FAILED'
+          || session.events.length === 0
+          || session.events.some(e => e.result === 'ERROR' || e.console_error !== null || e.network_error !== null);
+
+        if (!hasTechnicalFailure || attempt === maxAttempts) {
+          break;
+        }
+        console.warn(`[createSessionWorker] Session ${session_id} hit technical failure on attempt ${attempt}. Rerunning session...`);
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
-    const trajectory: RawNovaTrajectory = {
-      run_id, session_id, persona_id: persona.persona_id, target_url: input.target_url,
-      checkpoint_plan: [...plan.checkpoint_plan], steps: Array.isArray(result.steps) ? result.steps : [],
-      finish_reason: !mayExecute ? 'CANCELLED' : error || Number(result.statusCode) >= 400 ? 'TECHNICAL_ERROR' : String(result.finish_reason ?? 'ABANDONED'),
-    };
-    const session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
     let trajectoryRef: string | null = null;
     let persistedEvents = 0;
     try {

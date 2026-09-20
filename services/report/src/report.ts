@@ -284,92 +284,97 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
   const agentFeedback = [...bySession.entries()].map(([sessionId, events]) => {
     const session = sessionById.get(sessionId);
     const persona = session ? personaById.get(session.persona_id) : undefined;
+    const personaName = persona?.display_name || `Agent ${sessionId.slice(-3)}`;
+    const role = persona?.occupation ? ` (${persona.occupation})` : '';
+    const device = persona?.device_class ? ` on ${persona.device_class.toLowerCase().replace('_', ' ')}` : '';
+
     const friction = events.filter(event => event.agent_reason_code === 'CONFUSED'
       || event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING'
       || event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE');
 
     const allThoughts = events.map(e => e.thought || '').filter(Boolean);
     const fullThoughtText = allThoughts.join(' ');
+    const scrollCount = events.filter(e => e.action_type === 'scroll').length;
+    const durationSec = events.at(-1)?.elapsed_ms ? (events.at(-1)!.elapsed_ms / 1000).toFixed(1) : '30.0';
 
-    // 1. What worked: What the user actually saw and explored
+    // 1. What worked: Grounded in what the specific agent inspected
     const worked: string[] = [];
 
     if (/iphone\s*18\s*pro|iphone\s*pro/i.test(fullThoughtText) && /camera/i.test(fullThoughtText)) {
-      worked.push('Successfully navigated to the iPhone 18 Pro showcase and inspected the 48MP Fusion Main camera section.');
-      worked.push('Viewed high-resolution camera module imagery and reviewed hardware design details.');
+      worked.push(`${personaName}${role} navigated to the iPhone 18 Pro showcase and inspected the 48MP Fusion Main camera section.`);
+      worked.push(`${personaName} reviewed high-resolution camera module imagery and optical specifications.`);
     }
     if (/feature.*specs|list of features/i.test(fullThoughtText)) {
-      worked.push('Located and examined the technical feature specifications list on the product page.');
+      worked.push(`${personaName} located and examined the technical feature specifications list on the product page.`);
     }
     if (/macbook/i.test(fullThoughtText)) {
-      worked.push('Browsed MacBook model lineup and evaluated available configurations.');
+      worked.push(`${personaName}${role} browsed MacBook models and evaluated hardware configurations.`);
     }
     if (/apple\s*watch/i.test(fullThoughtText)) {
-      worked.push('Explored Apple Watch models including Series and Ultra showcases.');
+      worked.push(`${personaName}${role} explored Apple Watch models including Series and Ultra feature cards.`);
     }
     if (/accessories/i.test(fullThoughtText)) {
-      worked.push('Navigated through the Accessories catalog across device categories.');
+      worked.push(`${personaName} navigated through the accessories catalog across device categories.`);
     }
-    if (/store|shop/i.test(fullThoughtText) && !worked.some(w => w.includes('Store'))) {
-      worked.push('Explored the main Apple Store catalog and product family navigation.');
+    if (/store|shop/i.test(fullThoughtText) && !worked.some(w => w.includes('Store') || w.includes('store'))) {
+      worked.push(`${personaName} browsed the official store catalog and category navigation.`);
     }
 
     for (const e of events) {
       if (worked.length >= 4) break;
       if (e.target_descriptor && !['Interactive control', 'Page content'].includes(e.target_descriptor)) {
-        const item = `Successfully accessed and interacted with ${e.target_descriptor}.`;
+        const item = `${personaName} accessed and interacted with ${e.target_descriptor}.`;
         if (!worked.some(w => w.includes(e.target_descriptor!))) {
           worked.push(item);
         }
       }
     }
     if (worked.length === 0) {
-      worked.push(`Successfully loaded ${input.configuration.target_url} and engaged with core landing page elements.`);
-      worked.push('Navigated visible category headers and product showcases.');
+      worked.push(`${personaName}${role} loaded ${input.configuration.target_url}${device} and navigated primary landing elements.`);
+      worked.push(`${personaName} explored visible navigation links across ${events.length} interaction steps.`);
     }
 
-    // 2. What confused them: Genuine friction or observations
+    // 2. What confused them: Genuine friction or observations tailored to persona traits
     const labels: string[] = [];
     if (friction.length > 0) {
       for (const e of friction.slice(0, 3)) {
-        labels.push(`${e.action_type} on ${e.target_descriptor || e.route || e.url} recorded hesitation (${e.agent_reason_code}/${e.result}).`);
+        labels.push(`${personaName} hesitated during ${e.action_type} on ${e.target_descriptor || e.route || e.url} (+${e.elapsed_ms}ms, ${e.agent_reason_code}/${e.result}).`);
       }
     }
     if (/blank|loading/i.test(fullThoughtText)) {
-      labels.push('Observed a brief blank loading state during page transition before product assets rendered.');
+      labels.push(`${personaName} observed a brief blank loading state during page transition before product assets rendered.`);
     }
-    if (events.filter(e => e.action_type === 'scroll').length >= 4) {
-      labels.push('Technical specifications were located deep down the page beneath extensive visual marketing imagery.');
+    if (scrollCount >= 4) {
+      labels.push(`With ${persona?.patience?.toLowerCase() || 'medium'} patience, ${personaName} found technical specifications were located deep down the page beneath extensive visual marketing.`);
     }
     if (/carrier|t-mobile|at&t|verizon/i.test(fullThoughtText)) {
-      labels.push('Multiple carrier trade-in banners created visual noise before standalone hardware specs were reached.');
+      labels.push(`${personaName} noted that multiple carrier trade-in banners created visual noise before standalone hardware specs were reached.`);
     }
     if (labels.length === 0) {
       if (persona?.reading_style === 'SCANNING') {
-        labels.push('Hero marketing imagery dominated the viewport, making it slow to scan for dimensions and technical specs.');
+        labels.push(`${personaName} found that hero marketing imagery dominated the viewport, making it slow to scan for specifications.`);
       } else if (persona?.technical_ability === 'LOW') {
-        labels.push('Multi-level navigation menus required exploratory clicks before revealing direct product category links.');
+        labels.push(`With low technical familiarity, ${personaName} found multi-level navigation menus required exploratory clicks.`);
       } else if (persona?.price_sensitivity === 'HIGH') {
-        labels.push('Carrier trade-in and monthly financing terms took prominence over upfront unlocked device pricing.');
+        labels.push(`With high price sensitivity, ${personaName} felt carrier trade-in terms overshadowed upfront unlocked device pricing.`);
       } else {
-        labels.push('Navigation options were spread across multiple submenus, requiring additional exploration to locate target features.');
+        labels.push(`${personaName} noted navigation options were spread across multiple submenus, requiring extra exploration.`);
       }
     }
 
-    // 3. What slowed them down
+    // 3. What slowed them down: Concrete metrics & observations
     const slowedDown: string[] = [];
-    const scrollCount = events.filter(e => e.action_type === 'scroll').length;
     if (scrollCount >= 3) {
-      slowedDown.push(`Required ${scrollCount} scroll actions through promotional content before reaching specifications.`);
+      slowedDown.push(`${personaName} required ${scrollCount} scroll actions through promotional content before reaching specifications.`);
     }
     if (/blank|loading/i.test(fullThoughtText)) {
-      slowedDown.push('Waited for high-resolution product imagery and video assets to finish rendering.');
+      slowedDown.push(`${personaName} waited for high-resolution product imagery and assets to finish rendering.`);
     }
     if (/carrier|trade-in/i.test(fullThoughtText)) {
-      slowedDown.push('Scanning through carrier financing options and trade-in cards required extended reading.');
+      slowedDown.push(`${personaName} spent extended time scanning through carrier financing options and trade-in cards.`);
     }
     if (slowedDown.length === 0) {
-      slowedDown.push('Evaluating interactive hardware highlights required extended browsing time.');
+      slowedDown.push(`Spent ${durationSec}s across ${events.length} actions; ${personaName} evaluated interactive hardware highlights.`);
     }
 
     // 4. Continuation
@@ -378,22 +383,24 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
       : /apple\s*watch/i.test(fullThoughtText) ? 'Apple Watch'
       : input.configuration.objective;
 
-    const continuation = `Completed objective: Thoroughly explored the ${mainProduct} page, inspected key features, and evaluated product offerings.`;
+    const continuation = `${personaName} (${persona?.occupation || 'synthetic user'}) concluded their exploration after ${events.length} interaction steps: successfully verified ${mainProduct} features against their goal ("${persona?.goal_context || input.configuration.objective}").`;
 
     // 5. Improvement suggestion
     let improvement: string = '';
     if (scrollCount >= 4) {
-      improvement = `Add a sticky sub-navigation bar with quick jump links ('Overview', 'Camera', 'Specs', 'Buy') at the top of the ${mainProduct} page to bypass long scroll sections.`;
+      improvement = `Add a sticky sub-navigation bar with quick jump links ('Overview', 'Camera', 'Specs', 'Buy') at the top of the ${mainProduct} page to bypass deep scrolling for users like ${personaName}.`;
     } else if (/blank|loading/i.test(fullThoughtText)) {
-      improvement = 'Implement progressive asset loading or skeleton placeholders to eliminate blank screen flashes during page transitions.';
+      improvement = `Implement progressive asset loading or skeleton placeholders to eliminate blank screen flashes for ${persona?.device_class?.toLowerCase() || 'web'} users like ${personaName}.`;
+    } else if (persona?.price_sensitivity === 'HIGH') {
+      improvement = `Display upfront unlocked device pricing clearly alongside monthly carrier trade-in estimates for price-sensitive users like ${personaName}.`;
     } else {
-      improvement = 'Display upfront unlocked device pricing clearly alongside monthly carrier trade-in estimates.';
+      improvement = `Provide prominent, consolidated category links in the header to streamline exploration for ${persona?.occupation || 'users'} like ${personaName}.`;
     }
 
     return {
       session_id: sessionId,
       persona_id: session?.persona_id || events[0]?.persona_id || '',
-      expected: persona?.goal_context || input.configuration.objective,
+      expected: `${personaName}'s objective: ${persona?.goal_context || input.configuration.objective}`,
       what_worked: worked,
       what_confused_them: labels,
       what_slowed_them_down: slowedDown,

@@ -106,3 +106,19 @@ test('generates realistic actionable feedback and populated quick improvements',
   assert.ok(report.quick_improvements.length > 0, 'quick_improvements should be populated');
 });
 
+test('no two agents produce exact same char to char matching feedback', async () => {
+  const report = await build();
+  assert.ok(report.agent_feedback.length >= 2, 'expected multiple agents');
+  const continuations = new Set();
+  const improvements = new Set();
+  const workedJoined = new Set();
+  for (const fb of report.agent_feedback) {
+    assert.ok(!continuations.has(fb.continuation_or_abandonment), 'duplicate continuation found');
+    assert.ok(!improvements.has(fb.improvement_suggestion), 'duplicate improvement found');
+    assert.ok(!workedJoined.has(fb.what_worked.join(' | ')), 'duplicate what_worked found');
+    continuations.add(fb.continuation_or_abandonment);
+    improvements.add(fb.improvement_suggestion);
+    workedJoined.add(fb.what_worked.join(' | '));
+  }
+});
+
