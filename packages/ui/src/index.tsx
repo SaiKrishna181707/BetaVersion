@@ -28,8 +28,7 @@ export function Icon({ name, size = 18, ...props }: SVGProps<SVGSVGElement> & { 
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return <a className={`brand${compact ? ' brand-compact' : ''}`} href="#/" aria-label="Centopus home">
-    <img className="brand-mascot" src="/favicon.svg" alt="" aria-hidden="true" />
-    {!compact && <span className="brand-wordmark">centopus</span>}
+    <img className="brand-lockup" src="/centopus-header.svg" alt="centopus" />
   </a>;
 }
 
