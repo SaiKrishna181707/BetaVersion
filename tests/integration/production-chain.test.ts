@@ -107,7 +107,7 @@ test('concurrent persona edits invalidate a stale population snapshot before bud
 
 test('historical unverified cost is not presented as actual billing', async () => {
   const f = fixture();
-  f.db.put({ pk: 'RUN#old', sk: 'META', actual_cost_cents: 615, status: 'COMPLETED' });
+  f.db.put({ pk: 'RUN#old', sk: 'META', actual_cost_cents: 615, status: 'COMPLETED', owner_sub: 'local-operator' });
   const run = JSON.parse((await f.api(event('GET', '/runs/old'))).body);
   assert.equal(run.actual_cost_cents, null);
   assert.match(run.evidence_warning, /Historical evidence/);
@@ -188,7 +188,7 @@ test('a cancellation during report persistence is never overwritten by finalizat
 });
 
 test('cancellation does not overwrite a concurrently completed run', async () => {
-  const db = memoryDynamo([{ pk: 'RUN#r', sk: 'META', status: 'ACTIVE', execution_arn: 'test-execution' }]);
+  const db = memoryDynamo([{ pk: 'RUN#r', sk: 'META', status: 'ACTIVE', execution_arn: 'test-execution', owner_sub: 'local-operator' }]);
   const api = createProductionApi({ docClient: db.client, s3Client: new S3Client({}), environment,
     sfnClient: { send: async (command: unknown) => {
       assert.ok(command instanceof StopExecutionCommand);
