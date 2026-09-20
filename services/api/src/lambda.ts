@@ -132,7 +132,7 @@ export function createProductionApi(dependencies: {
     if (env.REQUIRE_AUTH === 'true' && !event.requestContext?.authorizer?.jwt?.claims?.sub) {
       return response(401, { error: 'Operator sign-in is required.' }, allowedOrigin);
     }
-    const operatorSub = operatorSubject(event);
+    const operatorSub = operatorSubject(event) ?? (env.REQUIRE_AUTH === 'true' ? null : 'local-operator');
 
     if (method === 'POST' && path === '/product-intelligence') {
       const payload = parseJson(body);
