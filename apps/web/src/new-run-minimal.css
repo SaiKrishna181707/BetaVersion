@@ -1,0 +1,217 @@
+.centopus-new-run-minimal {
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(124, 92, 255, .11), transparent 34rem),
+    #050309;
+  color: #f7f4ff;
+}
+
+.centopus-new-run-card {
+  width: min(940px, 100%);
+  max-height: calc(100dvh - 44px);
+  display: grid;
+  gap: 16px;
+  padding: 24px 26px;
+  border: 1px solid rgba(151, 124, 255, .22);
+  border-radius: 18px;
+  background: rgba(12, 7, 19, .9);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, .34),
+    0 0 65px rgba(92, 63, 214, .07);
+}
+
+.centopus-new-run-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.centopus-new-run-heading h1 {
+  margin: 0;
+  color: #fff;
+  font-size: 27px;
+  line-height: 1.05;
+  letter-spacing: -.035em;
+  font-weight: 650;
+}
+
+.centopus-new-run-heading p {
+  margin: 0;
+  color: #9e93b2;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.centopus-new-run-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.centopus-new-run-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.centopus-new-run-grid.category-objective {
+  grid-template-columns: minmax(220px, .72fr) minmax(0, 1.28fr);
+}
+
+.centopus-new-run-card label {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.centopus-new-run-card label > span {
+  color: #e8e1f5;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.centopus-new-run-card input,
+.centopus-new-run-card textarea {
+  width: 100%;
+  border: 1px solid #3b2d52;
+  border-radius: 10px;
+  outline: 0;
+  background: #09050f;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.centopus-new-run-card input {
+  height: 44px;
+  padding: 0 13px;
+}
+
+.centopus-new-run-card textarea {
+  min-height: 76px;
+  height: 76px;
+  resize: none;
+  padding: 11px 13px;
+  line-height: 1.45;
+}
+
+.centopus-new-run-card input::placeholder,
+.centopus-new-run-card textarea::placeholder {
+  color: #71667f;
+}
+
+.centopus-new-run-card input:focus,
+.centopus-new-run-card textarea:focus {
+  border-color: #8063ff;
+  background: #0c0714;
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, .11);
+}
+
+.centopus-new-run-footer {
+  display: grid;
+  grid-template-columns: 170px minmax(220px, 1fr);
+  gap: 14px;
+  align-items: end;
+  padding-top: 2px;
+}
+
+.centopus-agent-count input {
+  text-align: center;
+  font-weight: 650;
+}
+
+.centopus-build-agents {
+  min-height: 44px;
+  border: 1px solid rgba(186, 170, 255, .38);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: linear-gradient(135deg, #8263ff, #5839d8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 11px 30px rgba(88, 57, 216, .25);
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+
+.centopus-build-agents:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 14px 34px rgba(88, 57, 216, .34);
+}
+
+.centopus-build-agents:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.centopus-new-run-error {
+  margin: -3px 0 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 122, 122, .24);
+  border-radius: 8px;
+  background: rgba(110, 31, 45, .14);
+  color: #ffabab;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+@media (max-height: 700px) and (min-width: 721px) {
+  .centopus-new-run-minimal {
+    padding: 14px;
+  }
+
+  .centopus-new-run-card {
+    max-height: calc(100dvh - 28px);
+    gap: 11px;
+    padding: 17px 20px;
+  }
+
+  .centopus-new-run-heading h1 {
+    font-size: 24px;
+  }
+
+  .centopus-new-run-card input {
+    height: 40px;
+  }
+
+  .centopus-new-run-card textarea {
+    min-height: 62px;
+    height: 62px;
+  }
+
+  .centopus-build-agents {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 720px) {
+  .centopus-new-run-minimal {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+    place-items: start center;
+    padding: 18px;
+  }
+
+  .centopus-new-run-card {
+    max-height: none;
+    padding: 20px;
+  }
+
+  .centopus-new-run-grid.two,
+  .centopus-new-run-grid.category-objective,
+  .centopus-new-run-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .centopus-new-run-card textarea {
+    min-height: 82px;
+    height: 82px;
+  }
+}
