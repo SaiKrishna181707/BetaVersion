@@ -35,6 +35,7 @@ export interface BehaviorEvent {
   network_error: string | null;
   task_checkpoint: string | null;
   agent_reason_code: AgentReasonCode;
+  thought?: string | null;
 }
 
 export interface SyntheticPersona {

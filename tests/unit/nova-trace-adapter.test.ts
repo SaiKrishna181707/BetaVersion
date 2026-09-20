@@ -194,3 +194,95 @@ test('rejects missing actions, timing and outcomes instead of inventing evidence
   assert.equal(event.agent_reason_code, 'EXPLORING');
   assert.equal(event.screenshot_ref, null);
 });
+
+test('cleanses raw bounding box descriptors into human-readable element names', () => {
+  const trajectory: RawNovaTrajectory = {
+    steps: [
+      {
+        timestamp: '2026-09-20T00:00:01.000Z',
+        sequence: 1,
+        action: { type: 'click', selector: '<box>13,1067,28,1114</box>' },
+        observation: { url: 'https://www.apple.com/', title: 'Apple' },
+        thought: 'I should now click the Support link in the navigation menu to navigate to the Support page.',
+        status: 'SUCCESS',
+        elapsed_ms: 1000,
+      },
+      {
+        timestamp: '2026-09-20T00:00:02.000Z',
+        sequence: 2,
+        action: { type: 'scroll', selector: '<box>0,0,732,1456</box>' },
+        observation: { url: 'https://www.apple.com/', title: 'Apple' },
+        thought: 'The page has scrolled down. I can see the MacBook Air section.',
+        status: 'SUCCESS',
+        elapsed_ms: 2000,
+      },
+      {
+        timestamp: '2026-09-20T00:00:03.000Z',
+        sequence: 3,
+        action: { type: 'click', selector: '#valid-css-id' },
+        observation: { url: 'https://www.apple.com/shop', title: 'Shop' },
+        thought: 'Clicking shop',
+        status: 'SUCCESS',
+        elapsed_ms: 3000,
+      },
+    ],
+  };
+
+  const plan = {
+    run_id: 'r-cleanse',
+    session_id: 's-cleanse',
+    persona_id: 'p-cleanse',
+    target_url: 'https://www.apple.com/',
+    checkpoint_plan: [],
+  };
+
+  const events = adaptNovaTraceToBehaviorEvents(trajectory, plan);
+  assert.equal(events.length, 3);
+  assert.equal(events[0]!.target_descriptor, 'Support link');
+  assert.equal(events[1]!.target_descriptor, 'Page content');
+  assert.equal(events[2]!.target_descriptor, '#valid-css-id');
+});
+
+test('marks uninstrumented website session as COMPLETED when agent concludes task successfully', () => {
+  const trajectory: RawNovaTrajectory = {
+    steps: [
+      {
+        timestamp: '2026-09-20T00:00:01.000Z',
+        sequence: 1,
+        action: { type: 'scroll' },
+        observation: { url: 'https://www.apple.com/', title: 'Apple' },
+        thought: 'I am exploring the homepage',
+        status: 'SUCCESS',
+        elapsed_ms: 1000,
+      },
+      {
+        timestamp: '2026-09-20T00:00:02.000Z',
+        sequence: 2,
+        action: { type: 'click', selector: '<box>10,10,20,20</box>' },
+        observation: { url: 'https://www.apple.com/mac', title: 'Mac' },
+        thought: 'I have explored the Mac models and my task is complete.',
+        status: 'SUCCESS',
+        elapsed_ms: 5000,
+      },
+    ],
+  };
+
+  const sessionPlan = {
+    run_id: 'run-uninstrumented',
+    session_id: 's-uninst',
+    persona: personaFixture('seed-001', 'COHORT_A'),
+    objective: 'Explore Apple products',
+    target_url: 'https://www.apple.com',
+    allowed_origins: ['www.apple.com'],
+    checkpoint_plan: [],
+    max_actions: 40,
+    max_session_seconds: 180,
+    remaining_budget_cents: 500,
+    account_ref: null,
+  };
+
+  const result = adaptNovaTrajectoryToSessionResult(trajectory, sessionPlan);
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.finish_reason, 'OBJECTIVE_COMPLETE');
+});
+

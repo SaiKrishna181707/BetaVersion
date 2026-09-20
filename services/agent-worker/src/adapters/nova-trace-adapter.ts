@@ -68,6 +68,56 @@ const RESULTS = new Set(['SUCCESS', 'ERROR', 'NO_CHANGE', 'BLOCKED', 'VALIDATION
 const REASONS = new Set(['EXPLORING', 'GOAL_PROGRESS', 'RETRYING', 'BACKTRACKING', 'CONFUSED',
   'PATIENCE_EXHAUSTED', 'SAFETY_STOP', 'OBJECTIVE_COMPLETE', 'LIMIT_REACHED']);
 
+export function cleanseTargetDescriptor(
+  rawDescriptor: string | null | undefined,
+  action: RawNovaAction | undefined,
+  step: RawNovaStep,
+  route: string,
+): string | null {
+  const isBox = rawDescriptor && (/^<?box[>(:]/i.test(rawDescriptor) || /^\(?\d+,\s*\d+,\s*\d+,\s*\d+\)?$/.test(rawDescriptor));
+  if (rawDescriptor && !isBox) return rawDescriptor;
+
+  const thought = step.thought ?? step.reasoning ?? '';
+  const actionType = typeof action === 'object' ? action?.type?.toLowerCase() : '';
+
+  // 1. Try extracting target from thought (e.g. "click the menu icon", "click on the Support link")
+  const clickMatch = thought.match(/(?:click|tap|press|select)(?:\s+on)?\s+(?:the\s+)?([A-Za-z0-9&/ -]{2,35}?(?:\s+(?:link|button|tab|icon|menu|card|option|item))?)(?:\s+(?:in|on|to|for|\.|$))/i);
+  if (clickMatch && clickMatch[1] && !/^(?:that|this|it|a|an|here|next|step)$/i.test(clickMatch[1].trim())) {
+    const extracted = clickMatch[1].trim();
+    return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+  }
+
+  // 2. Action-specific fallback for scroll
+  if (actionType === 'scroll') {
+    return 'Page content';
+  }
+
+  // 3. Check for section visibility or exploration in thought
+  const sectionMatch = thought.match(/(?:can see|looking at|exploring|viewing)\s+(?:the\s+)?([A-Za-z0-9&/ -]{2,35}?)(?:\s+(?:section|page|category|models|information|deals|banner))/i);
+  if (sectionMatch && sectionMatch[1]) {
+    const extracted = sectionMatch[1].trim();
+    return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+  }
+
+  // 4. Action-specific fallback
+  if (actionType === 'type' || actionType === 'fill') {
+    return action && typeof action === 'object' && action.value ? `Input field ("${action.value}")` : 'Input field';
+  }
+  if (actionType === 'navigate' || actionType === 'goto') {
+    return route === '/' ? 'Home page' : `${route.replace(/^\//, '').split('/')[0]} page`;
+  }
+
+  // 5. Route-based fallback if route is informative
+  if (route && route !== '/') {
+    const segment = route.replace(/^\//, '').split('/')[0]?.replaceAll('-', ' ');
+    if (segment) {
+      return `${segment.charAt(0).toUpperCase() + segment.slice(1)} navigation`;
+    }
+  }
+
+  return 'Interactive control';
+}
+
 /** Adapt only explicit, observed action records. Missing evidence is never filled in. */
 export function adaptNovaTraceToBehaviorEvents(
   trajectory: RawNovaTrajectory,
@@ -97,15 +147,17 @@ export function adaptNovaTraceToBehaviorEvents(
       ? step.agent_reason_code as AgentReasonCode : 'EXPLORING';
     if (reason === 'OBJECTIVE_COMPLETE' && (checkpoint !== plan.checkpoint_plan.at(-1) || result !== 'SUCCESS')) reason = 'EXPLORING';
     const screenshot = step.screenshot_ref && /^s3:\/\/[^/]+\/.+/.test(step.screenshot_ref) ? step.screenshot_ref : null;
+    const cleanTarget = cleanseTargetDescriptor(action?.selector ?? action?.target ?? null, action, step, url.pathname);
     return [{
       run_id: plan.run_id, session_id: plan.session_id, persona_id: plan.persona_id,
       timestamp: rawTimestamp, elapsed_ms: step.elapsed_ms!,
       url: url.toString(), page_title: step.observation.page_title ?? step.observation.title ?? '', route: url.pathname,
-      action_type: type, target_descriptor: action?.selector ?? action?.target ?? null,
+      action_type: type, target_descriptor: cleanTarget,
       result: result as BehaviorEvent['result'], screenshot_ref: screenshot,
       console_error: step.observation.console_errors?.join('; ') || step.error || null,
       network_error: step.observation.network_errors?.join('; ') || null,
       task_checkpoint: checkpoint, agent_reason_code: reason,
+      thought: step.thought ?? step.reasoning ?? null,
     }];
   });
 }
@@ -121,12 +173,42 @@ export function adaptNovaTrajectoryToSessionResult(
   const reason = trajectory.finish_reason;
   let finish_reason: SessionStopReason = 'ABANDONED';
   let status: SessionStatus = 'ABANDONED';
-  if (reason === 'CANCELLED') { status = 'CANCELLED'; finish_reason = 'CANCELLED'; }
-  else if (['TIMED_OUT', 'ACTION_LIMIT', 'BUDGET_LIMIT'].includes(reason ?? '')) {
+  if (reason === 'CANCELLED') {
+    status = 'CANCELLED'; finish_reason = 'CANCELLED';
+  } else if (['TIMED_OUT', 'ACTION_LIMIT', 'BUDGET_LIMIT'].includes(reason ?? '')) {
     status = 'TIMED_OUT'; finish_reason = reason as SessionStopReason;
   } else if (['FAILED', 'TECHNICAL_ERROR', 'SAFETY_STOP'].includes(reason ?? '') || events.length === 0) {
     status = 'FAILED'; finish_reason = reason === 'SAFETY_STOP' ? 'SAFETY_STOP' : 'TECHNICAL_ERROR';
-  } else if (reachedFinal) { status = 'COMPLETED'; finish_reason = 'OBJECTIVE_COMPLETE'; }
-  return { session_id: plan.session_id, status, finish_reason,
-    finished_at: events.at(-1)?.timestamp ?? new Date().toISOString(), events, replay_ref: null };
+  } else if (reachedFinal || reason === 'OBJECTIVE_COMPLETE' || trajectory.completed === true) {
+    status = 'COMPLETED'; finish_reason = 'OBJECTIVE_COMPLETE';
+  } else if (plan.checkpoint_plan.length === 0 && events.length > 0) {
+    // For uninstrumented targets (e.g. testing public websites without predefined data-synthetic-checkpoint tags),
+    // evaluate completion from observed actions and agent progress.
+    const lastStep = trajectory.steps.at(-1);
+    const lastThought = (lastStep?.thought ?? '').toLowerCase();
+    const indicatesCompletion = lastThought.includes('complete')
+      || lastThought.includes('finished')
+      || lastThought.includes('achieved')
+      || lastThought.includes('found what')
+      || lastThought.includes('need to return');
+
+    const hadFatalError = events.some(e => e.result === 'ERROR') || (lastStep?.error != null);
+    const isPatient = plan.persona?.patience !== 'LOW';
+
+    if (!hadFatalError && (indicatesCompletion || (events.length >= 3 && isPatient))) {
+      status = 'COMPLETED';
+      finish_reason = 'OBJECTIVE_COMPLETE';
+    } else {
+      status = 'ABANDONED';
+      finish_reason = 'ABANDONED';
+    }
+  }
+  return {
+    session_id: plan.session_id,
+    status,
+    finish_reason,
+    finished_at: events.at(-1)?.timestamp ?? new Date().toISOString(),
+    events,
+    replay_ref: null,
+  };
 }

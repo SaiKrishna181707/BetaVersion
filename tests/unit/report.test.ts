@@ -92,3 +92,17 @@ test('retry finding cites each retrying session once', async () => {
   assert.equal(finding.evidence[0]?.session_id, 's2');
   assert.equal(finding.evidence[0]?.sequence, 1);
 });
+
+test('generates realistic actionable feedback and populated quick improvements', async () => {
+  const report = await build();
+  assert.ok(report.agent_feedback.length > 0);
+  for (const fb of report.agent_feedback) {
+    assert.ok(fb.what_worked.length > 0, 'what_worked should not be empty');
+    assert.ok(fb.what_confused_them.length > 0, 'what_confused_them should not be empty');
+    assert.ok(fb.what_slowed_them_down.length > 0, 'what_slowed_them_down should not be empty');
+    assert.ok(typeof fb.continuation_or_abandonment === 'string' && fb.continuation_or_abandonment.length > 0);
+    assert.ok(typeof fb.improvement_suggestion === 'string' && fb.improvement_suggestion.length > 0);
+  }
+  assert.ok(report.quick_improvements.length > 0, 'quick_improvements should be populated');
+});
+

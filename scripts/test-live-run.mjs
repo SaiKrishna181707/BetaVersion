@@ -47,6 +47,19 @@ async function test() {
     console.log(`[${i * 5}s] Run Status: ${run.status}, Session Status: ${session?.status}, Actions: ${session?.actions_taken ?? 0}`);
     if (run.status === 'COMPLETED' || run.status === 'FAILED') {
       console.log('Run finished with status:', run.status);
+      console.log('5. Fetching report and feedback...');
+      const reportRes = await fetch(`${API}/runs/${encodeURIComponent(runData.run_id)}/report`).then(r => r.json());
+      console.log('--- REPORT FINDINGS ---');
+      console.log('Completion rate:', reportRes.report?.metrics?.completion);
+      console.log('Findings:', reportRes.report?.findings?.map(f => `[${f.kind}] ${f.title}`));
+      console.log('Quick improvements:', reportRes.report?.quick_improvements?.map(q => q.recommendation));
+      console.log('--- AGENT FEEDBACK ---');
+      console.log('Feedback:', JSON.stringify(reportRes.report?.agent_feedback, null, 2));
+      const sessionEvents = await fetch(`${API}/runs/${encodeURIComponent(runData.run_id)}/sessions/${session?.session_id}/events`).then(r => r.json());
+      console.log('--- FIRST 5 ACTIONS & TARGETS ---');
+      for (const ev of (sessionEvents.events || []).slice(0, 5)) {
+        console.log(`Action: ${ev.action_type} | Target: ${ev.target_descriptor} | Route: ${ev.route}`);
+      }
       break;
     }
   }

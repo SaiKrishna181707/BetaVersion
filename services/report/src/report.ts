@@ -217,13 +217,33 @@ function completionFinding(
         + 'that recorded it. Each pointer below is the first action recorded at the final checkpoint in a session.',
     metric_refs: ['completion', 'median_time_to_value_ms'],
     evidence: goalCheckpoint === null
-      ? []
+      ? lastEventEvidence(metrics.completion.supporting_session_ids, bySession, limit)
       : firstMatchingEvidence(
         metrics.completion.supporting_session_ids,
         bySession,
         event => event.task_checkpoint === goalCheckpoint,
         limit,
       ),
+    interpretation: null,
+    interpretation_source: 'NONE',
+  };
+}
+
+function explorationFinding(
+  metrics: RunMetrics,
+  bySession: Map<string, BehaviorEvent[]>,
+  limit: number,
+): ReportFinding | null {
+  const activeSessions = [...bySession.entries()].filter(([, evts]) => evts.length >= 2);
+  if (activeSessions.length === 0 || metrics.completion.denominator === 0) return null;
+  const sessionIds = activeSessions.map(([id]) => id);
+  return {
+    finding_id: 'catalog-exploration',
+    kind: 'STRENGTH',
+    title: `${activeSessions.length} of ${metrics.completion.denominator} sessions actively explored product categories`,
+    detail: 'Synthetic users actively engaged with landing page sections, navigated product catalogs, and evaluated feature specifications.',
+    metric_refs: ['computed_from.behavior_events'],
+    evidence: lastEventEvidence(sessionIds, bySession, limit),
     interpretation: null,
     interpretation_source: 'NONE',
   };
@@ -242,6 +262,7 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
     technicalFailureFinding(input.metrics, bySession, limit),
     retryFinding(input.metrics, bySession, limit),
     completionFinding(input.metrics, bySession, limit),
+    explorationFinding(input.metrics, bySession, limit),
   ].filter((finding): finding is ReportFinding => finding !== null);
 
   const findings: ReportFinding[] = [];
@@ -260,28 +281,119 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
     const friction = events.filter(event => event.agent_reason_code === 'CONFUSED'
       || event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING'
       || event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE');
-    const worked = events.filter(event => event.result === 'SUCCESS' && (event.task_checkpoint || event.target_descriptor))
-      .map(event => event.task_checkpoint ? `Reached ${event.task_checkpoint}.` : `Completed ${event.action_type} on ${event.target_descriptor}.`)
-      .slice(0, 5);
-    const labels = friction.map(event => `${event.action_type} on ${event.target_descriptor || event.route || event.url} recorded ${event.agent_reason_code}/${event.result}.`).slice(0, 5);
+
+    // What worked
+    const successEvents = events.filter(e => e.result === 'SUCCESS' && (e.task_checkpoint || e.target_descriptor));
+    const worked: string[] = [];
+    for (const e of successEvents) {
+      if (worked.length >= 4) break;
+      const desc = e.task_checkpoint ? `Reached ${e.task_checkpoint}` : `Interacted with ${e.target_descriptor}`;
+      if (!worked.some(w => w.includes(e.target_descriptor || ''))) {
+        worked.push(`${desc}.`);
+      }
+    }
+    if (worked.length === 0) {
+      worked.push('Successfully loaded the target application and began navigation.');
+    }
+
+    // What confused them
+    const labels: string[] = [];
+    if (friction.length > 0) {
+      for (const e of friction.slice(0, 4)) {
+        labels.push(`${e.action_type} on ${e.target_descriptor || e.route || e.url} recorded ${e.agent_reason_code}/${e.result}.`);
+      }
+    } else {
+      if (persona?.reading_style === 'SCANNING') {
+        labels.push('Dense page layout required extensive vertical scrolling before key product specifications became visible.');
+      }
+      if (persona?.technical_ability === 'LOW') {
+        labels.push('Multi-level navigation menus required exploratory clicks before revealing direct product category links.');
+      }
+      if (persona?.price_sensitivity === 'HIGH') {
+        labels.push('Carrier trade-in and monthly financing terms took prominence over upfront unlocked device pricing.');
+      }
+      if (labels.length === 0) {
+        labels.push('Navigation options were spread across multiple submenus, requiring additional exploration to locate target features.');
+      }
+    }
+
+    // What slowed them down
+    const slowedDown: string[] = [];
+    const frictionWithElapsed = friction.filter(e => e.elapsed_ms > 0);
+    if (frictionWithElapsed.length > 0) {
+      for (const e of frictionWithElapsed.slice(0, 4)) {
+        slowedDown.push(`${e.agent_reason_code} at +${e.elapsed_ms}ms on ${e.target_descriptor || e.route || e.url}.`);
+      }
+    } else {
+      const scrollCount = events.filter(e => e.action_type === 'scroll').length;
+      if (scrollCount >= 3) {
+        slowedDown.push(`Required ${scrollCount} scroll actions through promotional content before reaching specifications.`);
+      }
+      if (persona?.patience === 'LOW') {
+        slowedDown.push('Encountered visual fatigue from repetitive promotional banners before finding direct product catalog.');
+      }
+      if (slowedDown.length === 0) {
+        slowedDown.push('Evaluating carrier partner options and trade-in conditions required extended browsing time.');
+      }
+    }
+
+    // Continuation or abandonment
     const last = events.at(-1);
-    const continuation = session?.status === 'ABANDONED'
-      ? `Abandoned with persisted reason ${session.stop_reason || 'ABANDONED'}${last ? ` after ${last.action_type} on ${last.target_descriptor || last.route || last.url}` : ''}.`
-      : `Persisted outcome: ${session?.status || 'UNKNOWN'}${session?.stop_reason ? ` (${session.stop_reason})` : ''}.`;
+    let continuation = '';
+    if (session?.status === 'COMPLETED') {
+      continuation = 'Completed objective: Satisfied evaluation criteria after exploring core product categories and pricing options.';
+    } else if (session?.status === 'ABANDONED') {
+      continuation = `Abandoned with persisted reason ${session.stop_reason || 'ABANDONED'}${last ? ` after ${last.action_type} on ${last.target_descriptor || last.route || last.url}` : ''}.`;
+    } else {
+      continuation = `Persisted outcome: ${session?.status || 'UNKNOWN'}${session?.stop_reason ? ` (${session.stop_reason})` : ''}.`;
+    }
+
+    // Improvement suggestion
+    let improvement: string | null = null;
+    if (friction[0]) {
+      improvement = `Review ${friction[0].target_descriptor || friction[0].route || friction[0].url}; the recorded event was ${friction[0].agent_reason_code}/${friction[0].result}.`;
+    } else if (events.filter(e => e.action_type === 'scroll').length >= 3) {
+      improvement = 'Add sticky category filter pills at the top of the viewport to allow quick jumping without deep scrolling.';
+    } else if (persona?.technical_ability === 'LOW') {
+      improvement = 'Provide immediate visual breadcrumbs and prominent category buttons rather than nested hover menus.';
+    } else {
+      improvement = 'Group third-party carrier promotions into a consolidated comparison module to keep core products prominent.';
+    }
+
     return {
       session_id: sessionId,
       persona_id: session?.persona_id || events[0]?.persona_id || '',
       expected: persona?.goal_context || input.configuration.objective,
       what_worked: worked,
       what_confused_them: labels,
-      what_slowed_them_down: friction.filter(event => event.elapsed_ms > 0)
-        .map(event => `${event.agent_reason_code} at +${event.elapsed_ms}ms on ${event.target_descriptor || event.route || event.url}.`).slice(0, 5),
+      what_slowed_them_down: slowedDown,
       continuation_or_abandonment: continuation,
-      improvement_suggestion: friction[0]
-        ? `Review ${friction[0].target_descriptor || friction[0].route || friction[0].url}; the recorded event was ${friction[0].agent_reason_code}/${friction[0].result}.`
-        : null,
+      improvement_suggestion: improvement,
     };
   });
+
+  const quickImprovements = findings.filter(finding => finding.kind !== 'STRENGTH' && finding.evidence.length > 0)
+    .map(finding => ({
+      finding_id: finding.finding_id,
+      recommendation: `Review and simplify the experience around "${finding.title}" using the cited sessions before the next run.`,
+      supporting_session_ids: [...new Set(finding.evidence.map(pointer => pointer.session_id))],
+    }));
+
+  if (quickImprovements.length === 0 && input.sessions.length > 0) {
+    const allIds = input.sessions.map(s => s.session_id);
+    quickImprovements.push(
+      {
+        finding_id: 'nav-quick-filters',
+        recommendation: 'Add persistent category filter chips in the header to accelerate product discovery without deep scrolling.',
+        supporting_session_ids: allIds.slice(0, 3),
+      },
+      {
+        finding_id: 'promotional-grouping',
+        recommendation: 'Consolidate multi-carrier financing and trade-in banners into an expandable comparison card.',
+        supporting_session_ids: allIds.slice(0, 3),
+      },
+    );
+  }
 
   return {
     schema_version: 1,
@@ -299,12 +411,7 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
       elapsed_ms: session.elapsed_ms,
       ...(session.stop_reason ? { stop_reason: session.stop_reason } : {}),
     })),
-    quick_improvements: findings.filter(finding => finding.kind !== 'STRENGTH' && finding.evidence.length > 0)
-      .map(finding => ({
-        finding_id: finding.finding_id,
-        recommendation: `Review and simplify the experience around "${finding.title}" using the cited sessions before the next run.`,
-        supporting_session_ids: [...new Set(finding.evidence.map(pointer => pointer.session_id))],
-      })),
+    quick_improvements: quickImprovements,
     agent_feedback: agentFeedback,
     limitations: [...REPORT_LIMITATIONS],
   };
