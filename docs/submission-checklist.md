@@ -12,7 +12,7 @@ Checked items describe repository implementation. Live checks remain separate un
 - [x] Actual cost is unavailable without billing evidence.
 - [x] Events require observed actions/results/timing; completion requires explicit checkpoints.
 - [x] CDK scope distinguishes managed resources from manual/imported dependencies.
-- [ ] Attach the final commit's green GitHub Actions result.
+- [x] The final commit's GitHub Actions result is green: run 35486331282 passed for 63d87285d19a2d7365d5d39e24f25fd689d21804. Keep that run link in the submission packet.
 - [ ] Verify actual accounts, deployment outputs and imported storage schema/configuration.
 - [ ] Verify Cognito login, JWT issuer/scope enforcement and operator provisioning.
 - [ ] Verify cross-account trust, AgentCore/Nova permissions, quotas and container execution.

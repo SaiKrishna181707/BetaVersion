@@ -4,6 +4,8 @@ This records repository verification, not a deployment certificate. No AWS deplo
 
 Main baseline: ddcaa6a4feb4ca9c57e494353c5074825ced7fd5. The integration branch preserves its application/storage contracts and adapts selected foundation safeguards. See [integration provenance and branch inventory](integration-audit.md).
 
+Final integration commit: 63d87285d19a2d7365d5d39e24f25fd689d21804, fast-forwarded onto `main` and verified by hosted CI.
+
 ## Local verification on 2026-09-20
 
 These checks ran against the final integration source before commit. Node checks
@@ -53,8 +55,10 @@ not AWS evidence. The targeted credential scan does not certify all repository h
 - Fresh AWS account/resource existence, effective IAM, Cognito login, quotas,
   notification delivery, reservation adoption, browser execution and billing all
   require the manual checks in the submission checklist. No AWS authentication was attempted.
-- A final GitHub Actions result must be associated with the pushed commit. Local
-  results above do not claim a hosted CI result.
+- Hosted CI for the pushed commit: GitHub Actions run 35486331282 (workflow CI, push to
+  `main`, commit 63d87285d19a2d7365d5d39e24f25fd689d21804) completed with conclusion
+  `success` on 2026-09-20. The blocking npm audit, `npm run check`, `npm run infra:synth`,
+  browser tests and the Python Nova worker job all passed, matching the local results above.
 
 ## Historical evidence
 
