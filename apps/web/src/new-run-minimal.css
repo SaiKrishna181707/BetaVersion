@@ -110,6 +110,26 @@
   box-shadow: 0 0 0 3px rgba(124, 92, 255, .11);
 }
 
+.centopus-authorization {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 2px;
+  color: #9f96b2;
+  font-size: 10px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.centopus-authorization input {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  accent-color: #8061ff;
+}
+
 .centopus-new-run-footer {
   display: grid;
   grid-template-columns: 170px minmax(220px, 1fr);
