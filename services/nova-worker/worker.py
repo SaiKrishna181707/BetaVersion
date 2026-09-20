@@ -19,6 +19,7 @@ import ipaddress
 import json
 import os
 import re
+import socket
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -98,6 +99,26 @@ def _is_public_target_host(host: str) -> bool:
     except ValueError:
         return True
     return address.is_global
+
+
+
+def _resolved_addresses(host: str) -> set[str]:
+    """Resolve a runtime hostname and return every observed address."""
+    try:
+        infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise PlanError("target hostname could not be resolved") from exc
+    addresses = {info[4][0] for info in infos if info[4] and info[4][0]}
+    if not addresses:
+        raise PlanError("target hostname resolved to no addresses")
+    return addresses
+
+
+def assert_runtime_target_public(host: str) -> None:
+    """Reject DNS answers that could route the browser into private/local networks."""
+    addresses = _resolved_addresses(host)
+    if any(not ipaddress.ip_address(address).is_global for address in addresses):
+        raise PlanError("target hostname resolved to a private or non-global network address")
 
 
 def navigation_guardrail_reason(
@@ -277,6 +298,10 @@ def execute_with_aws(
     from evidence import BrowserEvidence, SessionStop, recorded_actuator
 
     evidence = BrowserEvidence(plan)
+    # Validate the actual DNS answer immediately before opening the browser.
+    # The API performs its own network check, but the worker also defends against
+    # DNS changes between request validation and browser execution.
+    assert_runtime_target_public(_host(plan.target_url))
     client = BrowserClient(region=region)
     browser_session_id = None
     execution_error = None
@@ -284,6 +309,11 @@ def execute_with_aws(
 
     def state_guardrail(state):
         if not evidence.authorized(state.browser_url):
+            evidence.reason = 'SAFETY_STOP'
+            return GuardrailDecision.BLOCK
+        try:
+            assert_runtime_target_public(_host(state.browser_url))
+        except PlanError:
             evidence.reason = 'SAFETY_STOP'
             return GuardrailDecision.BLOCK
         evidence.check()
