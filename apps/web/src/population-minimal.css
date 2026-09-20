@@ -6,16 +6,16 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 34px 48px 20px;
+  padding: 26px 46px 18px;
   background:
-    radial-gradient(circle at 50% -10%, rgba(124, 92, 255, .14), transparent 36rem),
-    radial-gradient(circle at 50% 100%, rgba(42, 74, 190, .1), transparent 28rem),
+    radial-gradient(circle at 50% -10%, rgba(124, 92, 255, .13), transparent 34rem),
+    radial-gradient(circle at 50% 100%, rgba(42, 74, 190, .08), transparent 26rem),
     #050309;
   color: #f7f4ff;
 }
 
 .centopus-population-heading {
-  width: min(1080px, 100%);
+  width: min(1060px, 100%);
   margin: 0 auto;
   flex: 0 0 auto;
   text-align: center;
@@ -24,25 +24,25 @@
 .centopus-population-heading h1 {
   margin: 0;
   color: #fff;
-  font-size: clamp(32px, 4.2vw, 54px);
+  font-size: clamp(30px, 3.5vw, 46px);
   line-height: 1;
-  letter-spacing: -.055em;
+  letter-spacing: -.05em;
   font-weight: 620;
 }
 
 .centopus-population-heading p {
   max-width: 820px;
-  margin: 10px auto 0;
+  margin: 8px auto 0;
   color: #a79db8;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .centopus-population-tools-wrap {
   position: relative;
   z-index: 12;
   width: min(900px, 100%);
-  margin: 22px auto 0;
+  margin: 16px auto 0;
   flex: 0 0 auto;
 }
 
@@ -68,7 +68,7 @@
 
 .centopus-pop-search input {
   width: 100%;
-  height: 46px;
+  height: 44px;
   padding: 0 15px 0 42px;
   border: 1px solid #3a2d50;
   border-radius: 11px;
@@ -76,7 +76,7 @@
   background: rgba(11, 7, 16, .94);
   color: #fff;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   transition: border-color .16s ease, box-shadow .16s ease;
 }
 
@@ -90,7 +90,7 @@
 }
 
 .centopus-pop-filter-button {
-  height: 46px;
+  height: 44px;
   border: 1px solid #3a2d50;
   border-radius: 11px;
   display: inline-flex;
@@ -101,7 +101,6 @@
   color: #d9d0e9;
   font-size: 11px;
   font-weight: 650;
-  transition: border-color .16s ease, background .16s ease, color .16s ease;
 }
 
 .centopus-pop-filter-button:hover,
@@ -117,7 +116,7 @@
   left: 0;
   right: 0;
   z-index: 20;
-  max-height: min(440px, 62vh);
+  max-height: min(420px, 60vh);
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -130,10 +129,7 @@
   scrollbar-color: #553c80 transparent;
 }
 
-.centopus-pop-filter-panel .vision-filter-group {
-  color: #dcd4e9;
-}
-
+.centopus-pop-filter-panel .vision-filter-group,
 .centopus-pop-filter-panel .vision-filter-group strong {
   color: #ddd5eb;
 }
@@ -178,8 +174,8 @@
 
 .centopus-pop-error {
   position: absolute;
-  top: 18px;
-  right: 22px;
+  top: 16px;
+  right: 20px;
   z-index: 30;
   max-width: 380px;
   margin: 0;
@@ -193,10 +189,10 @@
 
 .centopus-carousel-shell {
   position: relative;
-  width: min(1180px, 100%);
+  width: min(1120px, 100%);
   min-height: 0;
   flex: 1 1 auto;
-  margin: 6px auto 0;
+  margin: 18px auto 0;
   display: flex;
   align-items: center;
 }
@@ -204,17 +200,21 @@
 .centopus-carousel-track {
   width: 100%;
   height: 100%;
-  min-height: 360px;
+  min-height: 292px;
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 18px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 18px calc(50% - 175px) 30px;
-  scroll-snap-type: x mandatory;
-  scroll-padding-inline: calc(50% - 175px);
+  padding: 18px calc(50% - 142px) 16px;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: calc(50% - 142px);
+  scroll-behavior: smooth;
   overscroll-behavior-inline: contain;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  outline: none;
 }
 
 .centopus-carousel-track::-webkit-scrollbar {
@@ -223,55 +223,54 @@
 
 .centopus-carousel-card {
   position: relative;
-  flex: 0 0 350px;
-  width: 350px;
+  flex: 0 0 284px;
+  width: 284px;
   scroll-snap-align: center;
   transform-origin: center center;
   transition:
-    transform .32s cubic-bezier(.2, .7, .2, 1),
-    opacity .32s ease,
-    filter .32s ease;
+    transform .28s cubic-bezier(.22, .75, .25, 1),
+    opacity .28s ease,
+    filter .28s ease;
 }
 
 .centopus-carousel-card.is-active {
   z-index: 4;
-  transform: translateY(-18px) scale(1);
+  transform: translateY(0) scale(1);
   opacity: 1;
   filter: none;
 }
 
 .centopus-carousel-card.is-near {
   z-index: 2;
-  transform: translateY(26px) scale(.92);
+  transform: translateY(18px) scale(.91);
   opacity: .48;
   filter: saturate(.72);
 }
 
 .centopus-carousel-card.is-far {
   z-index: 1;
-  transform: translateY(38px) scale(.86);
-  opacity: .22;
-  filter: saturate(.55);
+  transform: translateY(28px) scale(.84);
+  opacity: .18;
+  filter: saturate(.5);
 }
 
 .centopus-carousel-card .agent-card {
   width: 100%;
-  min-height: 332px;
-  padding: 19px;
+  min-height: 258px;
+  padding: 15px;
   border-color: #332640;
   background: rgba(14, 8, 23, .97);
   color: #f6f1ff;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .26);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .24);
   transform: none;
-  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
 }
 
 .centopus-carousel-card.is-active .agent-card {
   border-color: #7659db;
   background: #10091b;
   box-shadow:
-    0 26px 68px rgba(0, 0, 0, .42),
-    0 0 48px rgba(100, 70, 221, .12);
+    0 20px 52px rgba(0, 0, 0, .38),
+    0 0 36px rgba(100, 70, 221, .1);
 }
 
 .centopus-carousel-card .agent-card:hover,
@@ -279,39 +278,59 @@
   transform: none;
 }
 
-.centopus-carousel-card .agent-card-name strong,
-.centopus-carousel-card .agent-card-facts dd {
-  color: #f5f1ff;
+.centopus-carousel-card .agent-card-name {
+  margin-top: 22px;
 }
 
-.centopus-carousel-card .agent-card-name span,
-.centopus-carousel-card .agent-card-facts dt {
+.centopus-carousel-card .agent-card-name strong {
+  color: #f5f1ff;
+  font-size: 14px;
+}
+
+.centopus-carousel-card .agent-card-name span {
   color: #81768f;
+  font-size: 9px;
 }
 
 .centopus-carousel-card .agent-card-facts {
+  margin-top: 18px;
   border-color: #2d213c;
 }
 
 .centopus-carousel-card .agent-card-facts > div {
+  min-height: 27px;
   border-color: #2d213c;
 }
 
+.centopus-carousel-card .agent-card-facts dt,
+.centopus-carousel-card .agent-card-facts dd {
+  font-size: 8px;
+}
+
+.centopus-carousel-card .agent-card-facts dd {
+  color: #f5f1ff;
+}
+
 .centopus-carousel-card .agent-avatar {
+  width: 38px;
+  height: 38px;
   background: #f0ecff;
   color: #7759ee;
+  font-size: 10px;
 }
 
 .centopus-carousel-card .agent-card-footer {
+  margin-top: 17px;
   color: #a88fff;
+  font-size: 9px;
 }
 
 .centopus-carousel-arrow {
   position: absolute;
   top: 50%;
   z-index: 8;
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   border: 1px solid rgba(146, 119, 255, .32);
   border-radius: 50%;
   display: grid;
@@ -324,18 +343,18 @@
 }
 
 .centopus-carousel-arrow:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: scale(1.06);
   border-color: #8063ff;
   color: #fff;
 }
 
 .centopus-carousel-arrow:disabled {
-  opacity: .2;
+  opacity: .16;
   cursor: default;
 }
 
 .centopus-carousel-arrow.left {
-  left: 2px;
+  left: 4px;
 }
 
 .centopus-carousel-arrow.left svg {
@@ -343,12 +362,46 @@
 }
 
 .centopus-carousel-arrow.right {
-  right: 2px;
+  right: 4px;
+}
+
+.centopus-population-runbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 0;
+}
+
+.centopus-run-simulation-button {
+  min-width: 190px;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 1px solid rgba(183, 167, 255, .42);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: linear-gradient(135deg, #8263ff, #5839d8);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 11px 28px rgba(88, 57, 216, .25);
+}
+
+.centopus-run-simulation-button:hover:not(:disabled) {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+.centopus-run-simulation-button:disabled {
+  opacity: .5;
+  cursor: wait;
 }
 
 .centopus-pop-empty {
   flex: 1 0 100%;
-  min-height: 250px;
+  min-height: 220px;
   display: grid;
   place-items: center;
   align-content: center;
@@ -377,51 +430,62 @@
 
 @media (max-height: 680px) and (min-width: 721px) {
   .centopus-population-minimal {
-    padding-top: 22px;
+    padding-top: 18px;
+    padding-bottom: 12px;
   }
 
   .centopus-population-heading h1 {
-    font-size: clamp(30px, 3.8vw, 46px);
+    font-size: 36px;
   }
 
   .centopus-population-tools-wrap {
-    margin-top: 16px;
+    margin-top: 12px;
+  }
+
+  .centopus-carousel-shell {
+    margin-top: 10px;
   }
 
   .centopus-carousel-track {
-    min-height: 320px;
+    min-height: 250px;
     padding-top: 10px;
-    padding-bottom: 16px;
+    padding-bottom: 8px;
+  }
+
+  .centopus-carousel-card {
+    flex-basis: 258px;
+    width: 258px;
   }
 
   .centopus-carousel-card .agent-card {
-    min-height: 310px;
+    min-height: 228px;
+    padding: 13px;
   }
 
-  .centopus-carousel-card.is-active {
-    transform: translateY(-12px) scale(.96);
+  .centopus-carousel-card .agent-card-name {
+    margin-top: 16px;
   }
 
-  .centopus-carousel-card.is-near {
-    transform: translateY(20px) scale(.89);
+  .centopus-carousel-card .agent-card-facts {
+    margin-top: 12px;
+  }
+
+  .centopus-carousel-card .agent-card-facts > div {
+    min-height: 23px;
+  }
+
+  .centopus-run-simulation-button {
+    min-height: 40px;
   }
 }
 
 @media (max-width: 900px) {
   .centopus-population-minimal {
-    padding-inline: 26px;
+    padding-inline: 24px;
   }
 
   .centopus-pop-filter-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .centopus-carousel-arrow.left {
-    left: -10px;
-  }
-
-  .centopus-carousel-arrow.right {
-    right: -10px;
   }
 }
 
@@ -430,7 +494,7 @@
     height: auto;
     min-height: 100dvh;
     overflow-y: auto;
-    padding: 24px 18px 18px;
+    padding: 24px 16px 18px;
   }
 
   .centopus-population-heading {
@@ -438,7 +502,7 @@
   }
 
   .centopus-population-heading h1 {
-    font-size: 36px;
+    font-size: 34px;
   }
 
   .centopus-population-heading p {
@@ -460,13 +524,13 @@
   }
 
   .centopus-carousel-shell {
-    min-height: 420px;
+    min-height: 330px;
   }
 
   .centopus-carousel-track {
-    min-height: 410px;
-    padding-inline: 11vw;
-    scroll-padding-inline: 11vw;
+    min-height: 320px;
+    padding-inline: calc(50% - 39vw);
+    scroll-padding-inline: calc(50% - 39vw);
   }
 
   .centopus-carousel-card {
@@ -475,28 +539,28 @@
   }
 
   .centopus-carousel-card.is-active {
-    transform: translateY(-10px) scale(.98);
+    transform: translateY(0) scale(.98);
   }
 
   .centopus-carousel-card.is-near {
-    transform: translateY(22px) scale(.9);
+    transform: translateY(18px) scale(.9);
   }
 
   .centopus-carousel-card.is-far {
-    transform: translateY(30px) scale(.86);
+    transform: translateY(25px) scale(.84);
   }
 
   .centopus-carousel-arrow {
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
   }
 
   .centopus-carousel-arrow.left {
-    left: -8px;
+    left: -6px;
   }
 
   .centopus-carousel-arrow.right {
-    right: -8px;
+    right: -6px;
   }
 
   .persona-actions {
@@ -506,6 +570,6 @@
 
   .persona-actions-buttons {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
