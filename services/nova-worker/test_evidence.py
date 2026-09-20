@@ -122,7 +122,7 @@ class EvidenceTests(unittest.TestCase):
             'nova_act': SimpleNamespace(NovaAct=Nova, Workflow=Workflow, GuardrailDecision=SimpleNamespace(PASS=1, BLOCK=0)),
             'nova_act.tools.browser.default.default_nova_local_browser_actuator': SimpleNamespace(DefaultNovaLocalBrowserActuator=Actuator),
         }
-        with patch.dict('sys.modules', modules):
+        with patch.dict('sys.modules', modules), patch('worker._resolved_addresses', return_value={'93.184.216.34'}):
             return execute_with_aws(replace(validate_plan(plan()), checkpoint_plan=('goal',)), region='test', workflow_name='test', model_id='test')
 
     def test_successful_model_response_does_not_prove_task_completion(self):

@@ -81,7 +81,8 @@ test('tolerates a narrator that declines to interpret', async () => {
 
 test('always states its limitations', async () => {
   const report = await build();
-  assert.equal(report.limitations.length, 3);
+  assert.equal(report.limitations.length, 4);
+  assert.match(String(report.limitations[3]), /synthetic, evidence-derived interpretation/i);
   assert.match(String(report.limitations[0]), /not real beta users/);
 });
 
@@ -106,6 +107,74 @@ test('agent feedback is session-specific and never requires invented prose', asy
     }
   }
   assert.ok(report.quick_improvements.every(item => item.supporting_session_ids.length > 0));
+});
+
+test('builds detailed product-specific synthetic reflection from recorded evidence', async () => {
+  const report = await buildCentopusReport({
+    configuration: { ...validConfiguration, company_name: 'Fieldwork Labs', product_name: 'Fieldwork' },
+    metrics,
+    sessions,
+    events,
+    generated_at: '2026-09-18T00:10:00.000Z',
+    personas,
+  });
+
+  const completed = report.agent_feedback.find(item => item.session_id === 's1');
+  assert.ok(completed);
+  assert.equal(completed.reflection_basis, 'EVIDENCE_DERIVED_SYNTHETIC_REFLECTION');
+  assert.equal(completed.overall_feeling, 'POSITIVE');
+  assert.equal(completed.task_confidence, 'HIGH');
+  assert.equal(completed.would_use_again, 'YES');
+  assert.match(completed.feeling_summary || '', /Fieldwork/);
+  assert.match(completed.direct_feedback || '', /Fieldwork/);
+  assert.equal(completed.evidence_event_count, 3);
+  assert.ok((completed.what_i_liked ?? []).length > 0);
+
+  const abandoned = report.agent_feedback.find(item => item.session_id === 's2');
+  assert.ok(abandoned);
+  assert.equal(abandoned.overall_feeling, 'NEGATIVE');
+  assert.equal(abandoned.task_confidence, 'MEDIUM');
+  assert.equal(abandoned.would_use_again, 'NO');
+  assert.ok((abandoned.what_frustrated_me ?? []).length > 0);
+  assert.match(abandoned.expectation_gap || '', /did not validate|ended abandoned/i);
+
+  for (const feedback of report.agent_feedback) {
+    assert.ok(feedback.direct_feedback?.includes('Fieldwork'));
+    assert.ok(typeof feedback.evidence_event_count === 'number');
+    assert.doesNotMatch(feedback.direct_feedback || '', /iPhone|MacBook|Apple Watch|carrier financing/i);
+  }
+});
+
+test('detailed reflection stays explicitly uncertain when no browser evidence exists', async () => {
+  const noEvidenceSession = sessionFixture('s-no-evidence', personas[0]!.persona_id, {
+    run_id: 'run-no-evidence',
+    status: 'FAILED',
+    action_count: 0,
+    elapsed_ms: 0,
+    stop_reason: 'TECHNICAL_ERROR',
+  });
+  const noEvidenceMetrics = computeRunMetrics({
+    run_id: 'run-no-evidence',
+    sessions: [noEvidenceSession],
+    events: [],
+    personas: [personas[0]!],
+    checkpoint_plan: CHECKPOINT_PLAN,
+  });
+  const report = await buildCentopusReport({
+    configuration: { ...validConfiguration, product_name: 'Fieldwork' },
+    metrics: noEvidenceMetrics,
+    sessions: [noEvidenceSession],
+    events: [],
+    generated_at: '2026-09-18T00:10:00.000Z',
+    personas: [personas[0]!],
+  });
+  const feedback = report.agent_feedback[0]!;
+  assert.equal(feedback.overall_feeling, 'INSUFFICIENT_EVIDENCE');
+  assert.equal(feedback.task_confidence, 'NONE');
+  assert.equal(feedback.would_use_again, 'NOT_ENOUGH_EVIDENCE');
+  assert.equal(feedback.first_impression, null);
+  assert.deepEqual(feedback.what_i_liked, []);
+  assert.match(feedback.direct_feedback || '', /cannot give reliable feedback/i);
 });
 
 test('report contains no target-specific fallback recommendations or fabricated catalog claims', async () => {

@@ -175,6 +175,7 @@ export function RunReportPage({ runId }: { runId: string }) {
 
       <section className="vision-report-section">
         <div className="vision-section-heading"><span>WHAT EACH USER EXPERIENCED</span><h2>Open any individual journey.</h2></div>
+        <p className="vision-measured-note">Each card combines measured browser evidence with a clearly labelled synthetic first-person reflection. Reflection never changes the recorded status, metrics, or action trail.</p>
         <div className="vision-result-rail">
           {report.agent_results.map(result => {
             const session = sessions.find(item => item.session_id === result.session_id);
@@ -186,8 +187,12 @@ export function RunReportPage({ runId }: { runId: string }) {
               <p>{[persona?.patience ? `${persona.patience.toLowerCase()} patience` : '', persona?.technical_ability ? `${persona.technical_ability.toLowerCase()} tech` : ''].filter(Boolean).join(' · ')}</p>
               <dl><div><dt>Actions</dt><dd>{result.action_count}</dd></div><div><dt>Duration</dt><dd>{duration(result.elapsed_ms)}</dd></div><div><dt>Outcome</dt><dd>{result.stop_reason?.replaceAll('_', ' ') || result.status}</dd></div></dl>
               {feedback ? <div className="vision-result-agent-feedback">
-                <small><strong>Worked:</strong> {feedback.what_worked[0] || 'No successful behavior established.'}</small>
-                <small><strong>Friction:</strong> {feedback.what_confused_them[0] || 'No explicit friction signal recorded.'}</small>
+                <small><strong>Feeling:</strong> {feedback.overall_feeling?.replaceAll('_', ' ') || 'Historical report — detailed reflection unavailable.'}</small>
+                <small><strong>Agent says:</strong> {feedback.direct_feedback || feedback.continuation_or_abandonment}</small>
+                <small><strong>Liked:</strong> {feedback.what_i_liked?.[0] || feedback.what_worked[0] || 'No positive interaction established.'}</small>
+                <small><strong>Frustration:</strong> {feedback.what_frustrated_me?.[0] || feedback.what_confused_them[0] || 'No evidence-grounded frustration recorded.'}</small>
+                <small><strong>Confidence:</strong> {feedback.task_confidence || '—'}{feedback.task_confidence_reason ? ` · ${feedback.task_confidence_reason}` : ''}</small>
+                <small><strong>Would use again:</strong> {feedback.would_use_again?.replaceAll('_', ' ') || '—'}</small>
                 <small><strong>Outcome:</strong> {feedback.continuation_or_abandonment}</small>
                 <small><strong>Improvement:</strong> {feedback.improvement_suggestion || 'No evidence-grounded recommendation.'}</small>
               </div> : <small>No session-specific feedback was persisted.</small>}
