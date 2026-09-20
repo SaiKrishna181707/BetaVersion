@@ -8,413 +8,272 @@
 
 <p align="center">
   <strong>Centopus turns AI from a reviewer into a participant.</strong><br/>
-  Instead of recruiting people for every early test cycle, teams can launch a population of synthetic users that open the product, see the interface, make decisions, take actions, get stuck, recover, and sometimes abandon the task — then bring real users in where human judgment matters most.
+  Give it a product URL and a task. Centopus creates a population of distinct synthetic users, gives each session its own browser journey, records what actually happened, and turns that evidence into product feedback.
 </p>
 
 <p align="center">
-  Built for <a href="https://www.wemakedevs.org/aws/first-commit">First Commit — Bharat Builds Tour</a> by WeMakeDevs in collaboration with AWS Builder Center.
+  Built for <a href="https://www.wemakedevs.org/aws/first-commit">First Commit — Bharat Builds Tour</a> by WeMakeDevs × AWS Builder Center.
 </p>
 
-## 🎬 3-Minute Demo
+---
+
+## 🎬 3-minute demo
 
 <p align="center">
   <a href="https://youtu.be/OIuQfNFQq1U">
-    <img src="https://img.youtube.com/vi/OIuQfNFQq1U/maxresdefault.jpg" alt="Watch the Centopus 3-minute demo" width="860" />
+    <img src="https://img.youtube.com/vi/OIuQfNFQq1U/maxresdefault.jpg" alt="Watch the Centopus demo" width="860" />
   </a>
 </p>
 
 <p align="center">
   <strong><a href="https://youtu.be/OIuQfNFQq1U">▶ Watch Centopus in action</a></strong><br/>
-  From product URL → synthetic population → independent Nova Act browser journeys → evidence-backed results.
+  Product URL → synthetic population → Nova Act browser journeys → evidence-backed results.
 </p>
 
 ---
 
 ## The problem
 
-Beta testing is valuable — but it is also slow, repetitive, and expensive to run every time a product changes.
+Beta testing is valuable, but it is difficult to repeat at product-development speed.
 
-Teams have to recruit the right people, coordinate schedules, explain the task, wait for sessions, collect feedback, clean the results, and then repeat the whole process after the next build. Small teams often cannot do this for every feature, every flow, every device profile, or every release candidate.
+Every new feature can mean recruiting people, coordinating schedules, explaining tasks, waiting for sessions, collecting feedback, analysing it, and then repeating the cycle after the next build.
 
-Traditional QA answers **"does it work?"**  
-Analytics answers **"where did users drop?"**  
-Human research answers **"why did this person struggle?"**
+Traditional QA answers **“does it work?”**  
+Analytics answers **“where did users drop?”**  
+Human research answers **“why did this person struggle?”**
 
-But there is a large gap before all of that: **what happens when many different kinds of users actually try the product?**
+Centopus adds a missing layer before those expensive human cycles:
 
-Centopus automates that early testing layer.
+**What happens when many different kinds of users actually try the product?**
 
-Instead of needing a fresh group of beta users for every iteration, a team can launch dozens of distinct synthetic users on demand, let them actually operate the product, and identify likely friction before spending human research time on it.
+Instead of assembling a fresh beta group for every early iteration, a team can launch synthetic users on demand, find likely friction, and reserve real human research for the questions that genuinely need human judgment.
 
-The goal is not to remove people from product research. It is to make human testing **more focused, less repetitive, and more valuable**.
-
-## What Centopus does
-
-Give Centopus:
-
-1. a product URL,
-2. a task you want a user to complete,
-3. and the size of the synthetic population.
-
-Centopus builds a population of distinct personas and gives **each session its own browser journey**.
-
-A patient power user may immediately find the right path.  
-A scanning user may miss an important control.  
-A less technical user may retry, backtrack, or get stuck.  
-Another persona may decide the task is not worth continuing.
-
-Those differences become the test.
-
-> **Centopus does not ask an LLM to imagine 100 reviews.**  
-> It can create up to 100 synthetic users and send their sessions through real browser-agent execution.
-
-Every session is handled independently. Amazon Nova Act observes the rendered product through Amazon Bedrock AgentCore Browser, decides what to do next, and performs browser actions such as clicking, scrolling, typing, navigating, waiting, retrying, or stopping.
-
-The result is not a pile of generated opinions. It is a population of **evidence-backed journeys**.
+> **Automate the repetition. Keep the human insight.**
 
 ---
 
-## Why this is different
+## What Centopus does
 
-### Most AI feedback is hypothetical. Centopus is behavioral.
+Centopus takes three inputs:
 
-The agent does not receive a screenshot and write a pretend review. It interacts with the actual website.
+1. **Product URL**
+2. **A browser-testable customer task**
+3. **Population size**
 
-### Every persona gets its own journey.
+It then creates distinct personas with different technical confidence, product familiarity, patience, reading style, device class, motivations, sensitivities, and abandonment triggers.
 
-Centopus maps each persona to a separate persisted session. Sessions are orchestrated in controlled parallel batches so one user's path does not become everybody's path.
+Each persona maps to its **own persisted browser session**.
 
-### Evidence decides the outcome.
+A confident user may immediately find the right path.  
+A scanning user may miss a control.  
+Another may retry, backtrack, get stuck, or stop.
 
-The agent's final sentence does **not** decide whether a task succeeded.
+Those differences are the test.
 
-Centopus records browser-observed actions and checkpoints. Completion, abandonment, retries, friction, and timing are calculated from those events.
+> **Centopus does not ask an LLM to imagine 100 reviews.**  
+> It sends synthetic users through actual browser-agent execution and records the journeys.
 
-### Nova can improve the explanation — not rewrite reality.
+Amazon Nova Act operates the rendered website through Amazon Bedrock AgentCore Browser. The agent can click, scroll, type, navigate, wait, retry, recover, or stop according to what it sees and the persona it is representing.
 
-Amazon Nova is used after the evidence is collected to turn raw results into useful, readable feedback. The underlying outcome remains tied to the recorded browser journey.
+The final result is a population of **evidence-backed journeys**, not a pile of hypothetical opinions.
+
+---
+
+## Why Centopus is different
+
+### 1. Every persona gets an independent journey
+
+One successful browser flow is not copied across the population. Each session is persisted and executed independently, with AWS Step Functions controlling concurrency.
+
+### 2. The browser is the source of truth
+
+The model cannot simply say, “I completed the task.”
+
+Centopus records browser-observed actions, states, checkpoints, timing, failures, and stop reasons. Outcomes are calculated from those events.
+
+### 3. Failure is useful data
+
+Retries, dead ends, abandonment, timeouts, and confusion stay visible. They are not rewritten into success.
+
+### 4. Nova explains the evidence — it does not replace it
+
+Amazon Nova helps with product understanding, persona language, and final feedback synthesis. The underlying session outcome remains tied to recorded browser evidence.
 
 **Evidence before opinion.**
 
 ---
 
-## How one Centopus run works
-
-```text
-Product URL + usability objective
-              |
-              v
-     Amazon Nova product intelligence
-              |
-              v
-   Distinct synthetic population
-       (up to 100 personas)
-              |
-              v
-       AWS Step Functions
-    controlled session orchestration
-              |
-              v
-     One persisted session/persona
-              |
-              v
- Amazon Nova Act + AgentCore Browser
-   observe -> reason -> act -> react
-              |
-              v
-      Browser evidence recorder
- clicks / typing / scrolls / navigation
- checkpoints / errors / stop reasons
-              |
-              v
-     S3 raw trajectory + DynamoDB
-              |
-              v
-       Deterministic analytics
-              |
-              v
- Amazon Nova evidence-grounded synthesis
-              |
-              v
-    Population results + agent feedback
-```
-
-### 1. Understand the product
-
-Centopus safely reads a small set of first-party public pages and uses Amazon Nova through Amazon Bedrock to extract product context and suggest observable usability objectives.
-
-### 2. Build the population
-
-Centopus creates editable personas that vary across attributes such as:
-
-- technical ability,
-- product familiarity,
-- patience,
-- reading style,
-- device class,
-- motivations,
-- price and privacy sensitivity,
-- decision style,
-- and abandonment triggers.
-
-The goal is not demographic prediction. The goal is to create meaningfully different ways of approaching the same task.
-
-### 3. Give every persona a browser journey
-
-For each session, the worker starts an Amazon Bedrock AgentCore Browser session and runs Amazon Nova Act against the rendered website.
-
-Nova Act is prompted to behave as that synthetic user — not as a QA engineer trying to make the test pass.
-
-It can misunderstand the UI, scan past something, retry, backtrack, or abandon.
-
-### 4. Record what actually happened
-
-Centopus wraps browser actions with an evidence recorder.
-
-It captures the page state and action trail, including:
-
-- URL and page title,
-- visible DOM checkpoints,
-- click/type/scroll/navigation actions,
-- action targets,
-- success, error, or no-change results,
-- timestamps and elapsed time,
-- console/network errors,
-- and stop/reason codes.
-
-### 5. Calculate results from evidence
-
-Completion and friction metrics are derived from recorded session events — not from model self-report.
-
-The report can show completion, abandonment, time-to-value, retries, friction signals, funnels, cohort results, and individual agent outcomes.
-
-### 6. Turn evidence into product feedback
-
-Only after the result is known does Amazon Nova help refine the language.
-
-That gives product teams readable positive, mixed, and negative feedback while preserving the browser evidence underneath it.
-
----
-
 ## AWS architecture
 
-Centopus is not simply hosted on AWS. AWS is the execution engine of the product.
+AWS is not just where Centopus is hosted. It is the execution engine.
+
+The diagram below is rendered directly by GitHub.
 
 ```mermaid
 flowchart LR
-    UI["React / Vite UI"] --> API["Amazon API Gateway"]
-    API --> L1["AWS Lambda API"]
-    L1 --> DDB["Amazon DynamoDB"]
-    L1 --> SFN["AWS Step Functions"]
+    USER["Product team"] --> WEB["React + Vite UI"]
 
-    SFN --> W["Session Worker Lambda"]
-    W --> STS["AWS STS / IAM"]
-    STS --> NW["Python Nova Worker"]
+    subgraph CONTROL["AWS control plane"]
+      WEB --> API["Amazon API Gateway"]
+      API --> APIL["AWS Lambda API"]
+      APIL --> SFN["AWS Step Functions"]
+      APIL --> DDB["Amazon DynamoDB"]
+      SFN --> WORKER["Session Worker Lambda"]
+      EVB["Amazon EventBridge"] --> FINAL["Report Finalizer Lambda"]
+      CW["Amazon CloudWatch / SNS / Budgets"]
+    end
 
-    NW --> NA["Amazon Nova Act"]
-    NA --> B["Amazon Bedrock AgentCore Browser"]
+    subgraph AGENT["AWS agent execution plane"]
+      WORKER --> STS["AWS STS / IAM"]
+      STS --> NOVAL["Python Nova Worker"]
+      NOVAL --> ACT["Amazon Nova Act"]
+      ACT --> BROWSER["Amazon Bedrock AgentCore Browser"]
+      BROWSER --> EVIDENCE["Instrumented browser evidence"]
+    end
 
-    B --> EV["Instrumented Browser Evidence"]
-    EV --> S3["Amazon S3 Raw Trajectories"]
-    EV --> DDB
-
-    DDB --> F["Report Finalizer Lambda"]
-    S3 --> F
-    F --> BR["Amazon Bedrock / Amazon Nova"]
-    F --> DDB
-    F --> UI
+    EVIDENCE --> S3["Amazon S3 raw trajectories"]
+    EVIDENCE --> DDB
+    S3 --> FINAL
+    DDB --> FINAL
+    FINAL --> BEDROCK["Amazon Bedrock / Amazon Nova"]
+    FINAL --> DDB
+    DDB --> WEB
 ```
 
-### AWS services used
+### AWS services in the product
 
-| Layer | AWS services | What they do in Centopus |
+| Layer | AWS services | Role in Centopus |
 |---|---|---|
 | Browser agents | **Amazon Nova Act + Amazon Bedrock AgentCore Browser** | Let each synthetic user observe and act on the rendered website |
-| Intelligence | **Amazon Bedrock + Amazon Nova Micro/Lite** | Product understanding, persona language, and evidence-grounded feedback synthesis |
-| Orchestration | **AWS Step Functions + AWS Lambda** | Turn a population into bounded, independently executed browser sessions |
-| State & evidence | **Amazon DynamoDB + Amazon S3** | Store session state, BehaviorEvents, raw trajectories, and reports |
-| API | **Amazon API Gateway** | Connect the web application to the execution control plane |
-| Security | **AWS IAM + AWS STS** | Least-privilege and cross-account agent execution |
-| Operations | **Amazon CloudWatch + EventBridge + SNS + AWS Budgets** | Errors, reconciliation, alerts, and spend guardrails |
+| AI | **Amazon Bedrock + Amazon Nova Micro/Lite** | Product understanding, persona language, evidence-grounded synthesis |
+| Orchestration | **AWS Step Functions + AWS Lambda** | Execute independent sessions with bounded concurrency |
+| Evidence | **Amazon DynamoDB + Amazon S3** | Persist session state, events, raw trajectories, and reports |
+| API | **Amazon API Gateway** | Connect the web app to the execution control plane |
+| Security | **AWS IAM + AWS STS** | Least-privilege and cross-account execution |
+| Operations | **CloudWatch + EventBridge + SNS + AWS Budgets** | Monitoring, reconciliation, alerts, and spend guardrails |
 | Infrastructure | **AWS CDK** | Reproducible infrastructure as code |
-| Frontend delivery | **AWS Amplify configuration** | Build/hosting path for the React application |
+| Frontend | **AWS Amplify configuration** | Build and hosting path for the React application |
+
+### Deliberate scale and cost controls
+
+A configured run is bounded to:
+
+- **100 users per run**
+- **5 concurrent session workers**
+- **40 browser actions per session**
+- **300 seconds maximum per browser session**
+- estimate-based run admission plus AWS Budget/SNS guardrails
+
+The goal is controlled population-scale testing, not uncontrolled browser fan-out.
+
+For the detailed model, see [docs/cost-model.md](docs/cost-model.md).
 
 ---
 
-## The engineering challenge
+## How a run becomes a product decision
 
-Making an AI agent click a website is the easy part.
+```text
+Product URL + objective
+        ↓
+Amazon Nova product understanding
+        ↓
+Distinct synthetic population
+        ↓
+Step Functions session orchestration
+        ↓
+Nova Act + AgentCore Browser
+        ↓
+Observed browser actions and checkpoints
+        ↓
+S3 raw trajectory + DynamoDB events
+        ↓
+Deterministic metrics
+        ↓
+Nova evidence-grounded synthesis
+        ↓
+Population result + individual feedback
+```
 
-Making a population of browser agents **bounded, auditable, reproducible, and safe enough to trust as product evidence** is the harder problem Centopus tackles.
+A product team can start with the aggregate result, identify repeated friction, filter problematic experiences, and then open the individual journey behind the finding.
 
-### Independent sessions
+Centopus can surface:
 
-A terminal or duplicate delivery cannot silently open another browser for the same completed session. Browser side-effect retries are deliberately constrained because a retry could duplicate actions and spend.
-
-### Bounded execution
-
-A configured run supports:
-
-- up to **100 users**,
-- up to **5 concurrent session workers**,
-- up to **40 browser actions per session**,
-- and up to **300 seconds per browser session**.
-
-The population can therefore be large without pretending that 100 browsers need to execute simultaneously.
-
-### Browser guardrails
-
-Execution is constrained in code, not only by prompts.
-
-Centopus includes:
-
-- authorized HTTPS target validation,
-- exact-host navigation controls,
-- session time limits,
-- action limits,
-- protection around destructive/payment-sensitive interactions,
-- and explicit stop conditions.
-
-### Failure is data too
-
-A missing checkpoint does not become a success because the model says it is done.
-
-If the agent gets stuck, times out, encounters an error, or abandons, that result remains visible to the reporting layer.
-
----
-
-## What a product team gets
-
-At the end of a run, Centopus turns many individual journeys into something a team can act on:
-
-- population-level positive / mixed / negative outcomes,
 - completion and abandonment,
 - repeated friction patterns,
 - retries and navigation failures,
-- evidence-linked individual feedback,
-- funnel and cohort analysis,
+- time-to-value,
+- positive / mixed / negative outcomes,
+- individual evidence-linked feedback,
+- cohort and funnel signals,
 - and a prioritized product recommendation.
 
-A PM can start from the aggregate result, filter the problematic experiences, then drill down into the individual journey that produced the finding.
-
-That bridge from **population signal -> individual evidence** is the point of Centopus.
+That bridge from **population signal → individual evidence** is the core product.
 
 ---
 
-## Why it matters
+## What we learned building it
 
-Centopus is designed to remove the repetitive pain around beta testing without removing the humans who make product research valuable.
+The hardest part was not making an agent click a website. It was making browser-agent behavior trustworthy enough to use as product evidence.
 
-Today, every new flow can mean another round of recruitment, scheduling, coordination, observation, note-taking, analysis, and retesting. That makes broad user testing difficult to repeat at product-development speed.
+Three lessons shaped the architecture:
 
-Centopus makes that layer available on demand.
+**Model output is not evidence.**  
+We built an instrumented browser boundary so the measured outcome comes from observed actions and states rather than the agent's final prose.
 
-A product team can use it to:
+**Agent scale needs operational boundaries.**  
+Independent sessions require concurrency limits, spend controls, idempotency, cancellation/reconciliation logic, and careful retry behavior because browser actions have real side effects.
 
-- test a new flow before inviting beta users,
-- explore many user behaviors without recruiting a new cohort,
-- repeat the same task after every important product change,
-- expose edge cases across patience, familiarity, reading style, and technical confidence,
-- identify the journeys that deserve deeper human research,
+**AI and analytics should have different jobs.**  
+Deterministic code computes the outcome. Nova improves product context and the language of the final explanation without changing the recorded result.
+
+---
+
+## Real-world use
+
+Centopus is designed for product managers, UX teams, designers, founders, QA teams, and engineers who need to test more often than they can recruit.
+
+It can help teams:
+
+- pressure-test a new flow before beta users see it,
+- repeat the same usability objective after product changes,
+- explore behavior across different user profiles,
+- find journeys that deserve deeper human research,
 - and give real testers a better product to start with.
 
-This changes where human effort is spent.
+Centopus does **not** replace the things only real people can provide: genuine emotion, trust, cultural context, lived experience, desirability, and purchasing intent.
 
-Instead of asking people to repeatedly discover obvious navigation friction, broken expectations, confusing controls, or dead ends, Centopus can surface those issues earlier. Human testers can then spend their time on the things synthetic agents cannot truly provide: emotion, trust, taste, cultural context, lived experience, desirability, and genuine purchasing intent.
-
-Centopus is therefore not a replacement for beta users or UX researchers.
-
-It is **automation around them** — reducing how often teams need humans for repetitive early validation and making every real human testing session more valuable.
-
-**Automate the repetition. Keep the human insight.**
+It automates the repetitive early validation around those people.
 
 ---
 
-## Built for First Commit — Bharat Builds Tour
-
-Centopus was built for the **First Commit** stop of the WeMakeDevs **Bharat Builds Tour**, in collaboration with AWS Builder Center.
-
-The project is intentionally aligned with what the event asks teams to demonstrate:
-
-| Judging area | Centopus |
-|---|---|
-| **Idea & Impact** | Finds product usability friction before customers have to discover it |
-| **Built on AWS** | Nova Act, AgentCore Browser, Bedrock, Step Functions, Lambda, DynamoDB, S3, API Gateway, IAM/STS, CloudWatch, EventBridge, SNS, Budgets, CDK and Amplify configuration |
-| **Learning** | Required us to solve browser evidence capture, cross-account execution, bounded agent orchestration, failure reconciliation, and trustworthy AI reporting |
-| **Execution** | End-to-end application path from product input -> personas -> browser agents -> recorded evidence -> deterministic metrics -> report |
-| **Demo** | Designed around one visible story: create the test, build the population, launch the agents, then inspect the evidence behind the result |
-
----
-
-## Run the project
+## Run locally
 
 ### Requirements
 
 - Node.js **22.12+**
 - npm
 - Python **3.12**
-- AWS credentials/configuration for the production AWS execution path
+- AWS credentials/configuration for the cloud execution path
 
-### Install and verify
+### Install, test, and build
 
 ```bash
 npm ci
 npm run check
-npm run build
 npm run infra:synth
 npm run test:python
 npm run nova:validate
 ```
 
-For full Python SDK verification:
-
-```bash
-python -m venv .venv
-# activate the environment for your shell
-python -m pip install -r services/nova-worker/requirements.txt
-python -m pip check
-python services/nova-worker/verify_sdk.py
-```
-
-### Start the frontend
+### Start the web app
 
 ```bash
 npm run dev
 ```
 
-Copy `apps/web/.env.example` to `apps/web/.env` and configure the API/AWS outputs required by your environment.
+For the full AWS deployment path and required environment values, see [infra/README.md](infra/README.md).
 
-### Local owned demo target
-
-```bash
-npm run dev:demo
-```
-
-The repository also contains a local heuristic browser adapter for development:
-
-```bash
-npm run l1:run
-```
-
-The local adapter is intentionally separate from the Nova Act + AgentCore Browser production execution path.
-
----
-
-## Repository map
-
-```text
-centopus/
-├── apps/web/                  # React + Vite product UI
-├── services/api/              # HTTP API and product intelligence
-├── services/agent-worker/     # Session orchestration + persistence
-├── services/nova-worker/      # Nova Act + AgentCore Browser execution
-├── services/population/       # Synthetic population generation
-├── services/analytics/        # Deterministic event-derived metrics
-├── services/report/           # Evidence-linked report generation
-├── packages/                  # Shared contracts / AI helpers
-├── infra/cdk/                 # AWS infrastructure as code
-└── docs/                      # Architecture, execution and verification docs
-```
+The Nova worker's direct Python runtime dependencies are pinned in `services/nova-worker/requirements.txt`.
 
 ---
 
@@ -422,43 +281,33 @@ centopus/
 
 ### Sai Krishna — Project Lead & Product / Architecture Lead
 
-Led the product vision, system architecture, UX direction, feature planning, integration, testing, and final delivery. Worked across the synthetic population flow, Nova-powered intelligence, reporting experience, frontend, AWS architecture, and end-to-end product integration.
+Led the product vision, system architecture, UX direction, feature planning, integration, testing, and final delivery. Worked across the population flow, Nova-powered intelligence, reporting experience, frontend, AWS architecture, and end-to-end product integration.
 
 ### Vivek — Technical Co-Lead & AWS / Agent Systems Lead
 
-Worked across the same core architecture and product development with a strong focus on the agent execution layer: Nova Act, Amazon Bedrock, AgentCore Browser, cross-account AWS execution, Lambda/session infrastructure, browser evidence, reliability, debugging, and integration between the agent runtime and the product.
+Worked across the same core product with a strong focus on Nova Act, Amazon Bedrock, AgentCore Browser, cross-account AWS execution, Lambda/session infrastructure, browser evidence, reliability, debugging, and integration between the agent runtime and the product.
 
-Both leads collaborated across architecture, implementation, testing, debugging, and final integration rather than splitting the project into isolated pieces.
+Both leads collaborated across architecture, implementation, testing, debugging, and final integration.
+
+---
+
+## Technical documentation
+
+For judges or engineers who want to inspect the implementation deeper:
+
+- [Architecture and storage contract](docs/architecture.md)
+- [AWS execution and evidence model](docs/aws-execution.md)
+- [Cost model and guardrails](docs/cost-model.md)
+
+Other audit, local-development, and submission-preparation files are indexed in [docs/README.md](docs/README.md) and are supporting material rather than required reading.
 
 ---
 
 ## Responsible use
 
-Centopus is for web products you own or are authorized to test.
+Centopus is intended for web products you own or are authorized to test.
 
-Synthetic users are simulated agents. They are useful for automating repetitive early-stage beta and usability testing, but they are **not real customers**. They do not measure genuine emotion, trust, cultural context, market demand, or purchasing intent. Centopus is designed to reduce unnecessary human testing cycles and help teams use real beta users where human insight matters most.
-
-The browser worker is designed around bounded execution and avoids destructive actions, real-money purchases, credential harvesting, CAPTCHA bypass, or leaving the approved target.
-
----
-
-## Documentation
-
-- [Architecture and storage contract](docs/architecture.md)
-- [AWS execution and evidence](docs/aws-execution.md)
-- [Cost model](docs/cost-model.md)
-- [Integration audit](docs/integration-audit.md)
-- [Submission checklist](docs/submission-checklist.md)
-- [Demo script](docs/demo-script.md)
-- [Submission packet](docs/submission-packet.md)
-- [Verification status](docs/final-deployment-report.md)
-
-<details>
-<summary><strong>Verification note</strong></summary>
-
-Local tests, infrastructure synthesis, and source inspection are not substitutes for a fresh AWS execution record. Deployment, browser access, quotas, and actual AWS billing should be demonstrated with the run used in the submission. Configured limits are capabilities of the implementation, not a claim that every scale configuration has been independently load-tested.
-
-</details>
+Synthetic users are simulated agents, not real customers. The browser worker is bounded by target validation, host restrictions, time/action ceilings, and protections around destructive, credential, CAPTCHA, and real-payment interactions.
 
 ---
 
