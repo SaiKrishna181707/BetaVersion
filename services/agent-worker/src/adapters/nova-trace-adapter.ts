@@ -26,6 +26,7 @@ export interface RawNovaObservation {
   network_errors?: string[];
   checkpoints?: string[];
   task_checkpoint?: string;
+  objective_matches?: string[];
   dom_summary?: string;
 }
 
@@ -74,58 +75,49 @@ export function cleanseTargetDescriptor(
   step: RawNovaStep,
   route: string,
 ): string | null {
-  const isBox = rawDescriptor && (/^<?box[>(:]/i.test(rawDescriptor) || /^\(?\d+,\s*\d+,\s*\d+,\s*\d+\)?$/.test(rawDescriptor));
-  if (rawDescriptor && !isBox) return rawDescriptor;
+  const normalized = rawDescriptor?.replace(/\s+/g, ' ').trim() || null;
+  const isBox = normalized && (
+    /^<?box[>(:]/i.test(normalized)
+    || /^\(?\d+,\s*\d+,\s*\d+,\s*\d+\)?$/.test(normalized)
+  );
+  if (normalized && !isBox) return normalized.slice(0, 180);
 
+  // New production traces record an accessible browser label in action.target.
+  // This thought-based extraction exists only as a legacy display fallback and is
+  // never used to decide completion or metrics.
   const thought = step.thought ?? step.reasoning ?? '';
   const actionType = typeof action === 'object' ? action?.type?.toLowerCase() : '';
 
-  // 1. Try extracting explicit click/interaction target from thought
-  const clickMatch = thought.match(/(?:click|tap|press|select)(?:\s+on)?\s+(?:the\s+)?([A-Za-z0-9&/ -]{2,35}?(?:\s+(?:link|button|tab|icon|menu|card|option|item))?)(?:\s+(?:in|on|to|for|\.|$))/i);
-  if (clickMatch && clickMatch[1] && !/^(?:that|this|it|a|an|here|next|step)$/i.test(clickMatch[1].trim())) {
-    const extracted = clickMatch[1].trim();
-    return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+  if (actionType === 'click' || actionType === 'tap' || actionType === 'press') {
+    const clickMatch = thought.match(
+      /(?:click|tap|press|select)(?:\s+on)?\s+(?:the\s+)?([A-Za-z0-9&/()' -]{2,60}?(?:\s+(?:link|button|tab|icon|menu|card|option|item))?)(?:\s+(?:in|on|to|for|because|so|\.|$))/i,
+    );
+    const extracted = clickMatch?.[1]?.replace(/\s+/g, ' ').trim();
+    if (extracted && !/^(?:that|this|it|a|an|here|next|step)$/i.test(extracted)) {
+      return extracted.slice(0, 180);
+    }
   }
 
-  // 2. Action-specific handling for scroll: extract actual observed products, hardware or sections
   if (actionType === 'scroll') {
-    if (/48mp|fusion.*camera/i.test(thought)) return '48MP Fusion Camera section';
-    if (/camera.*module/i.test(thought)) return 'Camera module showcase';
-    if (/list of features|feature.*specs/i.test(thought)) return 'Feature specifications list';
-    if (/macbook\s+air/i.test(thought)) return 'MacBook Air section';
-    if (/macbook\s+pro/i.test(thought)) return 'MacBook Pro section';
-    if (/carrier|t-mobile|at&t|verizon/i.test(thought)) return 'Carrier offers & trade-in section';
-    if (/trade-in/i.test(thought)) return 'Trade-in section';
-    if (/apple\s+watch/i.test(thought)) return 'Apple Watch section';
-    if (/accessories/i.test(thought)) return 'Accessories section';
-    if (/footer|bottom of the page/i.test(thought)) return 'Page footer';
-    if (/navigation|menu/i.test(thought)) return 'Navigation header';
-
-    const sectionMatch = thought.match(/(?:can see|looking at|exploring|viewing|information about)\s+(?:the\s+)?([A-Za-z0-9&/ -]{2,35}?(?:\s+(?:section|page|category|models|features|deals|banner))?)/i);
-    if (sectionMatch && sectionMatch[1] && !/^(?:that|this|it|page|screen|more)$/i.test(sectionMatch[1].trim())) {
-      const extracted = sectionMatch[1].trim();
-      return extracted.charAt(0).toUpperCase() + extracted.slice(1);
-    }
-    return 'Page content';
+    const sectionMatch = thought.match(
+      /(?:can see|looking at|exploring|viewing|reached|information about)\s+(?:the\s+)?([A-Za-z0-9&/()' -]{2,60}?(?:\s+(?:section|page|category|features|details|pricing|plans))?)(?:[.,]|$)/i,
+    );
+    const extracted = sectionMatch?.[1]?.replace(/\s+/g, ' ').trim();
+    return extracted ? extracted.slice(0, 180) : 'Page content';
   }
 
-  // 3. Other actions
-  if (actionType === 'type' || actionType === 'fill') {
-    return action && typeof action === 'object' && action.value ? `Input field ("${action.value}")` : 'Input field';
-  }
-  if (actionType === 'navigate' || actionType === 'goto') {
-    return route === '/' ? 'Home page' : `${route.replace(/^\//, '').split('/')[0]} page`;
+  // Never include action.value in evidence: it may contain typed personal data or a secret.
+  if (actionType === 'type' || actionType === 'fill' || actionType === 'input') return 'Input field';
+  if (actionType === 'wait' || actionType === 'sleep') return 'Current page';
+
+  if (actionType === 'navigate' || actionType === 'goto' || actionType === 'open') {
+    return route === '/' ? 'Home page' : `${route.replace(/^\//, '').split('/')[0]?.replaceAll('-', ' ') || 'Page'} page`;
   }
 
-  // 4. Route-based fallback
   if (route && route !== '/') {
-    const segment = route.replace(/^\//, '').split('/')[0]?.replaceAll('-', ' ');
-    if (segment && segment.length >= 3) {
-      const formatted = segment.replace(/^iphone/i, 'iPhone').replace(/^ipad/i, 'iPad');
-      return `${formatted.charAt(0).toUpperCase() + formatted.slice(1)} showcase`;
-    }
+    const segment = route.replace(/^\//, '').split('/')[0]?.replaceAll('-', ' ').trim();
+    if (segment && segment.length >= 2) return `${segment} page`;
   }
-
   return null;
 }
 
@@ -156,7 +148,14 @@ export function adaptNovaTraceToBehaviorEvents(
     const checkpoint = [...plan.checkpoint_plan].reverse().find(cp => observed.includes(cp)) ?? null;
     let reason: AgentReasonCode = step.agent_reason_code && REASONS.has(step.agent_reason_code)
       ? step.agent_reason_code as AgentReasonCode : 'EXPLORING';
-    if (reason === 'OBJECTIVE_COMPLETE' && (checkpoint !== plan.checkpoint_plan.at(-1) || result !== 'SUCCESS')) reason = 'EXPLORING';
+    if (reason === 'OBJECTIVE_COMPLETE') {
+      const finalCheckpoint = plan.checkpoint_plan.at(-1);
+      const checkpointEvidence = finalCheckpoint !== undefined && checkpoint === finalCheckpoint;
+      const readOnlyEvidence = finalCheckpoint === undefined
+        && Array.isArray(step.observation.objective_matches)
+        && step.observation.objective_matches.length > 0;
+      if (result !== 'SUCCESS' || (!checkpointEvidence && !readOnlyEvidence)) reason = 'EXPLORING';
+    }
     const screenshot = step.screenshot_ref && /^s3:\/\/[^/]+\/.+/.test(step.screenshot_ref) ? step.screenshot_ref : null;
     const cleanTarget = cleanseTargetDescriptor(action?.selector ?? action?.target ?? null, action, step, url.pathname);
     const consoleNoise = /favicon|adservice|doubleclick|tracker|telemetry|google-analytics|gtag/i;
@@ -186,26 +185,49 @@ export function adaptNovaTrajectoryToSessionResult(
   plan: SessionPlan,
   options: { allowDerivedTimestamp?: boolean } = { allowDerivedTimestamp: true },
 ): SessionResult {
-  const events = adaptNovaTraceToBehaviorEvents(trajectory, { ...plan, persona_id: plan.persona.persona_id }, options);
-  const reason = trajectory.finish_reason;
+  const events = adaptNovaTraceToBehaviorEvents(
+    trajectory,
+    { ...plan, persona_id: plan.persona.persona_id },
+    options,
+  );
+  const rawReason = trajectory.finish_reason ?? '';
+  const finalCheckpoint = plan.checkpoint_plan.at(-1);
+  const hasCheckpointCompletion = finalCheckpoint !== undefined
+    && events.some(event => event.result === 'SUCCESS' && event.task_checkpoint === finalCheckpoint);
+  const hasRecordedReadOnlyCompletion = finalCheckpoint === undefined
+    && events.some(event => event.result === 'SUCCESS' && event.agent_reason_code === 'OBJECTIVE_COMPLETE');
+  const hasCompletionEvidence = hasCheckpointCompletion || hasRecordedReadOnlyCompletion;
 
-  let finish_reason: SessionStopReason = 'OBJECTIVE_COMPLETE';
-  let status: SessionStatus = 'COMPLETED';
+  let status: SessionStatus;
+  let finish_reason: SessionStopReason;
 
-  if (reason === 'CANCELLED') {
+  if (rawReason === 'CANCELLED') {
     status = 'CANCELLED';
     finish_reason = 'CANCELLED';
-  } else if (events.length === 0) {
-    status = 'FAILED';
-    finish_reason = reason === 'SAFETY_STOP' ? 'SAFETY_STOP' : 'TECHNICAL_ERROR';
-  } else if (['SAFETY_STOP'].includes(reason ?? '')) {
+  } else if (rawReason === 'TIMED_OUT' || rawReason === 'ACTION_LIMIT') {
+    status = 'TIMED_OUT';
+    finish_reason = rawReason === 'ACTION_LIMIT' ? 'ACTION_LIMIT' : 'TIMED_OUT';
+  } else if (rawReason === 'SAFETY_STOP') {
     status = 'FAILED';
     finish_reason = 'SAFETY_STOP';
-  } else {
-    // When the agent executed actions and observed the target site,
-    // the session is a completed user exploration.
+  } else if (rawReason === 'TECHNICAL_ERROR') {
+    status = 'FAILED';
+    finish_reason = 'TECHNICAL_ERROR';
+  } else if (rawReason === 'OBJECTIVE_COMPLETE' && hasCompletionEvidence) {
     status = 'COMPLETED';
     finish_reason = 'OBJECTIVE_COMPLETE';
+  } else if (rawReason === 'BUDGET_LIMIT') {
+    status = 'ABANDONED';
+    finish_reason = 'BUDGET_LIMIT';
+  } else if (events.length === 0) {
+    // A normal "abandoned" outcome can have no actions only when the agent deliberately
+    // stopped. Missing/invalid evidence from any other execution path is a technical failure.
+    status = rawReason === 'ABANDONED' ? 'ABANDONED' : 'FAILED';
+    finish_reason = rawReason === 'ABANDONED' ? 'ABANDONED' : 'TECHNICAL_ERROR';
+  } else {
+    // Executing browser actions is not equivalent to achieving the objective.
+    status = 'ABANDONED';
+    finish_reason = 'ABANDONED';
   }
 
   return {

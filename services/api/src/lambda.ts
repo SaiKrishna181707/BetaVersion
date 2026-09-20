@@ -12,7 +12,7 @@ import {
   type SyntheticPersona,
 } from '@synthetic-beta/contracts';
 import { buildCohort, profileCohort } from '@synthetic-beta/population';
-import { assertPublicNetworkTarget, buildProductIntelligence } from './product-intelligence';
+import { assertPublicNetworkTarget, buildProductIntelligence, ProductIntelligenceServiceError } from './product-intelligence';
 import { applyPersonaPatch } from './persona';
 import { getGeminiApiKey } from './secrets';
 import { queryAll, scanAll, type DocumentClient } from './aws-store';
@@ -128,7 +128,9 @@ export function createProductionApi(dependencies: {
         return response(200, { intelligence }, allowedOrigin);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Product analysis failed.';
-        const unavailable = message.includes('GEMINI_SECRET_ARN') || message.includes('Gemini secret');
+        const unavailable = cause instanceof ProductIntelligenceServiceError
+          || message.includes('GEMINI_SECRET_ARN')
+          || message.includes('Gemini secret');
         return response(unavailable ? 503 : 400, { error: message }, allowedOrigin);
       }
     }

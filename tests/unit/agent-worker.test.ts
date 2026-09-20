@@ -109,7 +109,7 @@ test('rejects budget above the global ceiling and oversized policy lists', () =>
   const tooManyCheckpoints = reviewSessionPlan(planFixture({
     checkpoint_plan: Array.from({ length: 33 }, (_, index) => `STEP_${index}`),
   }));
-  assert.ok(tooManyCheckpoints.some(reason => reason.includes('1–32 ordered milestones')));
+  assert.ok(tooManyCheckpoints.some(reason => reason.includes('at most 32 ordered milestones')));
 });
 
 test('rejects origin entries that are not plain hostnames', () => {
@@ -119,9 +119,11 @@ test('rejects origin entries that are not plain hostnames', () => {
   }
 });
 
-test('rejects a plan with no checkpoints and no authorized origins', () => {
+test('allows checkpoint-free read-only plans but still requires authorized origins', () => {
+  const checkpointFree = reviewSessionPlan(planFixture({ checkpoint_plan: [] }));
+  assert.ok(!checkpointFree.some(reason => reason.includes('checkpoint plan')), checkpointFree.join(' | '));
+
   const reasons = reviewSessionPlan(planFixture({ checkpoint_plan: [], allowed_origins: [] }));
-  assert.ok(reasons.some(reason => reason.includes('checkpoint plan')), reasons.join(' | '));
   assert.ok(reasons.some(reason => reason.includes('authorized origins')), reasons.join(' | '));
   // An empty allowlist also means the target itself cannot be authorized.
   assert.ok(reasons.some(reason => reason.includes('localhost is not in the authorized origin allowlist')), reasons.join(' | '));

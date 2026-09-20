@@ -27,7 +27,7 @@ async function invokeNova(input: SessionWorkerInput, env: NodeJS.ProcessEnv) {
   const roleArn = env.AGENT_EXECUTION_ROLE_ARN || env.VIVEK_EXECUTION_ROLE_ARN;
   const functionArn = env.NOVA_WORKER_FUNCTION_ARN || env.VIVEK_NOVA_LAMBDA_ARN;
   if (!roleArn || !functionArn || !env.CROSS_ACCOUNT_EXTERNAL_ID) throw new Error('Cross-account execution is not configured.');
-  console.log('[invokeNova] Assuming role:', roleArn, 'externalId:', env.CROSS_ACCOUNT_EXTERNAL_ID);
+  console.log('[invokeNova] Assuming configured execution role for session:', input.session_id);
   const assumed = await new STSClient({}).send(new AssumeRoleCommand({
     RoleArn: roleArn, RoleSessionName: ('centopus-' + input.session_id).slice(0, 64),
     DurationSeconds: 900, ExternalId: env.CROSS_ACCOUNT_EXTERNAL_ID,
@@ -39,10 +39,10 @@ async function invokeNova(input: SessionWorkerInput, env: NodeJS.ProcessEnv) {
     credentials: { accessKeyId: credentials.AccessKeyId, secretAccessKey: credentials.SecretAccessKey, sessionToken: credentials.SessionToken } });
   const result = await client.send(new InvokeCommand({ FunctionName: functionArn, Payload: Buffer.from(JSON.stringify(input)) }));
   const payloadStr = result.Payload ? Buffer.from(result.Payload).toString('utf8') : '';
-  console.log('[invokeNova] Response StatusCode:', result.StatusCode, 'FunctionError:', result.FunctionError, 'Payload:', payloadStr.slice(0, 1000));
+  console.log('[invokeNova] Response StatusCode:', result.StatusCode, 'FunctionError:', result.FunctionError || 'none');
   if (result.FunctionError || !result.Payload) throw new Error(`Nova worker invocation failed (${result.FunctionError}): ${payloadStr}`);
   const parsed = JSON.parse(payloadStr) as Record<string, unknown>;
-  return validateNovaResponse(parsed, input, true);
+  return validateNovaResponse(parsed, input, false);
 }
 
 export function createSessionWorker(deps: {
@@ -113,10 +113,9 @@ export function createSessionWorker(deps: {
         session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
 
         const hasTechnicalFailure = error !== null
-          || Number(result.statusCode) >= 400
-          || session.status === 'FAILED'
-          || session.events.length === 0
-          || session.events.some(e => e.result === 'ERROR' || e.console_error !== null || e.network_error !== null);
+          || Number(result.statusCode) >= 500
+          || (session.status === 'FAILED' && session.finish_reason === 'TECHNICAL_ERROR')
+          || session.events.length === 0;
 
         if (!hasTechnicalFailure || attempt === maxAttempts) {
           break;
@@ -147,7 +146,7 @@ export function createSessionWorker(deps: {
       status: session.status, stop_reason: session.finish_reason, started_at: started,
       completed_at: new Date().toISOString(), duration_ms: Date.now() - startedMs,
       actions_taken: persistedEvents, agentcore_session_id: result.browser_session_id ?? null,
-      live_view_url: null, agentcore_diagnostic: error, trajectory_ref: trajectoryRef,
+      live_view_url: null, agentcore_diagnostic: error ?? (typeof result.execution_error === 'string' ? result.execution_error : null), trajectory_ref: trajectoryRef,
       evidence_schema_version: 2, actual_cost_cents: null, cost_basis: 'UNAVAILABLE', ttl: Math.floor(Date.now() / 1000) + 7 * 86400,
     };
     await deps.docClient.send(new TransactWriteCommand({ TransactItems: [

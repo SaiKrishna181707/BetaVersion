@@ -137,6 +137,7 @@ test('detects friction, console errors, and retrying signals correctly', () => {
 
 test('adapts raw Nova trajectory to complete SessionResult', () => {
   const trajectory: RawNovaTrajectory = {
+    finish_reason: 'OBJECTIVE_COMPLETE',
     steps: [
       {
         timestamp: '2026-09-20T00:00:01.000Z',
@@ -243,24 +244,28 @@ test('cleanses raw bounding box descriptors into human-readable element names', 
   assert.equal(events[2]!.target_descriptor, '#valid-css-id');
 });
 
-test('marks uninstrumented website session as COMPLETED when agent concludes task successfully', () => {
+test('accepts uninstrumented read-only completion only when recorder supplies browser objective evidence', () => {
   const trajectory: RawNovaTrajectory = {
+    finish_reason: 'OBJECTIVE_COMPLETE',
     steps: [
       {
         timestamp: '2026-09-20T00:00:01.000Z',
         sequence: 1,
         action: { type: 'scroll' },
-        observation: { url: 'https://www.apple.com/', title: 'Apple' },
-        thought: 'I am exploring the homepage',
+        observation: { url: 'https://www.example.com/', title: 'Example catalog' },
         status: 'SUCCESS',
         elapsed_ms: 1000,
       },
       {
         timestamp: '2026-09-20T00:00:02.000Z',
         sequence: 2,
-        action: { type: 'click', selector: '<box>10,10,20,20</box>' },
-        observation: { url: 'https://www.apple.com/mac', title: 'Mac' },
-        thought: 'I have explored the Mac models and my task is complete.',
+        action: { type: 'click', selector: 'Plans' },
+        observation: {
+          url: 'https://www.example.com/plans',
+          title: 'Plans',
+          objective_matches: ['plans'],
+        },
+        agent_reason_code: 'OBJECTIVE_COMPLETE',
         status: 'SUCCESS',
         elapsed_ms: 5000,
       },
@@ -271,9 +276,9 @@ test('marks uninstrumented website session as COMPLETED when agent concludes tas
     run_id: 'run-uninstrumented',
     session_id: 's-uninst',
     persona: personaFixture('seed-001', 'COHORT_A'),
-    objective: 'Explore Apple products',
-    target_url: 'https://www.apple.com',
-    allowed_origins: ['www.apple.com'],
+    objective: 'Find plans',
+    target_url: 'https://www.example.com',
+    allowed_origins: ['www.example.com'],
     checkpoint_plan: [],
     max_actions: 40,
     max_session_seconds: 180,
@@ -284,5 +289,57 @@ test('marks uninstrumented website session as COMPLETED when agent concludes tas
   const result = adaptNovaTrajectoryToSessionResult(trajectory, sessionPlan);
   assert.equal(result.status, 'COMPLETED');
   assert.equal(result.finish_reason, 'OBJECTIVE_COMPLETE');
+  assert.equal(result.events.at(-1)?.agent_reason_code, 'OBJECTIVE_COMPLETE');
 });
 
+test('model prose claiming success is not completion evidence', () => {
+  const trajectory: RawNovaTrajectory = {
+    finish_reason: 'OBJECTIVE_COMPLETE',
+    steps: [{
+      timestamp: '2026-09-20T00:00:02.000Z',
+      action: { type: 'click', selector: 'Plans' },
+      observation: { url: 'https://www.example.com/plans', title: 'Plans' },
+      thought: 'Success, the objective is complete.',
+      agent_reason_code: 'OBJECTIVE_COMPLETE',
+      status: 'SUCCESS',
+      elapsed_ms: 1000,
+    }],
+  };
+  const sessionPlan = {
+    run_id: 'run-no-proof',
+    session_id: 's-no-proof',
+    persona: personaFixture('seed-002', 'COHORT_A'),
+    objective: 'Find plans',
+    target_url: 'https://www.example.com',
+    allowed_origins: ['www.example.com'],
+    checkpoint_plan: [],
+    max_actions: 40,
+    max_session_seconds: 180,
+    remaining_budget_cents: 500,
+    account_ref: null,
+  };
+  const result = adaptNovaTrajectoryToSessionResult(trajectory, sessionPlan);
+  assert.equal(result.status, 'ABANDONED');
+  assert.equal(result.finish_reason, 'ABANDONED');
+  assert.equal(result.events[0]?.agent_reason_code, 'EXPLORING');
+});
+
+test('typed values are never copied into target descriptors', () => {
+  const events = adaptNovaTraceToBehaviorEvents({
+    steps: [{
+      timestamp: '2026-09-20T00:00:00Z',
+      elapsed_ms: 100,
+      action: { type: 'type', value: 'secret@example.com', selector: '<box>1,2,3,4</box>' },
+      observation: { url: 'https://www.example.com/form' },
+      status: 'SUCCESS',
+    }],
+  }, {
+    run_id: 'r-private',
+    session_id: 's-private',
+    persona_id: 'p-private',
+    target_url: 'https://www.example.com',
+    checkpoint_plan: [],
+  });
+  assert.equal(events[0]?.target_descriptor, 'Input field');
+  assert.ok(!JSON.stringify(events[0]).includes('secret@example.com'));
+});

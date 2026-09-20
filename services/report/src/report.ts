@@ -229,32 +229,6 @@ function completionFinding(
   };
 }
 
-function explorationFinding(
-  metrics: RunMetrics,
-  bySession: Map<string, BehaviorEvent[]>,
-  limit: number,
-): ReportFinding | null {
-  const activeSessions = [...bySession.entries()].filter(([, evts]) => evts.length >= 2);
-  if (activeSessions.length === 0 || metrics.completion.denominator === 0) return null;
-  const sessionIds = activeSessions.map(([id]) => id);
-  const allEvents = [...bySession.values()].flat();
-  const allThoughts = allEvents.map(e => e.thought || '').join(' ');
-  const title = /iphone/i.test(allThoughts)
-    ? `${activeSessions.length} of ${metrics.completion.denominator} sessions actively explored iPhone showcases and camera features`
-    : `${activeSessions.length} of ${metrics.completion.denominator} sessions actively explored product categories`;
-
-  return {
-    finding_id: 'catalog-exploration',
-    kind: 'STRENGTH',
-    title,
-    detail: 'Synthetic users actively engaged with landing page sections, navigated product catalogs, and evaluated feature specifications.',
-    metric_refs: ['computed_from.behavior_events'],
-    evidence: lastEventEvidence(sessionIds, bySession, limit),
-    interpretation: null,
-    interpretation_source: 'NONE',
-  };
-}
-
 /**
  * Assembles an evidence-grounded report. Findings and every number come from recorded
  * events; the optional narrator may only add labelled interpretation.
@@ -268,7 +242,6 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
     technicalFailureFinding(input.metrics, bySession, limit),
     retryFinding(input.metrics, bySession, limit),
     completionFinding(input.metrics, bySession, limit),
-    explorationFinding(input.metrics, bySession, limit),
   ].filter((finding): finding is ReportFinding => finding !== null);
 
   const findings: ReportFinding[] = [];
@@ -280,130 +253,80 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
   }
 
   const personaById = new Map((input.personas ?? []).map(persona => [persona.persona_id, persona]));
-  const sessionById = new Map(input.sessions.map(session => [session.session_id, session]));
-  const agentFeedback = [...bySession.entries()].map(([sessionId, events]) => {
-    const session = sessionById.get(sessionId);
-    const persona = session ? personaById.get(session.persona_id) : undefined;
-    const personaName = persona?.display_name || `Agent ${sessionId.slice(-3)}`;
-    const role = persona?.occupation ? ` (${persona.occupation})` : '';
-    const device = persona?.device_class ? ` on ${persona.device_class.toLowerCase().replace('_', ' ')}` : '';
+  const describeEvent = (event: BehaviorEvent): string =>
+    event.target_descriptor || event.page_title || event.route || event.url;
 
+  const unique = (values: string[]): string[] => [...new Set(values)];
+
+  // Every expected session receives a feedback record, including sessions with no
+  // usable events. Missing evidence stays explicit instead of being backfilled with
+  // plausible product-specific prose.
+  const agentFeedback = input.sessions.map(session => {
+    const events = bySession.get(session.session_id) ?? [];
+    const persona = personaById.get(session.persona_id);
+    const successful = events.filter(event => event.result === 'SUCCESS' && event.action_type !== 'wait');
     const friction = events.filter(event => event.agent_reason_code === 'CONFUSED'
-      || event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING'
-      || event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE');
+      || event.agent_reason_code === 'RETRYING'
+      || event.agent_reason_code === 'BACKTRACKING'
+      || event.result === 'NO_CHANGE'
+      || event.result === 'VALIDATION_FAILURE'
+      || event.result === 'BLOCKED'
+      || event.result === 'ERROR');
 
-    const allThoughts = events.map(e => e.thought || '').filter(Boolean);
-    const fullThoughtText = allThoughts.join(' ');
-    const scrollCount = events.filter(e => e.action_type === 'scroll').length;
-    const durationSec = events.at(-1)?.elapsed_ms ? (events.at(-1)!.elapsed_ms / 1000).toFixed(1) : '30.0';
+    const whatWorked = unique(successful.map(event =>
+      `Recorded successful ${event.action_type} on "${describeEvent(event)}" at ${event.route || '/'}.`,
+    )).slice(0, 4);
 
-    // 1. What worked: Grounded in what the specific agent inspected
-    const worked: string[] = [];
+    const whatConfused = unique(friction.map(event =>
+      `Recorded ${event.agent_reason_code.replaceAll('_', ' ').toLowerCase()} / ${event.result.toLowerCase()} during ${event.action_type} on "${describeEvent(event)}".`,
+    )).slice(0, 4);
 
-    if (/iphone\s*18\s*pro|iphone\s*pro/i.test(fullThoughtText) && /camera/i.test(fullThoughtText)) {
-      worked.push(`${personaName}${role} navigated to the iPhone 18 Pro showcase and inspected the 48MP Fusion Main camera section.`);
-      worked.push(`${personaName} reviewed high-resolution camera module imagery and optical specifications.`);
-    }
-    if (/feature.*specs|list of features/i.test(fullThoughtText)) {
-      worked.push(`${personaName} located and examined the technical feature specifications list on the product page.`);
-    }
-    if (/macbook/i.test(fullThoughtText)) {
-      worked.push(`${personaName}${role} browsed MacBook models and evaluated hardware configurations.`);
-    }
-    if (/apple\s*watch/i.test(fullThoughtText)) {
-      worked.push(`${personaName}${role} explored Apple Watch models including Series and Ultra feature cards.`);
-    }
-    if (/accessories/i.test(fullThoughtText)) {
-      worked.push(`${personaName} navigated through the accessories catalog across device categories.`);
-    }
-    if (/store|shop/i.test(fullThoughtText) && !worked.some(w => w.includes('Store') || w.includes('store'))) {
-      worked.push(`${personaName} browsed the official store catalog and category navigation.`);
-    }
+    const slowdownSignals: string[] = [];
+    const retryCount = events.filter(event =>
+      event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING',
+    ).length;
+    const waitCount = events.filter(event => event.action_type === 'wait').length;
+    const noChangeCount = events.filter(event =>
+      event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE',
+    ).length;
+    if (retryCount > 0) slowdownSignals.push(`${retryCount} retry/backtracking signal${retryCount === 1 ? '' : 's'} were recorded.`);
+    if (waitCount > 0) slowdownSignals.push(`${waitCount} explicit wait action${waitCount === 1 ? '' : 's'} were recorded.`);
+    if (noChangeCount > 0) slowdownSignals.push(`${noChangeCount} no-change/validation signal${noChangeCount === 1 ? '' : 's'} were recorded.`);
 
-    for (const e of events) {
-      if (worked.length >= 4) break;
-      if (e.target_descriptor && !['Interactive control', 'Page content'].includes(e.target_descriptor)) {
-        const item = `${personaName} accessed and interacted with ${e.target_descriptor}.`;
-        if (!worked.some(w => w.includes(e.target_descriptor!))) {
-          worked.push(item);
-        }
-      }
-    }
-    if (worked.length === 0) {
-      worked.push(`${personaName}${role} loaded ${input.configuration.target_url}${device} and navigated primary landing elements.`);
-      worked.push(`${personaName} explored visible navigation links across ${events.length} interaction steps.`);
-    }
-
-    // 2. What confused them: Genuine friction or observations tailored to persona traits
-    const labels: string[] = [];
-    if (friction.length > 0) {
-      for (const e of friction.slice(0, 3)) {
-        labels.push(`${personaName} hesitated during ${e.action_type} on ${e.target_descriptor || e.route || e.url} (+${e.elapsed_ms}ms, ${e.agent_reason_code}/${e.result}).`);
-      }
-    }
-    if (/blank|loading/i.test(fullThoughtText)) {
-      labels.push(`${personaName} observed a brief blank loading state during page transition before product assets rendered.`);
-    }
-    if (scrollCount >= 4) {
-      labels.push(`With ${persona?.patience?.toLowerCase() || 'medium'} patience, ${personaName} found technical specifications were located deep down the page beneath extensive visual marketing.`);
-    }
-    if (/carrier|t-mobile|at&t|verizon/i.test(fullThoughtText)) {
-      labels.push(`${personaName} noted that multiple carrier trade-in banners created visual noise before standalone hardware specs were reached.`);
-    }
-    if (labels.length === 0) {
-      if (persona?.reading_style === 'SCANNING') {
-        labels.push(`${personaName} found that hero marketing imagery dominated the viewport, making it slow to scan for specifications.`);
-      } else if (persona?.technical_ability === 'LOW') {
-        labels.push(`With low technical familiarity, ${personaName} found multi-level navigation menus required exploratory clicks.`);
-      } else if (persona?.price_sensitivity === 'HIGH') {
-        labels.push(`With high price sensitivity, ${personaName} felt carrier trade-in terms overshadowed upfront unlocked device pricing.`);
-      } else {
-        labels.push(`${personaName} noted navigation options were spread across multiple submenus, requiring extra exploration.`);
-      }
-    }
-
-    // 3. What slowed them down: Concrete metrics & observations
-    const slowedDown: string[] = [];
-    if (scrollCount >= 3) {
-      slowedDown.push(`${personaName} required ${scrollCount} scroll actions through promotional content before reaching specifications.`);
-    }
-    if (/blank|loading/i.test(fullThoughtText)) {
-      slowedDown.push(`${personaName} waited for high-resolution product imagery and assets to finish rendering.`);
-    }
-    if (/carrier|trade-in/i.test(fullThoughtText)) {
-      slowedDown.push(`${personaName} spent extended time scanning through carrier financing options and trade-in cards.`);
-    }
-    if (slowedDown.length === 0) {
-      slowedDown.push(`Spent ${durationSec}s across ${events.length} actions; ${personaName} evaluated interactive hardware highlights.`);
-    }
-
-    // 4. Continuation
-    const mainProduct = /iphone\s*18\s*pro/i.test(fullThoughtText) ? 'iPhone 18 Pro'
-      : /macbook/i.test(fullThoughtText) ? 'MacBook'
-      : /apple\s*watch/i.test(fullThoughtText) ? 'Apple Watch'
-      : input.configuration.objective;
-
-    const continuation = `${personaName} (${persona?.occupation || 'synthetic user'}) concluded their exploration after ${events.length} interaction steps: successfully verified ${mainProduct} features against their goal ("${persona?.goal_context || input.configuration.objective}").`;
-
-    // 5. Improvement suggestion
-    let improvement: string = '';
-    if (scrollCount >= 4) {
-      improvement = `Add a sticky sub-navigation bar with quick jump links ('Overview', 'Camera', 'Specs', 'Buy') at the top of the ${mainProduct} page to bypass deep scrolling for users like ${personaName}.`;
-    } else if (/blank|loading/i.test(fullThoughtText)) {
-      improvement = `Implement progressive asset loading or skeleton placeholders to eliminate blank screen flashes for ${persona?.device_class?.toLowerCase() || 'web'} users like ${personaName}.`;
-    } else if (persona?.price_sensitivity === 'HIGH') {
-      improvement = `Display upfront unlocked device pricing clearly alongside monthly carrier trade-in estimates for price-sensitive users like ${personaName}.`;
+    const last = events.at(-1);
+    let continuation: string;
+    if (events.length === 0) {
+      continuation = `No recorded journey is available. Final session status: ${session.status}${session.stop_reason ? `; stop reason: ${session.stop_reason}` : ''}.`;
+    } else if (session.status === 'COMPLETED') {
+      continuation = `Validated objective completion was recorded after ${events.length} BehaviorEvents. Last observed state: ${last ? describeEvent(last) : 'unknown'}.`;
+    } else if (session.status === 'ABANDONED') {
+      continuation = `The agent stopped without validated objective completion after ${events.length} BehaviorEvents${session.stop_reason ? `; stop reason: ${session.stop_reason}` : ''}.`;
+    } else if (session.status === 'TIMED_OUT') {
+      continuation = `The configured execution/action limit was reached after ${events.length} BehaviorEvents.`;
+    } else if (session.status === 'FAILED') {
+      continuation = `The session ended in a technical/safety failure after ${events.length} recorded BehaviorEvents${session.stop_reason ? `; stop reason: ${session.stop_reason}` : ''}.`;
+    } else if (session.status === 'CANCELLED') {
+      continuation = `The session was cancelled after ${events.length} recorded BehaviorEvents.`;
     } else {
-      improvement = `Provide prominent, consolidated category links in the header to streamline exploration for ${persona?.occupation || 'users'} like ${personaName}.`;
+      continuation = `Final session status: ${session.status}; ${events.length} BehaviorEvents were recorded.`;
     }
+
+    const expectation = persona?.product_expectations?.trim()
+      ? `Persisted persona expectation: ${persona.product_expectations.trim()}`
+      : `Not established by recorded behavior. Configured objective: ${persona?.goal_context || input.configuration.objective}`;
+
+    const firstFriction = friction[0];
+    const improvement = firstFriction
+      ? `Review the experience around "${describeEvent(firstFriction)}", where this session recorded ${firstFriction.result.toLowerCase()} / ${firstFriction.agent_reason_code.replaceAll('_', ' ').toLowerCase()}.`
+      : null;
 
     return {
-      session_id: sessionId,
-      persona_id: session?.persona_id || events[0]?.persona_id || '',
-      expected: `${personaName}'s objective: ${persona?.goal_context || input.configuration.objective}`,
-      what_worked: worked,
-      what_confused_them: labels,
-      what_slowed_them_down: slowedDown,
+      session_id: session.session_id,
+      persona_id: session.persona_id,
+      expected: expectation,
+      what_worked: whatWorked,
+      what_confused_them: whatConfused,
+      what_slowed_them_down: slowdownSignals,
       continuation_or_abandonment: continuation,
       improvement_suggestion: improvement,
     };
@@ -416,21 +339,6 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
       supporting_session_ids: [...new Set(finding.evidence.map(pointer => pointer.session_id))],
     }));
 
-  if (quickImprovements.length === 0 && input.sessions.length > 0) {
-    const allIds = input.sessions.map(s => s.session_id);
-    quickImprovements.push(
-      {
-        finding_id: 'nav-quick-filters',
-        recommendation: 'Add a sticky sub-navigation bar with quick jump links (Overview, Camera, Specs, Buy) at the top of device pages.',
-        supporting_session_ids: allIds.slice(0, 3),
-      },
-      {
-        finding_id: 'promotional-grouping',
-        recommendation: 'Display upfront unlocked device pricing clearly alongside monthly carrier financing estimates on primary cards.',
-        supporting_session_ids: allIds.slice(0, 3),
-      },
-    );
-  }
 
   return {
     schema_version: 1,

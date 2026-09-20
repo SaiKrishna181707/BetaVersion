@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPersonaPatch, fallbackProductIntelligence, parseGeminiIntelligence, stripHtml, validateProductIntelligenceRequest } from '@synthetic-beta/api';
+import { applyPersonaPatch, discoverFirstPartyUrls, fallbackProductIntelligence, parseGeminiIntelligence, stripHtml, validateProductIntelligenceRequest } from '@synthetic-beta/api';
 import { personaFixture } from '../fixtures/run-fixtures';
 
 test('accepts only public HTTPS product pages for intelligence', () => {
@@ -15,32 +15,54 @@ test('turns Gemini JSON into bounded product intelligence', () => {
   const request = { company_name: 'Acme', website_url: 'https://example.com/' };
   const result = parseGeminiIntelligence(request, 'Acme home', JSON.stringify({
     product_name: 'Acme Flow', category: 'Collaboration', summary: 'A workspace for distributed product teams.',
+    what_product_does: 'Helps distributed teams plan product launches in one workspace.',
     target_audience: 'Product teams coordinating launches.',
+    key_features: ['Shared launch plans', 'Ownership tracking'],
     suggested_objectives: ['Create a project', 'Invite a teammate', 'Find project status'],
     value_propositions: ['Shared planning', 'Clear ownership'],
   }), '2026-09-20T00:00:00.000Z');
   assert.equal(result.product_name, 'Acme Flow');
   assert.equal(result.suggested_objectives.length, 3);
+  assert.deepEqual(result.key_features, ['Shared launch plans', 'Ownership tracking']);
+  assert.match(result.what_product_does || '', /distributed teams/);
   assert.equal(result.source_title, 'Acme home');
 });
 
 test('extracts a bounded useful sample from oversized first-party HTML', () => {
   const page = stripHtml(`<title>Apple</title><main>${'Products and services. '.repeat(20_000)}</main>`);
   assert.equal(page.title, 'Apple');
-  assert.equal(page.text.length, 24_000);
+  assert.equal(page.text.length, 16_000);
   assert.match(page.text, /Products and services/);
 });
 
-test('returns conservative editable intelligence when retrieval or Gemini cannot enrich it', () => {
+test('blank fallback shape never invents product facts', () => {
   const result = fallbackProductIntelligence(
-    { company_name: 'Apple', website_url: 'https://apple.com/' },
+    { company_name: 'Acme', website_url: 'https://example.com/' },
     '',
     '2026-09-20T00:00:00.000Z',
   );
-  assert.equal(result.product_name, 'Apple');
-  assert.match(result.summary, /intentionally conservative and remains editable/);
-  assert.equal(result.suggested_objectives.length, 3);
-  assert.equal(result.source_title, 'apple.com');
+  assert.equal(result.product_name, 'Acme');
+  assert.equal(result.summary, '');
+  assert.equal(result.target_audience, '');
+  assert.deepEqual(result.suggested_objectives, []);
+  assert.deepEqual(result.key_features, []);
+  assert.equal(result.source_title, 'example.com');
+});
+
+test('discovers only controlled same-site product pages in stable priority order', () => {
+  const html = `
+    <a href="/about">About</a>
+    <a href="/features?ref=home">Features</a>
+    <a href="https://www.example.com/pricing#plans">Pricing</a>
+    <a href="https://evil.example.net/features">External</a>
+    <a href="/blog/launch">Blog</a>
+    <a href="/assets/catalog.pdf">PDF</a>
+  `;
+  assert.deepEqual(discoverFirstPartyUrls(html, 'https://example.com/', 3), [
+    'https://www.example.com/pricing',
+    'https://example.com/features',
+    'https://example.com/about',
+  ]);
 });
 
 test('updates editable persona fields without changing identity', () => {
