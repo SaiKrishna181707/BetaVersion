@@ -280,18 +280,6 @@ The Nova worker's direct Python runtime dependencies are pinned in `services/nov
 
 ---
 
-## Technical documentation
-
-For judges or engineers who want to inspect the implementation deeper:
-
-- [Architecture and storage contract](docs/architecture.md)
-- [AWS execution and evidence model](docs/aws-execution.md)
-- [Cost model and guardrails](docs/cost-model.md)
-
-Other audit, local-development, and submission-preparation files are indexed in [docs/README.md](docs/README.md) and are supporting material rather than required reading.
-
----
-
 <p align="center">
   <strong>Centopus</strong><br/>
   Don't ask AI what a user might do.<br/>
