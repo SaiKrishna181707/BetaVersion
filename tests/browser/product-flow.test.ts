@@ -11,14 +11,37 @@ import { memoryDynamo } from '../fixtures/memory-dynamo';
 import type { JsonModelRequest } from '@centopus/ai';
 
 test('browser: Centopus product -> population -> execution -> evidence/report using explicit offline fixtures', async () => {
+  const demoRecording = process.env.CENTOPUS_DEMO_RECORDING === '1';
+  const demoVideoDir = process.env.CENTOPUS_DEMO_VIDEO_DIR || '.artifacts/demo-video';
   const server = await createServer({ root: 'apps/web', configFile: false,
     server: { host: '127.0.0.1', port: 0 },
     define: { 'import.meta.env.VITE_API_BASE_URL': JSON.stringify('/centopus-test-api') } });
   await server.listen();
   const origin = server.resolvedUrls!.local[0]!.replace(/\/$/, '');
-  const browser = await chromium.launch({ headless: true, ...(process.platform === 'win32' ? { channel: 'msedge' } : {}) });
+  const browser = await chromium.launch({ headless: true, slowMo: demoRecording ? 350 : 0, ...(process.platform === 'win32' ? { channel: 'msedge' } : {}) });
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      ...(demoRecording ? { recordVideo: { dir: demoVideoDir, size: { width: 1440, height: 900 } } } : {}),
+    });
+    const page = await context.newPage();
+    if (demoRecording) {
+      await page.addInitScript({ content: `
+        (() => {
+        const installCursor = () => {
+          const cursor = document.createElement('div');
+          cursor.id = 'centopus-demo-cursor';
+          Object.assign(cursor.style, { position: 'fixed', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', border: '3px solid #6d5dfc', boxShadow: '0 2px 10px #0008', zIndex: '2147483647', pointerEvents: 'none', left: '30px', top: '30px', transition: 'transform 120ms ease' });
+          document.documentElement.appendChild(cursor);
+          window.addEventListener('mousemove', event => { cursor.style.left = (event.clientX - 9) + 'px'; cursor.style.top = (event.clientY - 9) + 'px'; });
+          window.addEventListener('mousedown', () => { cursor.style.transform = 'scale(.65)'; });
+          window.addEventListener('mouseup', () => { cursor.style.transform = 'scale(1)'; });
+        };
+        document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', installCursor) : installCursor();
+        })();
+      ` });
+    }
+    const beat = async (milliseconds = 1800) => { if (demoRecording) await page.waitForTimeout(milliseconds * 4); };
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     const db = memoryDynamo();
@@ -51,10 +74,10 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
       const path = new URL(request.url()).pathname.replace('/centopus-test-api', '');
       if (path === '/product-intelligence') {
         await route.fulfill({ json: { intelligence: {
-          company_name: 'Fixture Company', product_name: 'Fixture Product', website_url: 'https://example.com',
-          category: 'Testing', summary: 'An explicitly mocked product for offline browser validation.',
-          target_audience: 'Operators validating the offline browser workflow.', suggested_objectives: ['Reach the visible goal checkpoint.'],
-          value_propositions: ['Offline evidence inspection'], source_title: 'Fixture', analyzed_at: '2026-09-20T00:00:00Z',
+          company_name: 'Apple', product_name: 'Apple', website_url: 'https://apple.com',
+          category: 'Consumer technology', summary: 'Apple designs consumer hardware, software, and digital services.',
+          target_audience: 'Consumers comparing premium smartphones and product purchase journeys.', suggested_objectives: ['Find iPhone, compare the latest models, and reach the purchase configuration page without placing an order.'],
+          value_propositions: ['Integrated hardware and software experience'], source_title: 'Apple', analyzed_at: '2026-09-20T00:00:00Z',
         } } });
       } else {
         const response = await api({ rawPath: path, requestContext: { http: { method: request.method(), path } },
@@ -67,22 +90,28 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('button', { name: 'Previous' }).waitFor();
     assert.equal(await page.getByRole('button', { name: /Operator sign in/i }).count(), 0);
     assert.equal(await page.getByRole('button', { name: 'Sign out' }).count(), 0);
-    await page.getByRole('textbox', { name: 'Product / Company' }).fill('Fixture Company');
-    await page.getByRole('textbox', { name: 'Website', exact: true }).fill('https://example.com');
+    await beat(2500);
+    await page.getByRole('textbox', { name: 'Product / Company' }).fill('Apple');
+    await page.getByRole('textbox', { name: 'Website', exact: true }).fill('https://apple.com');
+    await beat();
     await page.getByRole('button', { name: 'Build Product' }).click();
     await page.waitForURL('**/#/new');
     await page.getByRole('spinbutton', { name: 'Number of agents' }).fill('100');
+    await beat(2500);
     await page.getByRole('button', { name: 'Build Agents' }).click();
     await page.waitForURL('**/population');
     await page.getByRole('heading', { name: 'Meet the people testing your product.' }).waitFor();
     await page.waitForFunction(() => document.querySelectorAll('[data-carousel-card]').length === 100);
     assert.equal(await page.locator('[data-carousel-card]').count(), 100);
+    await beat(3500);
     await page.locator('[data-carousel-card]').first().getByRole('button').click();
     await page.getByText('Distinct fixture story 1', { exact: true }).waitFor();
     await page.getByRole('button', { name: /close/i }).click();
+    await beat();
     await page.getByRole('button', { name: 'Run Simulation' }).click();
     await page.waitForURL('**/live');
     await page.getByRole('heading', { name: 'Simulating Individual Reactions' }).waitFor();
+    await beat(4000);
     assert.ok(dispatched);
     const sink = { send: async () => ({}) } as unknown as Pick<S3Client, 'send'>;
     const worker = createSessionWorker({ docClient: db.client, s3Client: sink, environment, invoke: async input => {
@@ -115,6 +144,7 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('link', { name: 'View Results' }).click({ timeout: 10000 });
     await page.waitForURL('**/report');
     await page.getByRole('heading', { name: 'Agent Results' }).waitFor();
+    await beat(5000);
     await page.getByRole('button', { name: 'Agents', exact: true }).waitFor();
     await page.getByLabel('Filter feedback').waitFor();
     assert.equal(await page.locator('.centopus-feedback-card').count(), 100);
@@ -123,10 +153,20 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     assert.match(resultText, /Mixed\s+20 agents/);
     assert.match(resultText, /Negative\s+4 agents/);
     assert.doesNotMatch(resultText, /Synthetic Beta|BetaVersion|synthetic-beta/i);
+    if (demoRecording) {
+      await page.getByRole('button', { name: 'Feedback', exact: true }).click();
+      await beat(5000);
+      await page.getByRole('button', { name: 'Agents', exact: true }).click();
+      await page.getByLabel('Filter feedback').selectOption('NEGATIVE');
+      await beat(4000);
+      await page.getByLabel('Filter feedback').selectOption('ALL');
+      await beat(3500);
+    }
     await page.screenshot({ path: '.artifacts/centopus-fixture-report.png', fullPage: true });
     await page.goto(`${origin}/#/runs/${dispatched.runId}/sessions/${dispatched.sessions[0]!.session_id}`);
     await page.getByRole('heading', { name: 'Fixture User 1', exact: true, level: 1 }).waitFor();
     assert.deepEqual(errors, []);
+    await context.close();
   } finally {
     await browser.close(); await server.close();
   }
