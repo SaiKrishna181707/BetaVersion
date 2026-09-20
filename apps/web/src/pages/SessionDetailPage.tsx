@@ -78,6 +78,7 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
     () => session ? reportFeedback || fallbackFeedback(session, events) : null,
     [events, reportFeedback, session],
   );
+  const hasDetailedReflection = measuredFeedback?.reflection_basis === 'EVIDENCE_DERIVED_SYNTHETIC_REFLECTION';
 
   if (loading) return <WorkspaceShell><div className="vision-loading-page"><span className="vision-loader" /><strong>Loading this agent’s experience…</strong><span>Retrieving the persisted persona, trajectory and evidence.</span></div></WorkspaceShell>;
 
@@ -151,7 +152,6 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
             <div className="vision-timeline-body">
               <div><strong>{event.action_type.replaceAll('_', ' ')}</strong><Badge tone={event.result === 'SUCCESS' ? 'accent' : 'warning'}>{event.result}</Badge></div>
               <p>{event.target_descriptor || event.page_title || event.route || event.url}</p>
-              {event.thought ? <p style={{ fontSize: '0.82rem', color: 'var(--muted, #8b949e)', fontStyle: 'italic', margin: '4px 0' }}>"{event.thought}"</p> : null}
               <small>{event.agent_reason_code.replaceAll('_', ' ')} · +{event.elapsed_ms}ms</small>
               {event.task_checkpoint ? <span className="vision-checkpoint">Checkpoint · {event.task_checkpoint}</span> : null}
               {event.console_error ? <pre>{event.console_error}</pre> : null}
@@ -164,7 +164,22 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
       </section>
 
       <section className="vision-report-section">
-        <div className="vision-section-heading"><span>WHAT THEY EXPERIENCED</span><h2>Agent-specific feedback.</h2></div>
+        <div className="vision-section-heading"><span>HOW IT FELT</span><h2>Product-specific synthetic reflection.</h2></div>
+        {measuredFeedback && hasDetailedReflection ? <div className="vision-feedback-grid">
+          <article><span>OVERALL FEELING</span><p><strong>{measuredFeedback.overall_feeling?.replaceAll('_', ' ')}</strong></p><p>{measuredFeedback.feeling_summary}</p></article>
+          <article><span>IN THEIR OWN WORDS</span><p>{measuredFeedback.direct_feedback}</p></article>
+          <article><span>FIRST IMPRESSION</span><p>{measuredFeedback.first_impression || 'There was not enough recorded interaction to establish a first impression.'}</p></article>
+          <article><span>WHAT I LIKED</span><TextList values={measuredFeedback.what_i_liked ?? []} fallback="No positive product interaction was strong enough to support a synthetic preference." /></article>
+          <article><span>WHAT FRUSTRATED ME</span><TextList values={measuredFeedback.what_frustrated_me ?? []} fallback="No evidence-grounded frustration was identified." /></article>
+          <article><span>EXPECTATION VS REALITY</span><p>{measuredFeedback.expectation_gap}</p></article>
+          <article><span>TASK CONFIDENCE</span><p><strong>{measuredFeedback.task_confidence}</strong></p><p>{measuredFeedback.task_confidence_reason}</p></article>
+          <article><span>WOULD I USE IT AGAIN?</span><p><strong>{measuredFeedback.would_use_again?.replaceAll('_', ' ')}</strong></p><p>{measuredFeedback.would_use_again_reason}</p></article>
+        </div> : <div className="vision-empty-state"><strong>Detailed reflection is not available for this report.</strong><span>Historical or incomplete reports still show measured session feedback below without inventing sentiment.</span></div>}
+        <p className="vision-measured-note"><strong>Synthetic reflection:</strong> generated deterministically from this persona plus its recorded browser evidence. It is not human-reported emotion, and it never overrides the observed event trail.</p>
+      </section>
+
+      <section className="vision-report-section">
+        <div className="vision-section-heading"><span>WHAT THEY EXPERIENCED</span><h2>Measured session feedback.</h2></div>
         {measuredFeedback ? <div className="vision-feedback-grid">
           <article><span>WHAT WORKED</span><TextList values={measuredFeedback.what_worked} fallback="No successful behavior was established by recorded evidence." /></article>
           <article><span>WHAT CONFUSED THEM</span><TextList values={measuredFeedback.what_confused_them} fallback="No explicit confusion signal was recorded." /></article>
@@ -173,7 +188,7 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
           <article><span>WHAT THEY EXPECTED</span><p>{measuredFeedback.expected}</p></article>
           <article><span>SPECIFIC IMPROVEMENT</span><p>{measuredFeedback.improvement_suggestion || 'No evidence-grounded recommendation is available.'}</p></article>
         </div> : null}
-        <p className="vision-measured-note">Feedback shown here is tied to this persona and its recorded session evidence. Missing evidence stays missing.</p>
+        <p className="vision-measured-note">Measured feedback shown here is tied to this persona and its recorded session evidence. Missing evidence stays missing.</p>
       </section>
 
       {session.trajectory_ref ? <section className="vision-trajectory"><span>TRAJECTORY REFERENCE</span><code>{session.trajectory_ref}</code></section> : null}
