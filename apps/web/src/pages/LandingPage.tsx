@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Brand, Icon } from '@centopus/ui';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { Icon } from '@centopus/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
 
 const loadingMessages = [
@@ -10,6 +10,23 @@ const loadingMessages = [
   'Preparing your simulation…',
 ];
 
+type BarStyle = CSSProperties & {
+  '--bar-scale': string;
+  '--bar-scale-high': string;
+};
+
+const gradientBarStyles: BarStyle[] = Array.from({ length: 20 }, (_, index) => {
+  const position = index / 19;
+  const distance = Math.abs(position - 0.5);
+  const scale = 0.3 + 0.7 * Math.pow(distance * 2, 1.2);
+
+  return {
+    '--bar-scale': scale.toFixed(3),
+    '--bar-scale-high': Math.min(scale + 0.1, 1).toFixed(3),
+    animationDelay: (index * 0.5) + 's',
+  };
+});
+
 export function LandingPage() {
   const [companyName, setCompanyName] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
@@ -17,6 +34,7 @@ export function LandingPage() {
   const [messageIndex, setMessageIndex] = useState(0);
   const [error, setError] = useState('');
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [previousOpen, setPreviousOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +52,15 @@ export function LandingPage() {
     );
     return () => window.clearInterval(timer);
   }, [building]);
+
+  useEffect(() => {
+    if (!previousOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviousOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [previousOpen]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -53,80 +80,138 @@ export function LandingPage() {
     }
   };
 
-  return <div className="vision-landing">
-    <header className="vision-landing-nav">
-      <Brand />
-      {runs.length > 0 ? <a href="#recent-runs">View runs</a> : null}
+  return <div className="centopus-portfolio-landing">
+    <div className="centopus-gradient-bars" aria-hidden="true">
+      {gradientBarStyles.map((style, index) => <span key={index} style={style} />)}
+    </div>
+    <div className="centopus-landing-grid" aria-hidden="true" />
+
+    <header className="centopus-landing-header">
+      <button
+        type="button"
+        className="centopus-previous-button"
+        onClick={() => setPreviousOpen(true)}
+        aria-expanded={previousOpen}
+        aria-controls="previous-runs-panel"
+      >
+        <span aria-hidden="true">←</span>
+        <span>Previous</span>
+      </button>
+
+      <a className="centopus-centered-brand" href="#/" aria-label="Centopus home">
+        <img src="/favicon.svg" alt="" />
+        <span>centopus</span>
+      </a>
     </header>
 
-    <main id="main">
-      <section className="vision-landing-hero" aria-labelledby="landing-title">
-        <div className="vision-landing-copy">
-          <span className="vision-product-name">CENTOPUS</span>
-          <h1 id="landing-title">Test before your users do.</h1>
-          <p>See how autonomous synthetic users navigate,<br />struggle, and succeed in your real product.</p>
-        </div>
+    <main id="main" className="centopus-landing-main">
+      <h1 className="centopus-visually-hidden">Centopus product testing</h1>
 
-        <form className="vision-build-card" onSubmit={event => void submit(event)}>
-          <label>
-            <span>Product / Company</span>
-            <input
-              value={companyName}
-              onChange={event => setCompanyName(event.target.value)}
-              placeholder="Company name"
-              minLength={2}
-              maxLength={120}
-              autoComplete="organization"
-              required
-            />
-          </label>
-          <label>
-            <span>Website</span>
-            <input
-              value={websiteUrl}
-              onChange={event => setWebsiteUrl(event.target.value)}
-              placeholder="https://yourproduct.com"
-              type="url"
-              autoComplete="url"
-              required
-            />
-          </label>
-          {error ? <p className="field-error" role="alert">{error}</p> : null}
-          <button className="button button-primary vision-build-button" disabled={building}>
-            {building ? loadingMessages[messageIndex] : 'Build Product'}
-            {!building ? <Icon name="arrow" size={16} /> : <span className="vision-loader" aria-hidden="true" />}
+      <form className="centopus-entry-form" onSubmit={event => void submit(event)}>
+        <label>
+          <span className="centopus-visually-hidden">Company or product name</span>
+          <input
+            value={companyName}
+            onChange={event => setCompanyName(event.target.value)}
+            placeholder="Company / Product name"
+            minLength={2}
+            maxLength={120}
+            autoComplete="organization"
+            required
+          />
+        </label>
+
+        <label>
+          <span className="centopus-visually-hidden">Website URL</span>
+          <input
+            value={websiteUrl}
+            onChange={event => setWebsiteUrl(event.target.value)}
+            placeholder="https://yourproduct.com"
+            type="url"
+            autoComplete="url"
+            required
+          />
+        </label>
+
+        <button
+          className="centopus-send-button"
+          type="submit"
+          disabled={building}
+          aria-label={building ? loadingMessages[messageIndex] : 'Build product'}
+          title={building ? loadingMessages[messageIndex] : 'Build product'}
+        >
+          {building
+            ? <span className="centopus-submit-loader" aria-hidden="true" />
+            : <Icon name="arrow" size={21} />}
+        </button>
+      </form>
+
+      {error
+        ? <p className="centopus-form-message is-error" role="alert">{error}</p>
+        : building
+          ? <p className="centopus-form-message" role="status">{loadingMessages[messageIndex]}</p>
+          : null}
+    </main>
+
+    {previousOpen ? <>
+      <aside
+        id="previous-runs-panel"
+        className="centopus-previous-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="previous-runs-title"
+      >
+        <div className="centopus-previous-panel-header">
+          <div>
+            <span>HISTORY</span>
+            <h2 id="previous-runs-title">Previous runs</h2>
+          </div>
+          <button
+            type="button"
+            className="centopus-panel-close"
+            onClick={() => setPreviousOpen(false)}
+            aria-label="Close previous runs"
+          >
+            <Icon name="close" size={18} />
           </button>
-          <small>We use publicly available information from your website to prefill your test setup. Everything remains editable.</small>
-        </form>
-      </section>
-
-      {runs.length > 0 ? <section id="recent-runs" className="vision-recent-runs" aria-labelledby="recent-runs-title">
-        <div className="vision-section-heading">
-          <span>PREVIOUS RUNS</span>
-          <h2 id="recent-runs-title">Continue your research.</h2>
         </div>
-        <div className="vision-run-list">
-          {runs.slice(0, 6).map(run => {
+
+        <div className="centopus-previous-list">
+          {runs.length > 0 ? runs.map(run => {
             const destination = run.status === 'QUEUED'
               ? 'population'
               : run.status === 'COMPLETED'
                 ? 'report'
                 : 'live';
-            return <a key={run.run_id} href={`#/runs/${run.run_id}/${destination}`}>
+
+            return <a
+              key={run.run_id}
+              href={'#/runs/' + run.run_id + '/' + destination}
+              className="centopus-previous-run"
+            >
               <span>
                 <strong>{run.configuration?.product_name || run.configuration?.target_url || run.run_id}</strong>
                 <small>{run.configuration?.objective || run.run_id}</small>
               </span>
-              <span className="vision-run-status">{run.status}<Icon name="arrow" size={14} /></span>
+              <span className="centopus-previous-status">
+                {run.status}
+                <Icon name="arrow" size={14} />
+              </span>
             </a>;
-          })}
+          }) : <div className="centopus-previous-empty">
+            <strong>No previous runs yet.</strong>
+            <span>Your completed and active runs will appear here.</span>
+          </div>}
         </div>
-      </section> : null}
-    </main>
+      </aside>
 
-    <footer className="vision-landing-footer">
-      <span>Centopus</span>
-      <span>Observe real behavior. Measure what happened.</span>
-    </footer>
+      <button
+        type="button"
+        className="centopus-drawer-scrim"
+        onClick={() => setPreviousOpen(false)}
+        aria-label="Close previous runs"
+        tabIndex={-1}
+      />
+    </> : null}
   </div>;
 }

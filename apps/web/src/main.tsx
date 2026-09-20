@@ -4,6 +4,7 @@ import { App } from './App';
 import '@centopus/ui/styles.css';
 import './styles.css';
 import './vision.css';
+import './landing.css';
 
 const root = createRoot(document.getElementById('root')!);
 root.render(<StrictMode><App /></StrictMode>);
