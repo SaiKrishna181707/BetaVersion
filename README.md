@@ -4,11 +4,11 @@
   <img src="apps/web/public/centopus-header.svg" alt="Centopus" width="560" />
 </p>
 
-<h3 align="center">One objective. Up to 100 perspectives. Independent browser journeys.</h3>
+<h3 align="center">Automated beta testing with up to 100 independent browser agents.</h3>
 
 <p align="center">
   <strong>Centopus turns AI from a reviewer into a participant.</strong><br/>
-  Synthetic users do not just describe what they might do — they open the product, see the interface, make decisions, take actions, get stuck, recover, and sometimes abandon the task.
+  Instead of recruiting people for every early test cycle, teams can launch a population of synthetic users that open the product, see the interface, make decisions, take actions, get stuck, recover, and sometimes abandon the task — then bring real users in where human judgment matters most.
 </p>
 
 <p align="center">
@@ -19,13 +19,21 @@
 
 ## The problem
 
-Product teams usually learn about usability problems too late.
+Beta testing is valuable — but it is also slow, repetitive, and expensive to run every time a product changes.
 
-Analytics can tell you **where** users dropped off. QA can tell you whether a flow technically works. Human usability research can tell you **why** people struggle, but it takes time to recruit, schedule, run, and analyze.
+Teams have to recruit the right people, coordinate schedules, explain the task, wait for sessions, collect feedback, clean the results, and then repeat the whole process after the next build. Small teams often cannot do this for every feature, every flow, every device profile, or every release candidate.
 
-What if a team could pressure-test a product with many different user perspectives **before** customers discover the friction?
+Traditional QA answers **"does it work?"**  
+Analytics answers **"where did users drop?"**  
+Human research answers **"why did this person struggle?"**
 
-That is what Centopus is built for.
+But there is a large gap before all of that: **what happens when many different kinds of users actually try the product?**
+
+Centopus automates that early testing layer.
+
+Instead of needing a fresh group of beta users for every iteration, a team can launch dozens of distinct synthetic users on demand, let them actually operate the product, and identify likely friction before spending human research time on it.
+
+The goal is not to remove people from product research. It is to make human testing **more focused, less repetitive, and more valuable**.
 
 ## What Centopus does
 
@@ -282,19 +290,30 @@ That bridge from **population signal -> individual evidence** is the point of Ce
 
 ## Why it matters
 
-Centopus is designed for the stage between automated QA and expensive human research.
+Centopus is designed to remove the repetitive pain around beta testing without removing the humans who make product research valuable.
 
-It can help product managers, UX teams, designers, founders, QA teams, and engineers explore questions such as:
+Today, every new flow can mean another round of recruitment, scheduling, coordination, observation, note-taking, analysis, and retesting. That makes broad user testing difficult to repeat at product-development speed.
 
-- Will different kinds of users find this feature?
-- Where do people take different paths through the same task?
-- Which controls repeatedly create hesitation or retries?
-- Does the happy path only work for confident users?
-- What should we investigate before launch?
+Centopus makes that layer available on demand.
 
-Synthetic agents are not a replacement for real people, and Centopus does not claim to measure market demand or purchasing intent.
+A product team can use it to:
 
-It is an **early-warning system for usability friction**.
+- test a new flow before inviting beta users,
+- explore many user behaviors without recruiting a new cohort,
+- repeat the same task after every important product change,
+- expose edge cases across patience, familiarity, reading style, and technical confidence,
+- identify the journeys that deserve deeper human research,
+- and give real testers a better product to start with.
+
+This changes where human effort is spent.
+
+Instead of asking people to repeatedly discover obvious navigation friction, broken expectations, confusing controls, or dead ends, Centopus can surface those issues earlier. Human testers can then spend their time on the things synthetic agents cannot truly provide: emotion, trust, taste, cultural context, lived experience, desirability, and genuine purchasing intent.
+
+Centopus is therefore not a replacement for beta users or UX researchers.
+
+It is **automation around them** — reducing how often teams need humans for repetitive early validation and making every real human testing session more valuable.
+
+**Automate the repetition. Keep the human insight.**
 
 ---
 
@@ -404,7 +423,7 @@ Both leads collaborated across architecture, implementation, testing, debugging,
 
 Centopus is for web products you own or are authorized to test.
 
-Synthetic users are simulated agents. They are useful for discovering possible usability friction, but they are **not real customers**, do not measure demand, and do not replace research with real people.
+Synthetic users are simulated agents. They are useful for automating repetitive early-stage beta and usability testing, but they are **not real customers**. They do not measure genuine emotion, trust, cultural context, market demand, or purchasing intent. Centopus is designed to reduce unnecessary human testing cycles and help teams use real beta users where human insight matters most.
 
 The browser worker is designed around bounded execution and avoids destructive actions, real-money purchases, credential harvesting, CAPTCHA bypass, or leaving the approved target.
 
