@@ -1,3 +1,4 @@
+import socket
 import unittest
 
 from worker import (
@@ -5,6 +6,7 @@ from worker import (
     build_prompt,
     navigation_guardrail_reason,
     validate_plan,
+    assert_runtime_target_public,
 )
 
 
@@ -132,6 +134,27 @@ class WorkerContractTests(unittest.TestCase):
         raw["max_actions"] = True
         with self.assertRaises(PlanError):
             validate_plan(raw)
+
+    def test_runtime_dns_check_rejects_private_address(self):
+        original = socket.getaddrinfo
+        try:
+            socket.getaddrinfo = lambda *args, **kwargs: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('169.254.169.254', 443))
+            ]
+            with self.assertRaises(PlanError):
+                assert_runtime_target_public("staging.example.test")
+        finally:
+            socket.getaddrinfo = original
+
+    def test_runtime_dns_check_accepts_global_address(self):
+        original = socket.getaddrinfo
+        try:
+            socket.getaddrinfo = lambda *args, **kwargs: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('93.184.216.34', 443))
+            ]
+            assert_runtime_target_public("staging.example.test")
+        finally:
+            socket.getaddrinfo = original
 
     def test_guardrail_blocks_navigation_outside_allowlist(self):
         reason = navigation_guardrail_reason(
