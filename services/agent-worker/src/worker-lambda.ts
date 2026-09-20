@@ -12,6 +12,8 @@ export interface SessionWorkerInput {
   allowed_origins?: string[]; checkpoint_plan?: string[]; max_session_seconds?: number; max_actions?: number;
 }
 
+export interface SessionWorkerReference { run_id: string; session_id: string }
+
 export function validateNovaResponse(parsed: Record<string, unknown>, input: SessionWorkerInput, allowLegacy = false) {
   if (!Array.isArray(parsed.steps)) throw new Error('Nova worker returned no trace array.');
   if (Number(parsed.statusCode) >= 400) return parsed;
@@ -52,11 +54,21 @@ export function createSessionWorker(deps: {
   const env = deps.environment ?? process.env;
   const table = env.STATE_TABLE || '';
   const bucket = env.ARTIFACT_BUCKET || '';
-  return async (input: SessionWorkerInput) => {
+  return async (dispatch: SessionWorkerInput | SessionWorkerReference) => {
     if (!table || !bucket) throw new Error('Session storage is not configured.');
-    const { run_id, session_id, persona } = input;
+    const { run_id, session_id } = dispatch;
     const run = await deps.docClient.send(new GetCommand({ TableName: table, Key: { pk: `RUN#${run_id}`, sk: 'META' }, ConsistentRead: true }));
     const existing = await deps.docClient.send(new GetCommand({ TableName: table, Key: { pk: `SESSION#${session_id}`, sk: 'META' }, ConsistentRead: true }));
+    const conf = run.Item?.configuration;
+    const persistedPersona = existing.Item?.persona as SyntheticPersona | undefined;
+    const input: SessionWorkerInput = 'persona' in dispatch ? dispatch : {
+      run_id, session_id, persona: persistedPersona!, objective: conf?.objective,
+      target_url: conf?.target_url, allowed_origins: conf?.target_url ? [new URL(conf.target_url).hostname] : [],
+      checkpoint_plan: conf?.checkpoint_plan ?? [], max_session_seconds: conf?.max_session_seconds,
+      max_actions: GUARDRAILS.MAX_ACTIONS,
+    };
+    const { persona } = input;
+    if (!persona || !input.objective || !input.target_url) throw new Error('Persisted session plan is incomplete.');
     if (!existing.Item || existing.Item.run_id !== run_id || existing.Item.persona_id !== persona.persona_id) throw new Error('Session identity is not persisted.');
     if (existing.Item.status !== 'QUEUED') {
       if (existing.Item.status === 'ACTIVE') throw new Error('Session is already executing; refusing a duplicate browser.');

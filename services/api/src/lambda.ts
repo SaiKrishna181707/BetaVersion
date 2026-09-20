@@ -308,7 +308,10 @@ export function createProductionApi(dependencies: {
         checkpoint_plan: conf.checkpoint_plan ?? [],
         max_actions: GUARDRAILS.MAX_ACTIONS, max_session_seconds: conf.max_session_seconds,
       }));
-      const executionInput = JSON.stringify({ runId, sessions, maxConcurrency });
+      // Step Functions has a 256 KiB execution-input ceiling. Full personas are
+      // already persisted atomically below, so dispatch stable references and
+      // let each worker hydrate its plan from DynamoDB.
+      const executionInput = JSON.stringify({ runId, sessions: sessions.map(({ run_id, session_id }) => ({ run_id, session_id })), maxConcurrency });
       if (Buffer.byteLength(executionInput) > 240000) return response(400, { error: 'Population exceeds the execution payload limit.' }, allowedOrigin);
       try { await reserveRunBudget(docClient, stateTable, runId!, estimate.total_cents, runGet.Item.persona_revision as number | undefined); }
       catch (cause) {
