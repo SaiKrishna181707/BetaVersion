@@ -62,6 +62,9 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     });
     await page.goto(origin);
     assert.match(await page.title(), /Centopus/);
+    await page.getByRole('button', { name: 'Previous' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /Operator sign in/i }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Sign out' }).count(), 0);
     await page.getByRole('textbox', { name: 'Product / Company' }).fill('Fixture Company');
     await page.getByRole('textbox', { name: 'Website', exact: true }).fill('https://example.com');
     await page.getByRole('button', { name: 'Build Product' }).click();

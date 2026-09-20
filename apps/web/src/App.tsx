@@ -57,6 +57,7 @@ function AuthGate({ match, children }: { match: RouteMatch; children: ReactNode 
     finishLogin(code).then(() => {
       window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       setReady(true);
+      window.dispatchEvent(new Event('centopus-auth-changed'));
     }).catch(cause => setError(cause instanceof Error ? cause.message : 'Sign-in failed.'));
   }, []);
 
