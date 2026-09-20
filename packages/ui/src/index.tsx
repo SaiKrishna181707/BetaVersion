@@ -27,25 +27,9 @@ export function Icon({ name, size = 18, ...props }: SVGProps<SVGSVGElement> & { 
 }
 
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <a className="brand" href="#/" aria-label="Centopus home">
-    <span className="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 64 64" role="img">
-        <defs>
-          <linearGradient id="centopusGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#8068ff" />
-            <stop offset="1" stopColor="#5638d8" />
-          </linearGradient>
-        </defs>
-        <path d="M18 31C8 27 6 18 11 14c4-3 9 0 9 5 0 4 2 7 6 8M18 43c-9 0-14-5-12-10 2-4 7-4 10-1 3 3 6 4 10 2M46 31c10-4 12-13 7-17-4-3-9 0-9 5 0 4-2 7-6 8M46 43c9 0 14-5 12-10-2-4-7-4-10-1-3 3-6 4-10 2M29 50c-4 9-11 10-14 6-3-4 0-8 4-9 4-1 7-3 8-7M35 50c4 9 11 10 14 6 3-4 0-8-4-9-4-1-7-3-8-7" fill="none" stroke="url(#centopusGradient)" strokeWidth="7" strokeLinecap="round"/>
-        <ellipse cx="32" cy="28" rx="20" ry="19" fill="url(#centopusGradient)"/>
-        <path d="M18 27c0-8 6-13 14-13s14 5 14 13-6 13-14 13-14-5-14-13Z" fill="#171b3a"/>
-        <path d="M25 27c2-4 5-4 7 0M38 27c2-4 5-4 7 0" fill="none" stroke="#d8d0ff" strokeWidth="2.5" strokeLinecap="round"/>
-        <circle cx="41" cy="9" r="2" fill="#8068ff"/>
-        <circle cx="47" cy="6" r="1.5" fill="#8068ff"/>
-        <circle cx="52" cy="9" r="1.2" fill="#8068ff"/>
-      </svg>
-    </span>
-    {!compact && <span>centopus</span>}
+  return <a className={`brand${compact ? ' brand-compact' : ''}`} href="#/" aria-label="Centopus home">
+    <img className="brand-mascot" src="/centopus-mascot.webp" alt="" aria-hidden="true" />
+    {!compact && <img className="brand-wordmark" src="/centopus-wordmark.webp" alt="centopus" />}
   </a>;
 }
 
