@@ -70,14 +70,13 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await page.getByRole('button', { name: 'Build Product' }).click();
     await page.waitForURL('**/#/new');
     await page.getByRole('spinbutton', { name: 'Number of agents' }).fill('1');
-    const authorization = page.getByRole('checkbox', { name: /I own this product or have explicit authorization/i });
-    if (await authorization.count()) await authorization.check();
     await page.getByRole('button', { name: 'Build Agents' }).click();
     await page.waitForURL('**/population');
     await page.getByRole('heading', { name: 'Meet the people testing your product.' }).waitFor();
     await page.locator('.agent-card').first().click();
     await page.getByRole('button', { name: 'Run Simulation' }).click();
     await page.waitForURL('**/live');
+    await page.getByRole('heading', { name: 'Your agents are working.' }).waitFor();
     assert.ok(dispatched);
     const sink = { send: async () => ({}) } as unknown as Pick<S3Client, 'send'>;
     const worker = createSessionWorker({ docClient: db.client, s3Client: sink, environment, invoke: async () => ({
