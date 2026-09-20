@@ -38,7 +38,7 @@ export function NewRunPage() {
     objective: intelligence?.suggested_objectives?.[0] || '',
     user_count: 10,
     batch_size: Math.min(5, GUARDRAILS.MAX_BATCH_SIZE),
-    authorization_acknowledged: false,
+    authorization_acknowledged: true,
   }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -61,9 +61,6 @@ export function NewRunPage() {
       if (url.protocol !== 'https:') return 'Use a public HTTPS product URL.';
     } catch {
       return 'Enter a complete product website URL.';
-    }
-    if (!configuration.authorization_acknowledged) {
-      return 'Confirm that you own this product or are authorized to test it.';
     }
     if (configuration.product_description.trim().length < 10) {
       return 'Describe what the product does.';
@@ -106,7 +103,7 @@ export function NewRunPage() {
           ...configuration,
           company_name: intelligence?.company_name || configuration.company_name || productName,
           product_name: productName,
-          authorization_acknowledged: configuration.authorization_acknowledged,
+          authorization_acknowledged: true,
         },
         {
           population_seed: seed,
@@ -194,15 +191,6 @@ export function NewRunPage() {
           />
         </label>
       </div>
-
-      <label className="centopus-authorization">
-        <input
-          type="checkbox"
-          checked={configuration.authorization_acknowledged}
-          onChange={event => update('authorization_acknowledged', event.target.checked)}
-        />
-        <span>I own this product or have explicit authorization to test this website.</span>
-      </label>
 
       <div className="centopus-new-run-footer">
         <label className="centopus-agent-count">

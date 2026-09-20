@@ -1,0 +1,211 @@
+.centopus-run-wait {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(112, 75, 255, .18), transparent 28rem),
+    linear-gradient(180deg, #050309 0%, #07040d 100%);
+  color: #f7f4ff;
+}
+
+.centopus-run-wait-glow {
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(72, 83, 255, .16), transparent 67%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.centopus-run-wait-card {
+  position: relative;
+  z-index: 1;
+  width: min(660px, 100%);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  padding: 44px 38px;
+  border: 1px solid rgba(139, 108, 255, .24);
+  border-radius: 22px;
+  background: rgba(9, 5, 15, .82);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .38);
+  backdrop-filter: blur(18px);
+}
+
+.centopus-run-wait-mark {
+  width: 72px;
+  height: 72px;
+  filter: drop-shadow(0 0 20px rgba(124, 92, 255, .38));
+}
+
+.centopus-run-wait-loader {
+  display: flex;
+  gap: 7px;
+  margin: 22px 0 18px;
+}
+
+.centopus-run-wait-loader span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8a6cff;
+  animation: centopus-run-bounce 1.15s ease-in-out infinite;
+}
+
+.centopus-run-wait-loader span:nth-child(2) { animation-delay: .14s; }
+.centopus-run-wait-loader span:nth-child(3) { animation-delay: .28s; }
+
+@keyframes centopus-run-bounce {
+  0%, 70%, 100% { transform: translateY(0); opacity: .45; }
+  35% { transform: translateY(-8px); opacity: 1; }
+}
+
+.centopus-run-wait h1 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(32px, 5vw, 48px);
+  line-height: 1.02;
+  letter-spacing: -.05em;
+  font-weight: 640;
+}
+
+.centopus-run-wait-task {
+  max-width: 560px;
+  margin: 12px 0 0;
+  color: #aba0bc;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.centopus-run-wait-progress {
+  width: 100%;
+  height: 8px;
+  margin-top: 30px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #181022;
+}
+
+.centopus-run-wait-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5b3ee1, #8e70ff);
+  transition: width .5s ease;
+}
+
+.centopus-run-wait-status {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  color: #8f849e;
+  font-size: 10px;
+}
+
+.centopus-run-wait-status strong {
+  color: #ded6ea;
+  font-weight: 620;
+}
+
+.centopus-run-wait-agents {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 25px;
+}
+
+.centopus-run-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #251a31;
+  border: 1px solid #47315f;
+}
+
+.centopus-run-dot.active,
+.centopus-run-dot.provisioning {
+  background: #7c5cff;
+  border-color: #9b84ff;
+  box-shadow: 0 0 16px rgba(124, 92, 255, .55);
+  animation: centopus-run-pulse 1.2s ease-in-out infinite;
+}
+
+.centopus-run-dot.completed {
+  background: #b69cff;
+  border-color: #d2c4ff;
+}
+
+.centopus-run-dot.failed,
+.centopus-run-dot.timed_out,
+.centopus-run-dot.abandoned,
+.centopus-run-dot.cancelled {
+  background: #70405e;
+  border-color: #9b5c82;
+}
+
+@keyframes centopus-run-pulse {
+  50% { transform: scale(1.24); }
+}
+
+.centopus-run-wait-note {
+  margin: 24px 0 0;
+  color: #766b84;
+  font-size: 10px;
+}
+
+.centopus-run-wait-error {
+  margin: 20px 0 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 126, 126, .24);
+  border-radius: 9px;
+  background: rgba(90, 24, 39, .18);
+  color: #ffabab;
+  font-size: 10px;
+}
+
+.centopus-run-results-link {
+  margin-top: 24px;
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(135deg, #8263ff, #5839d8);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media (max-width: 620px) {
+  .centopus-run-wait {
+    padding: 16px;
+  }
+
+  .centopus-run-wait-card {
+    padding: 34px 22px;
+  }
+
+  .centopus-run-wait-status {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .centopus-run-wait-loader span,
+  .centopus-run-dot.active,
+  .centopus-run-dot.provisioning {
+    animation: none !important;
+  }
+}
