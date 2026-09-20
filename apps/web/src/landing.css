@@ -93,34 +93,6 @@
   line-height: 1;
 }
 
-.centopus-auth-button {
-  position: absolute;
-  top: 28px;
-  left: 34px;
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 8px 16px;
-  border: 1px solid rgba(155, 130, 255, .25);
-  border-radius: 10px;
-  background: rgba(5, 3, 10, .52);
-  color: #cfc7e4;
-  font-size: 12px;
-  font-weight: 600;
-  backdrop-filter: blur(14px);
-  cursor: pointer;
-  transition: color .18s ease, border-color .18s ease, background .18s ease;
-}
-
-.centopus-auth-button:hover {
-  color: #fff;
-  border-color: rgba(155, 130, 255, .58);
-  background: rgba(19, 12, 32, .76);
-}
-
-.centopus-auth-button:focus-visible,
 .centopus-previous-button:focus-visible,
 .centopus-send-button:focus-visible,
 .centopus-panel-close:focus-visible {
@@ -428,21 +400,11 @@
     height: 130px;
   }
 
-  .centopus-previous-button,
-  .centopus-auth-button {
+  .centopus-previous-button {
     top: 20px;
+    right: 18px;
     min-height: 36px;
     padding: 7px 10px;
-  }
-
-  .centopus-previous-button {
-    right: 18px;
-  }
-
-  .centopus-auth-button {
-    left: 18px;
-    right: auto;
-    font-size: 11px;
   }
 
   .centopus-centered-brand {
