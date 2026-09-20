@@ -13,7 +13,7 @@ below are adapted source changes, not whole-commit cherry-picks.
 
 | Foundation source | Useful feature | Adaptation and verification |
 | --- | --- | --- |
-| `5cf47a2`, `f88efe4`: CDK configuration, data/execution/observability stacks | Explicit configuration, retained/imported storage, scoped IAM, execution limits and interruption handling | New `infra/cdk/stacks.ts` bundles main's three production Node entries, retains its cross-account Python worker and schema, and defines Cognito/JWT access. Template tests and offline synthesis check resources and dependencies. |
+| `5cf47a2`, `f88efe4`: CDK configuration, data/execution/observability stacks | Explicit configuration, retained/imported storage, scoped IAM, execution limits and interruption handling | New `infra/cdk/stacks.ts` bundles main's three production Node entries, retains its cross-account Python worker and schema, and defines the public judge API with backend-enforced target and execution controls. Template tests and offline synthesis check resources and dependencies. |
 | `83b267d`: `services/api/src/aws/budget.ts` | Atomic, retained global reservations | `services/api/src/budget.ts` reserves main's estimate and claims `RUN#/META` in one transaction. Tests cover concurrent starts, exhaustion, rollback and stale persona revisions. No JSON-body storage or automatic refund is introduced. |
 | `83b267d`: `services/agent-worker/python/nova_runner.py` | Custom Nova actuator records actual browser actions | `services/nova-worker/evidence.py` emits main-compatible raw steps; main's trace adapter requires observed action/result/time/URL. Python tests cover failures, limits, goal evidence, wrapped stops and cleanup; SDK surface verification checks the installed actuator signatures. |
 | `04881af`, `86416f2`, `f88efe4` | Execution validation, identity checks, bounded retries and evidence persistence | Main's API revalidates stored plans, checks population/payload size, and claims sessions before dispatch. Browser side effects have no automatic retry. Worker/finalizer failures do not fabricate evidence references or costs. Production-chain tests exercise main's routes and records. |
@@ -21,9 +21,9 @@ below are adapted source changes, not whole-commit cherry-picks.
 | Foundation AWS, Python and browser tests | Failure-focused validation approach | New tests use main's production factories and explicit AWS fixtures. No tests requiring foundation's incompatible storage/API are copied wholesale. |
 
 Additional integration fixes include full DynamoDB pagination, DNS-pinned and
-size-bounded product-page retrieval, shared authenticated frontend API calls,
-explicit operator authorization acknowledgment, cancellation/start race handling,
-truthful historical-evidence warnings, and blocking dependency audits.
+size-bounded product-page retrieval, production frontend API calls without an
+operator-login gate, backend-authoritative target validation, cancellation/start
+race handling, truthful historical-evidence warnings, and blocking dependency audits.
 
 ## Intentionally not ported
 
@@ -70,9 +70,10 @@ remain separate histories after selective adaptation.
   deterministic tests and is prohibited in production bundles.
 - Execution: Step Functions -> TypeScript worker -> cross-account role -> Python
   Nova worker. Direct Python CLI execution is diagnostic and bypasses API reservations.
-- Frontend HTTP: `apps/web/src/lib/api.ts`, with Cognito PKCE operator sign-in.
-- Backend infrastructure: `infra/cdk/`; Amplify hosting/bootstrap/secret provisioning
-  and current service access require explicit operator configuration.
+- Frontend HTTP: `apps/web/src/lib/api.ts`, connected directly to the production API.
+- Backend infrastructure: `infra/cdk/`; Gemini is retrieved server-side through
+  Secrets Manager, and GitHub Actions deploys merged `main` builds to Amplify with
+  repository-and-branch-restricted AWS OIDC credentials.
 
 No mascot asset exists in the inspected branch history at the requested path; the
 existing brand graphic is retained. User-facing text is Centopus. Internal package,
