@@ -110,6 +110,40 @@
   box-shadow: 0 0 0 3px rgba(124, 92, 255, .11);
 }
 
+.centopus-authorization {
+  display: flex !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 9px !important;
+  padding: 9px 11px;
+  border: 1px solid rgba(151, 124, 255, .16);
+  border-radius: 9px;
+  background: rgba(8, 4, 14, .58);
+  cursor: pointer;
+}
+
+.centopus-authorization input {
+  width: 16px !important;
+  height: 16px !important;
+  margin: 1px 0 0 !important;
+  padding: 0 !important;
+  flex: 0 0 auto;
+  accent-color: #8063ff;
+  cursor: pointer;
+}
+
+.centopus-authorization span {
+  color: #a99fba !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  line-height: 1.5 !important;
+}
+
+.centopus-authorization:focus-within {
+  border-color: rgba(128, 99, 255, .52);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, .09);
+}
+
 .centopus-new-run-footer {
   display: grid;
   grid-template-columns: 170px minmax(220px, 1fr);
