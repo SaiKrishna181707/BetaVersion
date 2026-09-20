@@ -29,7 +29,18 @@ jobs:
       - name: Build production frontend
         env:
           VITE_API_BASE_URL: https://fkvvrndb17.execute-api.us-east-1.amazonaws.com
-        run: npm run build
+          VITE_COGNITO_DOMAIN: ${{ vars.CENTOPUS_COGNITO_DOMAIN }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.CENTOPUS_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_REDIRECT_URI: ${{ vars.CENTOPUS_COGNITO_REDIRECT_URI }}
+        run: |
+          set -euo pipefail
+          for name in VITE_COGNITO_DOMAIN VITE_COGNITO_CLIENT_ID VITE_COGNITO_REDIRECT_URI; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing GitHub repository variable for $name. Configure CENTOPUS_COGNITO_DOMAIN, CENTOPUS_COGNITO_CLIENT_ID and CENTOPUS_COGNITO_REDIRECT_URI before deploying the production frontend."
+              exit 1
+            fi
+          done
+          npm run build
 
       - name: Package frontend
         run: cd apps/web/dist && zip -qr "$GITHUB_WORKSPACE/amplify.zip" .
