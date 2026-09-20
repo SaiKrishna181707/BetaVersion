@@ -59,6 +59,24 @@ export interface CentopusReport {
     what_slowed_them_down: string[];
     continuation_or_abandonment: string;
     improvement_suggestion: string | null;
+    /**
+     * Synthetic first-person reflection derived only from recorded evidence plus the
+     * persisted persona. These fields are optional so historical reports remain readable.
+     * They are not human-reported sentiment and never replace the event trail.
+     */
+    reflection_basis?: 'EVIDENCE_DERIVED_SYNTHETIC_REFLECTION';
+    overall_feeling?: 'POSITIVE' | 'MIXED' | 'NEGATIVE' | 'NEUTRAL' | 'INSUFFICIENT_EVIDENCE';
+    feeling_summary?: string;
+    first_impression?: string | null;
+    what_i_liked?: string[];
+    what_frustrated_me?: string[];
+    expectation_gap?: string;
+    task_confidence?: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+    task_confidence_reason?: string;
+    would_use_again?: 'YES' | 'MAYBE' | 'NO' | 'NOT_ENOUGH_EVIDENCE';
+    would_use_again_reason?: string;
+    direct_feedback?: string;
+    evidence_event_count?: number;
   }>;
   limitations: string[];
 }
