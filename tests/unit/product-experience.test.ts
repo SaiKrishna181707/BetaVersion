@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPersonaPatch, parseGeminiIntelligence, validateProductIntelligenceRequest } from '@synthetic-beta/api';
+import { applyPersonaPatch, fallbackProductIntelligence, parseGeminiIntelligence, stripHtml, validateProductIntelligenceRequest } from '@synthetic-beta/api';
 import { personaFixture } from '../fixtures/run-fixtures';
 
 test('accepts only public HTTPS product pages for intelligence', () => {
@@ -22,6 +22,25 @@ test('turns Gemini JSON into bounded product intelligence', () => {
   assert.equal(result.product_name, 'Acme Flow');
   assert.equal(result.suggested_objectives.length, 3);
   assert.equal(result.source_title, 'Acme home');
+});
+
+test('extracts a bounded useful sample from oversized first-party HTML', () => {
+  const page = stripHtml(`<title>Apple</title><main>${'Products and services. '.repeat(20_000)}</main>`);
+  assert.equal(page.title, 'Apple');
+  assert.equal(page.text.length, 24_000);
+  assert.match(page.text, /Products and services/);
+});
+
+test('returns conservative editable intelligence when retrieval or Gemini cannot enrich it', () => {
+  const result = fallbackProductIntelligence(
+    { company_name: 'Apple', website_url: 'https://apple.com/' },
+    '',
+    '2026-09-20T00:00:00.000Z',
+  );
+  assert.equal(result.product_name, 'Apple');
+  assert.match(result.summary, /intentionally conservative and remains editable/);
+  assert.equal(result.suggested_objectives.length, 3);
+  assert.equal(result.source_title, 'apple.com');
 });
 
 test('updates editable persona fields without changing identity', () => {
