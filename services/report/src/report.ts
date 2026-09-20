@@ -253,7 +253,6 @@ export async function buildSyntheticBetaReport(input: BuildReportInput): Promise
   }
 
   const personaById = new Map((input.personas ?? []).map(persona => [persona.persona_id, persona]));
-  const sessionById = new Map(input.sessions.map(session => [session.session_id, session]));
   const describeEvent = (event: BehaviorEvent): string =>
     event.target_descriptor || event.page_title || event.route || event.url;
 
