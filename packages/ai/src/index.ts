@@ -1,4 +1,5 @@
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
+import { fromTemporaryCredentials } from '@aws-sdk/credential-providers';
 
 export interface JsonModelRequest {
   system: string;
@@ -13,10 +14,23 @@ export type JsonModel = <T>(request: JsonModelRequest) => Promise<T>;
 const clients = new Map<string, BedrockRuntimeClient>();
 
 function client(region: string): BedrockRuntimeClient {
-  const existing = clients.get(region);
+  const roleArn = process.env.BEDROCK_ROLE_ARN?.trim();
+  const key = `${region}|${roleArn || 'local'}`;
+  const existing = clients.get(key);
   if (existing) return existing;
-  const created = new BedrockRuntimeClient({ region });
-  clients.set(region, created);
+  const created = new BedrockRuntimeClient({
+    region,
+    ...(roleArn ? {
+      credentials: fromTemporaryCredentials({
+        params: {
+          RoleArn: roleArn,
+          RoleSessionName: 'centopus-bedrock',
+          ...(process.env.BEDROCK_EXTERNAL_ID ? { ExternalId: process.env.BEDROCK_EXTERNAL_ID } : {}),
+        },
+      }),
+    } : {}),
+  });
+  clients.set(key, created);
   return created;
 }
 

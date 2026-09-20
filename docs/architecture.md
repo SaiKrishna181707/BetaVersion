@@ -22,6 +22,8 @@ React frontend (Amplify build configuration)
 
 Cognito provides an operator workspace. Health reports configuration availability, not a live AWS probe. Product intelligence and editable persona narratives use low-cost Amazon Nova models through Bedrock; they never supply behavioral events. Only Nova Act browser evidence can affect measured outcomes.
 
+When `BEDROCK_ROLE_ARN` is configured, the control-account API and finalizer obtain short-lived STS credentials for that role and invoke Nova in the agent account. This keeps Amplify, API Gateway, Step Functions, DynamoDB, and S3 in the control account while avoiding duplicate infrastructure in the Bedrock-enabled account.
+
 ## Authoritative storage
 
 | pk | sk | Data |
