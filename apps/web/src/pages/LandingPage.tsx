@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from '@centopus/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
+import { authConfigured, beginLogin, signOut, tokens } from '../lib/auth';
 
 const loadingMessages = [
   'Understanding your product…',
@@ -38,6 +39,7 @@ export function LandingPage() {
 
   useEffect(() => {
     let active = true;
+    if (!tokens()) return () => { active = false; };
     productApi.listRuns()
       .then(value => { if (active) setRuns(value); })
       .catch(() => undefined);
@@ -64,6 +66,10 @@ export function LandingPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (authConfigured() && !tokens()) {
+      setError('Sign in as an operator before starting a product analysis.');
+      return;
+    }
     setBuilding(true);
     setMessageIndex(0);
     setError('');
@@ -103,6 +109,13 @@ export function LandingPage() {
         <span>centopus</span>
       </a>
 
+      {authConfigured() ? (
+        tokens() ? (
+          <button type="button" className="centopus-auth-button" onClick={() => signOut()}>Sign out</button>
+        ) : (
+          <button type="button" className="centopus-auth-button" onClick={() => void beginLogin()}>Operator sign in</button>
+        )
+      ) : null}
     </header>
 
     <main id="main" className="centopus-landing-main">
