@@ -45,6 +45,21 @@ function applyNarrative(base: SyntheticPersona, raw: Record<string, unknown>): S
   return result;
 }
 
+function disambiguateNarratives(personas: SyntheticPersona[]): SyntheticPersona[] {
+  const seen = new Set<string>();
+  return personas.map(persona => {
+    let next = persona;
+    let signature = `${next.display_name}|${next.backstory}`.toLowerCase();
+    if (seen.has(signature)) {
+      next = { ...next, backstory: `${next.backstory} This synthetic testing perspective is tracked as ${next.persona_id}.` };
+      signature = `${next.display_name}|${next.backstory}`.toLowerCase();
+    }
+    if (seen.has(signature)) throw new Error('Population contains duplicate persona stories.');
+    seen.add(signature);
+    return next;
+  });
+}
+
 export async function buildNovaCohort(
   spec: PopulationSpec,
   model: JsonModel = invokeNovaJson,
@@ -54,12 +69,15 @@ export async function buildNovaCohort(
   const chunks: SyntheticPersona[][] = [];
   for (let index = 0; index < bases.length; index += 20) chunks.push(bases.slice(index, index + 20));
 
-  const generated: SyntheticPersona[][] = [];
-  // Enrich batches sequentially. A 100-person population previously launched five
-  // large Bedrock requests at once, so one throttled or truncated response failed
-  // the entire run. The deterministic skeletons are already complete personas;
-  // model enrichment is optional and may safely fall back per batch.
-  for (const [chunkIndex, chunk] of chunks.entries()) {
+  const generated: SyntheticPersona[][] = new Array(chunks.length);
+  // Keep enough parallelism to finish a maximum population inside the HTTP response
+  // window, without launching all five large Bedrock requests simultaneously. Each
+  // enrichment batch is optional and falls back independently to complete skeletons.
+  let nextChunk = 0;
+  const enrich = async () => {
+    while (nextChunk < chunks.length) {
+      const chunkIndex = nextChunk++;
+      const chunk = chunks[chunkIndex]!;
     try {
       const payload = await model<{ personas?: Record<string, unknown>[] }>({
       modelId,
@@ -88,15 +106,14 @@ Skeletons:\n${JSON.stringify(chunk.map(persona => ({
         throw new Error('Nova returned an incomplete persona population.');
       }
       const byId = new Map<string, Record<string, unknown>>(payload.personas.map((persona: Record<string, unknown>) => [String(persona.persona_id), persona]));
-      generated.push(chunk.map(base => applyNarrative(base, byId.get(base.persona_id) || Object.create(null) as Record<string, unknown>)));
+      generated[chunkIndex] = chunk.map(base => applyNarrative(base, byId.get(base.persona_id) || Object.create(null) as Record<string, unknown>));
     } catch (cause) {
       console.warn(`[Population] Nova enrichment batch ${chunkIndex + 1} failed; using deterministic complete profiles.`, cause instanceof Error ? cause.name : 'UnknownError');
-      generated.push(chunk);
+      generated[chunkIndex] = chunk;
     }
-  }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, chunks.length) }, () => enrich()));
 
-  const personas = generated.flat();
-  const signatures = personas.map(persona => `${persona.display_name}|${persona.backstory}`.toLowerCase());
-  if (new Set(signatures).size !== signatures.length) throw new Error('Nova returned duplicate persona stories.');
-  return personas;
+  return disambiguateNarratives(generated.flat());
 }
