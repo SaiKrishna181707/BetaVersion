@@ -1,3 +1,4 @@
+import { accessToken } from './auth';
 import type {
   BehaviorEvent,
   PopulationSpec,
@@ -88,10 +89,11 @@ async function request<T>(
   init?: RequestInit,
   options: { allow404?: boolean } = {},
 ): Promise<T | null> {
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
+  const token = accessToken();
+  const headers = new Headers(init?.headers);
+  headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(`${apiBaseUrl()}${path}`, { ...init, headers });
   if (response.status === 404 && options.allow404) return null;
   const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
   if (!response.ok) {
