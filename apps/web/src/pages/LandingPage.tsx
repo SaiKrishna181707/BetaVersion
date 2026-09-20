@@ -1,4 +1,3 @@
-import { OperatorSignIn } from '../components/OperatorSignIn';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Brand, Icon } from '@synthetic-beta/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
@@ -56,7 +55,7 @@ export function LandingPage() {
 
   return <div className="vision-landing">
     <header className="vision-landing-nav">
-      <Brand /><OperatorSignIn />
+      <Brand />
       {runs.length > 0 ? <a href="#recent-runs">View runs</a> : null}
     </header>
 

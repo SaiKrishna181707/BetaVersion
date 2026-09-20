@@ -5,7 +5,7 @@ infra/cdk/stacks.ts defines the backend for main's application/storage contract.
 | Component | Repository definition | Verification boundary |
 | --- | --- | --- |
 | DynamoDB / S3 | CDK creates retained resources or imports supplied names | Imported TTL, encryption, IAM and lifecycle settings need verification |
-| API Gateway / Cognito | HTTP API, JWT authorizer, operator pool and public PKCE client | Admin provisioning and deployed login/issuer/scope behavior need testing |
+| API Gateway | Public HTTP API for the judge-facing product; Lambda and service permissions remain least-privilege | Deployed route/CORS behavior needs testing |
 | API / worker / finalizer | Explicit bundled Lambda entries | Bundling is not deployment evidence |
 | Step Functions | Inline Map, five-worker bound, timeout, catches, reconciliation | Quotas and interruption behavior need live verification |
 | Budgets / SNS / Lambda alarms | $80 monthly control-account notification, 80%/100% thresholds | Confirm subscription/delivery; no dual-account aggregation or billing hard stop |
@@ -34,7 +34,7 @@ Existing resources are not automatically migrated or adopted. Set STATE_TABLE an
 
 npm run infra:deploy is the explicit deployment command, with CDK approval for permission broadening. It was not run during cleanup. Deploy each stack using credentials authorized for that account. Stable configured role/function names avoid cross-account CloudFormation references.
 
-Configure the existing Amplify branch with VITE_API_BASE_URL, VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID from control-stack outputs. Its origin must exactly match AMPLIFY_ORIGIN and the Cognito callback/logout URLs. Provision operators administratively. Supply GEMINI_SECRET_ARN for product intelligence.
+Configure the existing Amplify branch with VITE_API_BASE_URL from the control-stack output. Its origin must exactly match AMPLIFY_ORIGIN. Supply GEMINI_SECRET_ARN for product intelligence.
 
 The admission ledger starts at zero on a new table. Reconcile prior usage and conservatively seed reservations before adopting an existing table; otherwise previous spend is outside the ledger. Failed/cancelled runs do not refund automatically. Budget notifications do not enforce billing limits.
 

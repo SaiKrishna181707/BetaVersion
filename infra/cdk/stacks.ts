@@ -8,10 +8,8 @@ import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
-import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as gateway from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as budgets from 'aws-cdk-lib/aws-budgets';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
@@ -108,15 +106,9 @@ export function createStacks(app: App, config: DeploymentConfig) {
   new events.Rule(control, 'InterruptedRuns', { eventPattern: { source: ['aws.states'], detailType: ['Step Functions Execution Status Change'],
     detail: { stateMachineArn: [machine.stateMachineArn], status: ['FAILED', 'TIMED_OUT', 'ABORTED'] } }, targets: [new targets.SfnStateMachine(cleanup)] });
 
-  const pool = new cognito.UserPool(control, 'Operators', { selfSignUpEnabled: false, signInAliases: { email: true },
-    removalPolicy: RemovalPolicy.RETAIN });
-  const client = pool.addClient('WebClient', { generateSecret: false, oAuth: { flows: { authorizationCodeGrant: true },
-    scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL], callbackUrls: [`${config.webOrigin}/`], logoutUrls: [`${config.webOrigin}/`] } });
-  const domain = pool.addDomain('SignIn', { cognitoDomain: { domainPrefix: `${prefix}-${controlAccount}` } });
-  const apiFunction = makeFunction('Api', 'api', 30);
+  const apiFunction = makeFunction('Api', 'api', 45);
   apiFunction.addEnvironment('RUN_STATE_MACHINE_ARN', machine.stateMachineArn);
   apiFunction.addEnvironment('AMPLIFY_ORIGIN', config.webOrigin);
-  apiFunction.addEnvironment('REQUIRE_AUTH', 'true');
   if (config.geminiSecretArn) {
     apiFunction.addEnvironment('GEMINI_SECRET_ARN', config.geminiSecretArn);
     apiFunction.addToRolePolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue'], resources: [config.geminiSecretArn] }));
@@ -124,11 +116,10 @@ export function createStacks(app: App, config: DeploymentConfig) {
   machine.grantStartExecution(apiFunction); machine.grantExecution(apiFunction, 'states:StopExecution');
   bucket.grantRead(apiFunction, 'reports/*'); bucket.grantRead(apiFunction, 'nova-trajectories/*');
   const integration = new HttpLambdaIntegration('ProductionApi', apiFunction);
-  const authorizer = new HttpUserPoolAuthorizer('OperatorsOnly', pool, { userPoolClients: [client] });
   const api = new gateway.HttpApi(control, 'HttpApi', { corsPreflight: { allowOrigins: [config.webOrigin],
-    allowMethods: [gateway.CorsHttpMethod.GET, gateway.CorsHttpMethod.POST, gateway.CorsHttpMethod.PATCH, gateway.CorsHttpMethod.OPTIONS], allowHeaders: ['content-type', 'authorization'] } });
+    allowMethods: [gateway.CorsHttpMethod.GET, gateway.CorsHttpMethod.POST, gateway.CorsHttpMethod.PATCH, gateway.CorsHttpMethod.OPTIONS], allowHeaders: ['content-type'] } });
   api.addRoutes({ path: '/health', methods: [gateway.HttpMethod.GET], integration });
-  api.addRoutes({ path: '/{proxy+}', integration, authorizer, authorizationScopes: ['openid'] });
+  api.addRoutes({ path: '/{proxy+}', integration });
 
   const workflow = new nova.CfnWorkflowDefinition(agent, 'NovaWorkflow', { name: `${prefix}-browser-session` });
   const novaWorker = new lambda.DockerImageFunction(agent, 'NovaWorker', { functionName: novaFunctionName,
@@ -145,8 +136,6 @@ export function createStacks(app: App, config: DeploymentConfig) {
       ArnEquals: { 'aws:PrincipalArn': `arn:aws:iam::${controlAccount}:role/${workerRoleName}` } }) });
   novaWorker.grantInvoke(bridge);
   new CfnOutput(control, 'ApiUrl', { value: api.apiEndpoint });
-  new CfnOutput(control, 'CognitoDomain', { value: domain.baseUrl() });
-  new CfnOutput(control, 'CognitoClientId', { value: client.userPoolClientId });
   new CfnOutput(control, 'StateTable', { value: table.tableName });
   new CfnOutput(control, 'ArtifactBucket', { value: bucket.bucketName });
   new CfnOutput(control, 'StateMachineArn', { value: machine.stateMachineArn });

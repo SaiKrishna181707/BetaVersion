@@ -1,4 +1,3 @@
-import { accessToken, authConfigured } from './auth';
 import type {
   BehaviorEvent,
   PopulationSpec,
@@ -89,11 +88,9 @@ async function request<T>(
   init?: RequestInit,
   options: { allow404?: boolean } = {},
 ): Promise<T | null> {
-  const token = accessToken();
-  if (authConfigured && path !== '/health' && !token) throw new Error('Sign in as an operator to continue.');
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
   if (response.status === 404 && options.allow404) return null;
   const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
