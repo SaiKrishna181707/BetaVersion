@@ -1,0 +1,4 @@
+# Direct runtime SDK pins. Compile on Linux/Python 3.12 with pip-tools 7.6.1.
+bedrock-agentcore==1.23.1
+boto3==1.43.97
+nova-act==3.4.187.0

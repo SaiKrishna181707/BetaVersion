@@ -1,5 +1,5 @@
 /**
- * Fieldwork: the authorized demo target for Synthetic Beta.
+ * Fieldwork: the authorized demo target for Centopus.
  *
  * Every request stays in this browser. There is no fetch, no XHR, and no external asset.
  * Three friction sources are deliberate and documented in demo-target/README.md:

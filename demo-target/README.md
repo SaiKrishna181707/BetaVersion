@@ -1,6 +1,6 @@
 # Demo target: Fieldwork
 
-An authorized, local, disposable web product used as the test target for Synthetic Beta. It is intentionally
+An authorized, local, disposable web product used as the test target for Centopus. It is intentionally
 imperfect, and it makes **no external requests** — there is no fetch, no XHR, no remote asset, and no real data.
 Everything lives in this browser's `localStorage`.
 

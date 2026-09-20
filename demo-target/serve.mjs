@@ -43,6 +43,6 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Synthetic Beta demo target: http://${host}:${port}`);
+  console.log(`Centopus demo target: http://${host}:${port}`);
   console.log('Authorized, local, disposable. No external network calls, no real data.');
 });

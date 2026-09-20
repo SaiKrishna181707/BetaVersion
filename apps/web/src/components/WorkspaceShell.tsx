@@ -1,3 +1,4 @@
+import { OperatorSignIn } from './OperatorSignIn';
 import { useEffect, useState, type ReactNode } from 'react';
 import { GUARDRAILS, formatUsd } from '@synthetic-beta/contracts';
 import { Badge, Brand, Icon } from '@synthetic-beta/ui';
@@ -39,8 +40,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     <aside className="workspace-sidebar vision-sidebar">
       <Brand />
       <div className="workspace-selector">
-        <span className="workspace-avatar">S</span>
-        <div><strong>Synthetic Beta</strong><span>Product research workspace</span></div>
+        <span className="workspace-avatar">C</span>
+        <div><strong>Centopus</strong><span>Product research workspace</span></div>
       </div>
       <span className="nav-caption mono">WORKSPACE</span>
       <nav aria-label="Workspace">
@@ -53,16 +54,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <span>BUILD → OBSERVE → LEARN</span>
       </div>
       <div className="sidebar-budget">
-        <div><Icon name="shield" size={14} /> GLOBAL CEILING</div>
+        <div><Icon name="shield" size={14} /> EXECUTION ALLOWANCE</div>
         <strong className="mono">{formatUsd(GUARDRAILS.GLOBAL_SPEND_CEILING_USD * 100)}<span>USD</span></strong>
-        <p>Backend-enforced safety ceiling</p>
+        <p>Cumulative estimated spend reservations</p>
       </div>
     </aside>
 
     <div className="workspace-content">
       <header className="workspace-topbar vision-topbar">
+        <OperatorSignIn />
         <div className="mobile-brand"><Brand compact /></div>
-        <div className="breadcrumbs"><span>Synthetic Beta</span><Icon name="chevron" size={12} /><strong>{section}</strong></div>
+        <div className="breadcrumbs"><span>Centopus</span><Icon name="chevron" size={12} /><strong>{section}</strong></div>
         <Badge tone={backend === 'CONNECTED' ? 'accent' : backend === 'CHECKING' ? 'neutral' : 'warning'}>
           <span className="dot" />
           {backend === 'CONNECTED' ? 'API CONNECTED' : backend === 'CHECKING' ? 'CHECKING API' : 'API UNAVAILABLE'}

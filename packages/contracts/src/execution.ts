@@ -49,7 +49,7 @@ export interface RunPlan {
 
 /**
  * The boundary a real browser executor (Nova Act on AgentCore Browser) must implement.
- * Nothing in this repository implements it yet, and no stub pretends to.
+ * The local adapter implements this port; production uses the cross-account Lambda path.
  */
 export interface SessionExecutorPort {
   readonly kind: string;

@@ -1,4 +1,4 @@
-"""AWS execution adapter for one Synthetic Beta session.
+"""AWS execution adapter for one Centopus session.
 
 SessionPlan JSON in -> Nova Act drives an AgentCore Browser -> JSON result out.
 
@@ -56,6 +56,7 @@ class ValidatedPlan:
     allowed_origins: tuple[str, ...]
     max_actions: int
     max_session_seconds: int
+    checkpoint_plan: tuple[str, ...] = ()
 
 
 def _required_string(raw: dict[str, Any], key: str) -> str:
@@ -194,6 +195,11 @@ def validate_plan(raw: Any) -> ValidatedPlan:
             f"max_session_seconds must be between {MIN_SESSION_SECONDS} and {MAX_SESSION_SECONDS}"
         )
 
+    checkpoints = raw.get('checkpoint_plan', [])
+    if (not isinstance(checkpoints, list) or len(checkpoints) > 20
+        or any(not isinstance(cp, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', cp) for cp in checkpoints)
+        or len(set(checkpoints)) != len(checkpoints)):
+        raise PlanError('checkpoint_plan must contain up to 20 distinct DOM checkpoint names')
     return ValidatedPlan(
         run_id=run_id,
         session_id=session_id,
@@ -203,6 +209,7 @@ def validate_plan(raw: Any) -> ValidatedPlan:
         allowed_origins=allowed,
         max_actions=max_actions,
         max_session_seconds=max_session_seconds,
+        checkpoint_plan=tuple(checkpoints),
     )
 
 
@@ -220,7 +227,7 @@ def build_prompt(plan: ValidatedPlan) -> str:
     }
     trait_text = "\n".join(f"- {key}: {value}" for key, value in traits.items())
 
-    return f"""You are one synthetic beta user, not a QA engineer and not an assistant giving advice.
+    return f"""You are one Centopus synthetic user, not a QA engineer and not an assistant giving advice.
 
 Persona:
 {trait_text}
@@ -252,81 +259,6 @@ violate a safety boundary. At the end, briefly state whether you completed, aban
 what visible state led to that outcome."""
 
 
-def parse_nova_html_log(html_path: str) -> list[dict[str, Any]]:
-    """Parse a Nova Act generated HTML log into structured RawNovaStep dictionaries."""
-    if not os.path.exists(html_path):
-        return []
-
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        return []
-
-    with open(html_path, "r", encoding="utf-8") as handle:
-        soup = BeautifulSoup(handle.read(), "html.parser")
-
-    steps: list[dict[str, Any]] = []
-    containers = soup.find_all(class_="run-step-container")
-    elapsed_ms = 0
-
-    for i, c in enumerate(containers):
-        pre = c.find("pre")
-        pre_text = pre.get_text().strip() if pre else ""
-
-        thought_match = re.search(r'think\("([^"]+)"\)', pre_text)
-        thought = thought_match.group(1) if thought_match else ""
-
-        action_data: dict[str, Any] = {"type": "click"}
-        type_match = re.search(r'agentType\("([^"]*)",\s*"([^"]*)"\)', pre_text)
-        click_match = re.search(r'agentClick\("([^"]*)"\)', pre_text)
-        scroll_match = re.search(r'agentScroll\("([^"]*)",\s*"([^"]*)"\)', pre_text)
-
-        if type_match:
-            action_data = {"type": "type", "value": type_match.group(1), "selector": type_match.group(2)}
-        elif click_match:
-            action_data = {"type": "click", "selector": click_match.group(1)}
-        elif scroll_match:
-            action_data = {"type": "scroll", "details": scroll_match.group(1), "selector": scroll_match.group(2)}
-
-        active_url = ""
-        for d in c.find_all("div"):
-            if "Active URL" in d.get_text():
-                m = re.search(r'https?://[^\s<"\']+', d.get_text())
-                if m:
-                    active_url = m.group(0)
-                    break
-
-        server_time_s = 2.5
-        for d in c.find_all("div"):
-            if "Server time:" in d.get_text():
-                m = re.search(r"([\d\.]+)s", d.get_text())
-                if m:
-                    try:
-                        server_time_s = float(m.group(1))
-                    except ValueError:
-                        pass
-                    break
-
-        elapsed_ms += int(server_time_s * 1000)
-        img = c.find("img")
-        has_screenshot = bool(img and img.get("src") and "base64," in img.get("src", ""))
-
-        steps.append({
-            "sequence": i + 1,
-            "thought": thought,
-            "action": action_data,
-            "observation": {
-                "url": active_url,
-                "title": "Fieldwork" if "demo-target" in active_url else "ShopPulse",
-            },
-            "elapsed_ms": elapsed_ms,
-            "status": "SUCCESS",
-            "screenshot_ref": f"screenshot-step-{i+1}" if has_screenshot else None,
-        })
-
-    return steps
-
-
 def execute_with_aws(
     plan: ValidatedPlan,
     *,
@@ -335,104 +267,75 @@ def execute_with_aws(
     model_id: str,
     browser_identifier: str = DEFAULT_BROWSER_IDENTIFIER,
 ) -> dict[str, Any]:
-    """Run one real Nova Act session inside an AgentCore Browser."""
+    """Run Nova Act through an instrumented actuator; retain partial action evidence."""
+    import contextlib
+    import logging
+    import tempfile
+    import time
     from bedrock_agentcore.tools.browser_client import BrowserClient
     from nova_act import GuardrailDecision, NovaAct, Workflow
+    from evidence import BrowserEvidence, SessionStop, recorded_actuator
 
-    observation_count = 0
-
-    def state_guardrail(state: Any) -> Any:
-        nonlocal observation_count
-        observation_count += 1
-        reason = navigation_guardrail_reason(
-            state.browser_url,
-            plan.allowed_origins,
-            observation_count,
-            plan.max_actions,
-        )
-        return GuardrailDecision.PASS if reason == "PASS" else GuardrailDecision.BLOCK
-
+    evidence = BrowserEvidence(plan)
     client = BrowserClient(region=region)
-    client.start(
-        identifier=browser_identifier,
-        session_timeout_seconds=plan.max_session_seconds,
-    )
+    browser_session_id = None
+    execution_error = None
+    cleanup_error = None
 
-    session_logs_dir = None
-    act_error = None
-    result = None
+    def state_guardrail(state):
+        if not evidence.authorized(state.browser_url):
+            evidence.reason = 'SAFETY_STOP'
+            return GuardrailDecision.BLOCK
+        evidence.check()
+        return GuardrailDecision.PASS
 
+    # SDK logs can include typed values. Keep them ephemeral and out of Lambda logs.
+    previous_logging = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
     try:
-        ws_url, headers = client.generate_ws_headers()
-        with Workflow(
-            workflow_definition_name=workflow_name,
-            model_id=model_id,
-        ) as workflow:
-            with NovaAct(
-                cdp_endpoint_url=ws_url,
-                cdp_headers=headers,
-                starting_page=plan.target_url,
-                workflow=workflow,
-                state_guardrail=state_guardrail,
-                headless=True,
-                tty=False,
-            ) as nova:
-                session_logs_dir = nova.get_session_logs_directory()
-                try:
-                    result = nova.act(build_prompt(plan))
-                except Exception as exc:
-                    act_error = exc
+        with tempfile.TemporaryDirectory(prefix='centopus-nova-') as log_dir, open(os.devnull, 'w') as sink:
+            with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+                client.start(identifier=browser_identifier, session_timeout_seconds=plan.max_session_seconds)
+                browser_session_id = getattr(client, 'session_id', None)
+                ws_url, headers = client.generate_ws_headers()
+                with Workflow(workflow_definition_name=workflow_name, model_id=model_id,
+                              boto_session_kwargs={'region_name': region}) as workflow:
+                    with NovaAct(cdp_endpoint_url=ws_url, cdp_headers=headers,
+                                 starting_page=plan.target_url, cdp_use_existing_page=True,
+                                 actuator=recorded_actuator(evidence), workflow=workflow,
+                                 state_guardrail=state_guardrail, headless=True, tty=False,
+                                 logs_directory=log_dir, go_to_url_timeout=10) as nova:
+                        # A final LLM response is deliberately ignored.
+                        nova.act(build_prompt(plan), max_steps=plan.max_actions,
+                                 timeout=max(1, int(evidence.deadline - time.monotonic())))
+    except SessionStop:
+        pass
+    except Exception as exc:
+        # Nova may wrap SessionStop in an SDK exception. The recorder's deliberate
+        # terminal reason remains authoritative, including an observed goal.
+        if evidence.reason is None:
+            execution_error = type(exc).__name__
+            evidence.reason = ('TIMED_OUT' if 'Timeout' in execution_error else
+                               'ACTION_LIMIT' if 'MaxSteps' in execution_error else 'TECHNICAL_ERROR')
     finally:
-        client.stop()
+        try:
+            client.stop()
+        except Exception as exc:
+            cleanup_error = type(exc).__name__
+        logging.disable(previous_logging)
 
-    parsed_steps = []
-    if session_logs_dir and os.path.isdir(session_logs_dir):
-        for fname in os.listdir(session_logs_dir):
-            if fname.endswith(".html"):
-                parsed_steps = parse_nova_html_log(os.path.join(session_logs_dir, fname))
-                break
-
-    if not parsed_steps and act_error is not None:
-        raise act_error
-
-    response = getattr(result, "response", None)
-    is_completed = False
-    finish_reason = "ABANDONED"
-    if parsed_steps:
-        last_step = parsed_steps[-1]
-        last_thought = last_step.get("thought", "").lower()
-        if (
-            "invite teammate" in last_thought
-            or "order" in last_thought
-            or "complete" in last_thought
-            or "success" in last_thought
-            or (response and isinstance(response, str))
-        ):
-            is_completed = True
-            finish_reason = "OBJECTIVE_COMPLETE"
-        elif act_error and ("closed" in str(act_error).lower() or "timeout" in str(act_error).lower()):
-            finish_reason = "TIMED_OUT"
-    elif act_error:
-        finish_reason = "FAILED"
-
+    reason = evidence.reason or ('ABANDONED' if evidence.steps else 'TECHNICAL_ERROR')
+    if cleanup_error and reason == 'OBJECTIVE_COMPLETE':
+        reason = 'TECHNICAL_ERROR'
     return {
-        "schema_version": 1,
-        "run_id": plan.run_id,
-        "session_id": plan.session_id,
-        "persona_id": plan.persona.get("persona_id", "unknown"),
-        "executor": "nova-act-agentcore-browser",
-        "region": region,
-        "workflow_definition_name": workflow_name,
-        "model_id": model_id,
-        "browser_identifier": browser_identifier,
-        "browser_session_id": getattr(client, "session_id", None),
-        "enforced_session_timeout_seconds": plan.max_session_seconds,
-        "guardrail_observations": observation_count,
-        "guardrail_observation_limit": plan.max_actions,
-        "response": response if isinstance(response, str) else str(result or act_error),
-        "steps": parsed_steps,
-        "completed": is_completed,
-        "finish_reason": finish_reason,
+        'schema_version': 2, 'run_id': plan.run_id, 'session_id': plan.session_id,
+        'persona_id': plan.persona['persona_id'], 'executor': 'nova-act-agentcore-browser',
+        'region': region, 'workflow_definition_name': workflow_name, 'model_id': model_id,
+        'browser_identifier': browser_identifier, 'browser_session_id': browser_session_id,
+        'enforced_session_timeout_seconds': plan.max_session_seconds,
+        'duration_ms': int((time.monotonic() - evidence.started) * 1000),
+        'steps': evidence.steps, 'completed': reason == 'OBJECTIVE_COMPLETE',
+        'finish_reason': reason, 'execution_error': execution_error, 'cleanup_error': cleanup_error,
     }
 
 
@@ -445,7 +348,7 @@ def load_json(path: str | None) -> Any:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run one Synthetic Beta session on Nova Act + AgentCore Browser"
+        description="Run one Centopus session on Nova Act + AgentCore Browser"
     )
     parser.add_argument("--plan-file", help="SessionPlan JSON file. Reads stdin when omitted.")
     parser.add_argument(

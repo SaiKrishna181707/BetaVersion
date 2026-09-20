@@ -3,8 +3,8 @@ export const GUARDRAILS = {
   DEFAULT_RUN_HARD_CAP_USD: 45,
   DEFAULT_SESSION_SECONDS: 180,
   MAX_SESSION_SECONDS: 300,
-  DEFAULT_BATCH_SIZE: 10,
-  MAX_BATCH_SIZE: 20,
+  DEFAULT_BATCH_SIZE: 5,
+  MAX_BATCH_SIZE: 5,
   MAX_ACTIONS: 40,
   MAX_RETRIES_SAME_STATE: 5,
   MAX_USERS: 100,
@@ -112,6 +112,7 @@ export interface RunConfiguration {
   max_session_seconds: number;
   run_hard_cap_usd: number;
   authorization_acknowledged: boolean;
+  checkpoint_plan?: string[];
 }
 
 export interface SessionRecord {

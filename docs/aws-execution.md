@@ -1,124 +1,34 @@
-# AWS Execution & Dual-Account Orchestration
+# AWS execution and evidence
 
-Synthetic Beta's cloud execution relies on a canonical **dual-account architecture** to strictly isolate operator workflows and client data from the sandboxed environment where autonomous agents interact with external web applications.
+The intended deployment uses two explicitly configured accounts. Account IDs, resource ARNs and deployment status are not inferred from historical documents. Source and offline tests do not establish current live execution.
 
----
+| Role | Source entry point |
+| --- | --- |
+| HTTP API | services/api/src/lambda.ts |
+| Session dispatcher | services/agent-worker/src/worker-lambda.ts |
+| Agent container | services/nova-worker/lambda_handler.py:handler |
+| Finalizer/reconciliation | services/report/src/finalizer.ts |
 
-## 1. Dual-Account Topology
+scripts/build-lambdas.mjs builds three Node bundles with index.handler and rejects inclusion of services/api/src/handler.ts. That module remains a deterministic test transport.
 
-### Control Plane: Kittu Account (`643700104680`)
-- **AWS Amplify Hosting**: Serves the operator web interface at [https://main.d1s2dm4wj8xxb.amplifyapp.com](https://main.d1s2dm4wj8xxb.amplifyapp.com) and two embedded test applications:
-  - Demo Target 1 (Fieldwork SaaS): `/demo-target/`
-  - Demo Target 2 (ShopPulse Checkout): `/demo-target-checkout/`
-- **Amazon API Gateway**: HTTP API `synthetic-beta-http-api` (`fkvvrndb17.execute-api.us-east-1.amazonaws.com`).
-- **Amazon Cognito**: User Pool `synthetic-beta-users` for operator authentication.
-- **Amazon DynamoDB**: `SyntheticBetaState` single-table schema for run plans, personas, session metadata, event streams, and deterministic reports.
-- **AWS Step Functions**: `synthetic-beta-run-orchestrator` managing Distributed Map batch concurrency across sessions.
-- **AWS Lambda**:
-  - `synthetic-beta-api`: Ingests run configurations, validates origins and budgets, seeds populations.
-  - `synthetic-beta-session-worker`: Assumes cross-account role, launches browser session, runs Nova trace adapter, persists events.
-  - `synthetic-beta-finalizer`: Executes deterministic analytics reduction on completed run sessions.
-- **Amazon S3**: `synthetic-beta-artifacts-20260919-k7m4q2` for session logs, reports, and screenshots.
-- **AWS Budgets & SNS**: $80 account ceiling, $40 per-run hard cap with automated SNS alerting.
+## Evidence
 
-### Agent Execution Plane: Vivek Account (`768669378827`)
-- **Amazon Bedrock AgentCore Browser**: Ephemeral headless Chromium instances (`SyntheticBetaBrowser` / `aws.browser.v1`) running in isolated micro-VMs.
-- **Real-Time Interactive Streams**:
-  - **WebSocket Automation Stream (CDP)**: Secure communication channel for Nova Act to send mouse/keyboard events and inspect DOM nodes.
-  - **WebRTC Live View Stream**: Real-time video stream rendered directly in the operator dashboard for live session monitoring.
-- **Amazon Nova Act**: Multimodal foundation model (`nova-act-v1.0`, workflow `synthetic-beta-browser-session`) executing autonomous actions based on persona traits and objectives.
-- **Cross-Account Assumed Role**: `SyntheticBetaAgentExecutionRole` with scoped trust policy allowing session worker Lambda in Account `643700104680` to manage browser sessions.
-- **Amazon S3 Trajectories**: `synthetic-beta-artifacts-vivek-20260919` storing raw Nova Act step trajectories, CDP dumps, and execution logs.
+The Python worker validates the plan, starts AgentCore Browser and uses the pinned Nova SDK's custom actuator. The adapted foundation recorder wraps actual browser methods and captures timing, actions, outcomes and observations. Typed values, final model responses and SDK programs are not persisted; SDK logs are temporary.
 
----
+Trace adaptation requires an observed action, result, valid timestamp, elapsed time and URL. It does not default actions to clicks, outcomes to success, invent elapsed time, infer goals from URL substrings, or generate events from final model text. Hover counts toward the browser action limit but is not mislabeled as a click. Cloud screenshot references remain null because this recorder does not upload screenshots.
 
-## 2. Cross-Account Execution Workflow
+Completion requires an explicitly configured final DOM checkpoint (data-synthetic-checkpoint). Use the optional New Run field to enter checkpoint_plan in order. Fieldwork markers are OPEN_APP, CREATE_PROJECT, INVITE_TEAMMATE; a dashboard-only objective can use OPEN_APP. Uninstrumented sites still provide action/friction evidence, but completion remains unverified. A model statement never substitutes for this proof.
 
-```text
-[Control Plane: synthetic-beta-session-worker]
-                    │
-                    │ 1. sts:AssumeRole(arn:aws:iam::768669378827:role/SyntheticBetaAgentExecutionRole)
-                    ▼
-[Agent Plane: Bedrock AgentCore Browser Client]
-                    │
-                    │ 2. StartBrowserSession(identifier="aws.browser.v1", timeout=180s)
-                    ▼
-   Returns CDP WebSocket URL + WebRTC Live View Stream URL
-                    │
-                    │ 3. Pass Live View URL to DynamoDB -> rendered in Amplify Web UI
-                    ▼
-[Agent Plane: Amazon Nova Act]
-                    │
-                    │ 4. Connect to CDP WebSocket
-                    │ 5. Evaluate page screenshot & DOM accessibility tree
-                    │ 6. Issue autonomous actions (navigate, click, type, submit, wait, abandon)
-                    │ 7. Save raw trajectory to S3: synthetic-beta-artifacts-vivek-20260919
-                    ▼
-[Control Plane: nova-trace-adapter.ts]
-                    │
-                    │ 8. Ingest raw steps -> convert to strict BehaviorEvent[]
-                    │ 9. Write events & session status to DynamoDB: SyntheticBetaState
-                    ▼
-[Control Plane: synthetic-beta-finalizer]
-                    │
-                    │ 10. Triggered upon Map completion -> computeRunMetrics & build report
-```
+The recorder bounds actions, time and repeated states, restricts requests/navigation to authorized hosts, and blocks detected credential/payment/destructive controls. These are application controls, not universal harmful-action detection or proof of network-level isolation. External CDN/login hosts outside the authorized set can fail to load.
 
----
+Raw trajectories are saved before events are published. Persistence failures fail the session without inventing S3 references. Report downloads are linked only after successful S3 persistence. Runtime failures may retain partial evidence.
 
-## 3. Real AWS Worker Implementation
+## Live View and billing
 
-### Python Standalone Worker (`services/nova-worker/worker.py`)
-For headless CI testing and standalone session execution:
-- Accepts a JSON `SessionPlan`.
-- Connects directly to Bedrock AgentCore Browser via AWS IAM credentials.
-- Binds Nova Act to the CDP endpoint.
-- Applies strict state guardrails: rejects navigation outside pre-approved `allowed_origins` and enforces maximum observation ceilings.
+live_view_url is null. There is no endpoint provisioning/refresh/authentication path or WebRTC player. Conditional frontend links are compatibility hooks. Status polling every 2.5 seconds is not browser video or streamed action telemetry. An AWS console viewer does not establish application integration.
 
-Validate a session plan without cloud spend:
-```bash
-python services/nova-worker/worker.py \
-  --plan-file services/nova-worker/plan.example.json \
-  --validate-only
-```
+actual_cost_cents is null. Duration-based formulas are not billing measurements. See [cost model](cost-model.md) and [historical evidence limitations](final-deployment-report.md).
 
-Execute a single real session against an authorized HTTPS target:
-```bash
-export AWS_REGION=us-east-1
-export NOVA_ACT_WORKFLOW_NAME=synthetic-beta-browser-session
-export NOVA_ACT_MODEL_ID=nova-act-v1.0
+## Required AWS verification
 
-python services/nova-worker/worker.py --plan-file /path/to/session-plan.json
-```
-
-### TypeScript Cloud Worker (`services/agent-worker/src/worker-lambda.ts`)
-The serverless production path executed by Step Functions:
-- Assumes the cross-account role in Account `768669378827`.
-- Initiates the Bedrock AgentCore Browser session.
-- Captures the Live View stream endpoint for immediate web UI inspection.
-- Executes the Nova Act agent trajectory.
-- Invokes `adaptNovaTraceToBehaviorEvents()` to write zero-hallucination `BehaviorEvent` records to DynamoDB.
-
----
-
-## 4. Scale Path: 1 → 5 → 20 → 100 Users
-
-Synthetic Beta promises evaluation of up to 100 synthetic users. The Step Functions Distributed Map orchestrates this scale safely:
-1. **L2 (1 user)**: Single Nova Act session validating DOM interaction and Live View streaming.
-2. **L3 (5 users)**: Small batch verifying parallel session isolation and DynamoDB event indexing.
-3. **L4 (20 users)**: Concurrency-controlled batch verification (`MaxConcurrency: 5`, 4 waves of 5) achieving 100% completion and zero throttling.
-4. **L5 (100 users)**: Complete production run executed across 20 controlled waves of 5 (`run-mu8qcp85-ryxcm`), recording all discrete behavior events with zero infrastructure throttling.
-
-The 100-user run preserves all discrete behavior events, generating complete funnel drops, friction heatmaps, and cohort variance analytics.
-
----
-
-## 5. Security & Spend Boundaries
-
-- **Origin Whitelist**: Targets must be public HTTPS and explicitly enumerated in `allowed_origins`.
-- **No Local/Private Targets**: `127.0.0.1`, `localhost`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, and `169.254.169.254` are blocked before browser initialization.
-- **Spend Ceilings**:
-  - Global AWS Budget: $80.00 hard limit with SNS alerting.
-  - Per-Run Hard Cap: $40.00 admission check.
-  - Session Duration: 180s default, 300s hard server-side timeout.
-- **No Destructive Actions**: Prompt-level and state guardrails forbid real-money purchases, account deletions, spam, or CAPTCHA bypass.
+Follow [deployment prerequisites](../infra/README.md). Start with one authorized session. Inspect its execution ARN, both session records, raw trajectory, events, metrics and report. Verify every cited event/reference. Exercise cancellation, target rejection, worker failure, reservation exhaustion and denied operator access before increasing the cohort. A 100-user run or 20-user concurrency is not established by these instructions.

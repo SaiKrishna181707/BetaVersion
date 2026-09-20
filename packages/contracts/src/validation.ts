@@ -50,6 +50,13 @@ export function validateRunConfiguration(
     run_hard_cap_usd: typeof data.run_hard_cap_usd === 'number' ? data.run_hard_cap_usd : 0,
     authorization_acknowledged: data.authorization_acknowledged === true,
   };
+  if (data.checkpoint_plan !== undefined) {
+    if (!Array.isArray(data.checkpoint_plan) || data.checkpoint_plan.length > 20
+      || data.checkpoint_plan.some(entry => typeof entry !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(entry))
+      || new Set(data.checkpoint_plan).size !== data.checkpoint_plan.length) {
+      errors.checkpoint_plan = 'Use at most 20 distinct DOM checkpoint names.';
+    } else value.checkpoint_plan = data.checkpoint_plan as string[];
+  }
   const budgetCents = Math.round(value.run_hard_cap_usd * 100);
   const centExact = Number.isFinite(value.run_hard_cap_usd)
     && Math.abs(value.run_hard_cap_usd * 100 - budgetCents) < 1e-7;

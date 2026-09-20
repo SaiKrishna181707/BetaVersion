@@ -97,6 +97,7 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
     </div>
 
     {error ? <p className="vision-error" role="alert">{error}</p> : null}
+    {session?.evidence_warning ? <p className="vision-error" role="status">{session.evidence_warning}</p> : null}
 
     {session ? <>
       <section className="vision-agent-summary">
@@ -157,7 +158,7 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
               {event.screenshot_ref ? <span className="vision-evidence-ref"><Icon name="file" size={12} /> {event.screenshot_ref}</span> : null}
             </div>
           </article>)}
-          {!events.length ? <div className="vision-empty-state"><strong>No recorded BehaviorEvents.</strong><span>Synthetic Beta does not invent a journey when execution evidence is missing.</span></div> : null}
+          {!events.length ? <div className="vision-empty-state"><strong>No recorded BehaviorEvents.</strong><span>Centopus does not invent a journey when execution evidence is missing.</span></div> : null}
         </div>
       </section>
 

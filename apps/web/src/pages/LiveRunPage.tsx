@@ -130,15 +130,16 @@ export function LiveRunPage({ runId }: { runId: string }) {
       <div><span>Abandoned</span><strong>{counts.abandoned}</strong></div>
       <div><span>Failed</span><strong>{counts.failed}</strong></div>
       <div><span>Remaining</span><strong>{counts.remaining}</strong></div>
-      <div><span>Spend</span><strong>{typeof run?.actual_cost_cents === 'number' ? `$${(run.actual_cost_cents / 100).toFixed(2)}` : '—'}</strong></div>
+      <div><span>Actual cost</span><strong>{typeof run?.actual_cost_cents === 'number' ? `$${(run.actual_cost_cents / 100).toFixed(2)}` : '—'}</strong></div>
     </section>
 
     {error ? <p className="vision-error" role="alert">{error}</p> : null}
+    {run?.evidence_warning ? <p className="vision-error" role="status">{run.evidence_warning}</p> : null}
 
     <section className="vision-live-agents">
       <div className="vision-section-heading compact">
         <span>LIVE AGENTS</span>
-        <h2>Follow each session.</h2>
+        <h2>Follow each session.</h2><p>Status polling is available. Browser Live View is not integrated; action evidence appears after each session.</p>
       </div>
       <div className="vision-live-rail">
         {sessions.map(session => {

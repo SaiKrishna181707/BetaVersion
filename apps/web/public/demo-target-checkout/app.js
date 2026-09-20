@@ -51,7 +51,7 @@ function render() {
       <p style="margin-bottom: 20px;">Enter billing email and shipping info.</p>
       <div class="form-group">
         <label for="email">Billing Email</label>
-        <input id="email" type="email" placeholder="you@company.com" required value="developer@synthetic-beta.local" />
+        <input id="email" type="email" placeholder="you@company.com" required value="developer@centopus.example.test" />
       </div>
       <div class="form-group">
         <label for="zip">Postal / Zip Code</label>

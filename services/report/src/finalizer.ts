@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { computeRunMetrics } from '@synthetic-beta/analytics';
 import { buildSyntheticBetaReport } from '@synthetic-beta/report';
@@ -9,30 +9,39 @@ import type {
   RunConfiguration,
   SessionRecord,
   SessionStatus,
-  AgentReasonCode,
-  ActionType,
+
 } from '@synthetic-beta/contracts';
 
-const region = process.env.AWS_REGION || 'us-east-1';
-const stateTable = process.env.STATE_TABLE || 'SyntheticBetaState';
-const artifactBucket = process.env.ARTIFACT_BUCKET || 'synthetic-beta-artifacts-20260919-k7m4q2';
-
-const ddbClient = new DynamoDBClient({ region });
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const s3Client = new S3Client({ region });
+import { queryAll, type DocumentClient } from '../../api/src/aws-store';
+import { SFNClient, DescribeExecutionCommand } from '@aws-sdk/client-sfn';
 
 interface FinalizerInput {
-  runId: string;
+  runId?: string;
+  failed?: boolean;
+  detail?: { executionArn?: string; stateMachineArn?: string; status?: string };
 }
 
-export async function handler(input: FinalizerInput) {
-  const { runId } = input;
+export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pick<S3Client, 'send'>;
+  sfnClient?: Pick<SFNClient, 'send'>; environment?: NodeJS.ProcessEnv }) {
+  const { docClient, s3Client } = deps;
+  const env = deps.environment ?? process.env;
+  const stateTable = env.STATE_TABLE || '';
+  const artifactBucket = env.ARTIFACT_BUCKET || '';
+  return async function handler(input: FinalizerInput) {
+  if (!stateTable || !artifactBucket) throw new Error('Finalizer storage is not configured.');
+  let runId = input.runId;
+  if (input.detail) {
+    if (!deps.sfnClient || input.detail.stateMachineArn !== env.RUN_STATE_MACHINE_ARN || !input.detail.executionArn) throw new Error('Unexpected execution event.');
+    const execution = await deps.sfnClient.send(new DescribeExecutionCommand({ executionArn: input.detail.executionArn }));
+    runId = (JSON.parse(execution.input ?? '{}') as { runId?: string }).runId;
+  }
+  if (!runId) throw new Error('Missing runId.');
   console.log(`[Finalizer] Starting deterministic finalizer for run: ${runId}`);
 
   // 1. Fetch Run Metadata
   const runGet = await docClient.send(new GetCommand({
     TableName: stateTable,
-    Key: { pk: `RUN#${runId}`, sk: 'META' },
+    Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true,
   }));
 
   if (!runGet.Item) {
@@ -41,17 +50,18 @@ export async function handler(input: FinalizerInput) {
 
   const runMeta = runGet.Item;
   const configuration = runMeta.configuration as RunConfiguration;
+  const interrupted = Boolean(input.failed || input.detail || ['FAILED', 'CANCELLED'].includes(runMeta.status as string));
 
   // 2. Fetch Personas
-  const personasQuery = await docClient.send(new QueryCommand({
+  const personaItems = await queryAll(docClient, {
     TableName: stateTable,
     KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
     ExpressionAttributeValues: {
       ':pk': `RUN#${runId}`,
       ':prefix': 'PERSONA#',
     },
-  }));
-  const personas: SyntheticPersona[] = (personasQuery.Items || []).map(i => {
+  });
+  const personas: SyntheticPersona[] = personaItems.map(i => {
     const persona = i.persona as SyntheticPersona | undefined;
     if (!persona?.persona_id || !persona.population_seed || !persona.cohort || !persona.goal_context) {
       throw new Error(`Run ${runId} contains a malformed persisted persona.`);
@@ -60,72 +70,60 @@ export async function handler(input: FinalizerInput) {
   });
 
   // 3. Fetch Sessions
-  const sessionsQuery = await docClient.send(new QueryCommand({
+  const sessionItems = await queryAll(docClient, {
     TableName: stateTable,
     KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
     ExpressionAttributeValues: {
       ':pk': `RUN#${runId}`,
       ':prefix': 'SESSION#',
     },
-  }));
-
-  const sessionItems = sessionsQuery.Items || [];
+  });
   const sessions: SessionRecord[] = [];
   const allEvents: BehaviorEvent[] = [];
-  let actualCostCents = 0;
-  let hasActualCost = false;
+  if (personas.length !== configuration.user_count || sessionItems.length !== personas.length) throw new Error('Cannot finalize an incomplete population.');
 
   for (const item of sessionItems) {
     const sessionId = item.session_id as string;
     const sessionMetaGet = await docClient.send(new GetCommand({
       TableName: stateTable,
-      Key: { pk: `SESSION#${sessionId}`, sk: 'META' },
+      Key: { pk: `SESSION#${sessionId}`, sk: 'META' }, ConsistentRead: true,
     }));
 
-    const meta = sessionMetaGet.Item || item;
-    if (typeof meta.cost_cents === 'number' && Number.isFinite(meta.cost_cents)) {
-      actualCostCents += meta.cost_cents;
-      hasActualCost = true;
+    let meta = sessionMetaGet.Item || item;
+    if (meta.evidence_schema_version !== 2) throw new Error('Legacy session evidence requires manual verification before regenerating a report.');
+    let sessionStatus = meta.status as SessionStatus;
+    const terminal = ['COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED'];
+    if (!terminal.includes(sessionStatus)) {
+      if (!interrupted) throw new Error('Cannot finalize before every session is terminal.');
+      sessionStatus = runMeta.status === 'CANCELLED' || input.detail?.status === 'ABORTED' ? 'CANCELLED' : 'FAILED';
+      const closed = { ...meta, status: sessionStatus, stop_reason: sessionStatus === 'CANCELLED' ? 'CANCELLED' : 'TECHNICAL_ERROR', completed_at: new Date().toISOString() };
+      await docClient.send(new TransactWriteCommand({ TransactItems: [
+        { Put: { TableName: stateTable, Item: { ...closed, pk: `SESSION#${sessionId}`, sk: 'META' } } },
+        { Put: { TableName: stateTable, Item: { ...closed, pk: `RUN#${runId}`, sk: `SESSION#${sessionId}` } } },
+      ] }));
+      meta = closed;
     }
-    const sessionStatus: SessionStatus = meta.status || 'COMPLETED';
-    const personaId = meta.persona_id || (meta.persona ? meta.persona.persona_id : 'persona-001');
+    const personaId = meta.persona_id as string;
+    if (!personaId || !personas.some(persona => persona.persona_id === personaId)) throw new Error('Unknown persisted session persona.');
 
     // Fetch events for this session
-    const eventsQuery = await docClient.send(new QueryCommand({
+    const eventItems = await queryAll(docClient, {
       TableName: stateTable,
       KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
       ExpressionAttributeValues: {
         ':pk': `SESSION#${sessionId}`,
         ':prefix': 'EVENT#',
       },
-    }));
-
-    const rawEvents = (eventsQuery.Items || []).map(e => e.event).filter(Boolean) as Record<string, unknown>[];
-    const events: BehaviorEvent[] = rawEvents.filter(re =>
-      typeof re.timestamp === 'string'
-      && typeof re.elapsed_ms === 'number'
-      && typeof re.url === 'string'
-      && typeof re.action_type === 'string'
-      && typeof re.result === 'string'
-      && typeof re.agent_reason_code === 'string',
-    ).map(re => ({
-      run_id: runId,
-      session_id: sessionId,
-      persona_id: personaId,
-      timestamp: re.timestamp as string,
-      elapsed_ms: re.elapsed_ms as number,
-      url: re.url as string,
-      page_title: typeof re.page_title === 'string' ? re.page_title : '',
-      route: typeof re.route === 'string' ? re.route : '',
-      action_type: re.action_type as ActionType,
-      target_descriptor: typeof re.target_descriptor === 'string' ? re.target_descriptor : null,
-      result: re.result as BehaviorEvent['result'],
-      screenshot_ref: typeof re.screenshot_ref === 'string' ? re.screenshot_ref : null,
-      console_error: typeof re.console_error === 'string' ? re.console_error : null,
-      network_error: typeof re.network_error === 'string' ? re.network_error : null,
-      task_checkpoint: typeof re.task_checkpoint === 'string' ? re.task_checkpoint : null,
-      agent_reason_code: re.agent_reason_code as AgentReasonCode,
-    }));
+    });
+    const events = eventItems.map(item => item.event as BehaviorEvent);
+    // Reject corruption rather than rewriting identities or silently dropping evidence.
+    if (events.some(event => !event || event.run_id !== runId || event.session_id !== sessionId
+      || event.persona_id !== personaId || !Number.isFinite(Date.parse(event.timestamp))
+      || !Number.isSafeInteger(event.elapsed_ms) || event.elapsed_ms < 0
+      || !['click', 'type', 'scroll', 'navigate', 'back', 'submit', 'wait', 'abandon'].includes(event.action_type)
+      || !['SUCCESS', 'ERROR', 'NO_CHANGE', 'BLOCKED', 'VALIDATION_FAILURE'].includes(event.result))) {
+      throw new Error('Persisted event integrity check failed.');
+    }
     allEvents.push(...events);
 
     const lastEventElapsed = events.at(-1)?.elapsed_ms ?? 0;
@@ -147,10 +145,7 @@ export async function handler(input: FinalizerInput) {
   console.log(`[Finalizer] Loaded ${personas.length} personas, ${sessions.length} sessions, ${allEvents.length} events`);
 
   // 4. Compute Run Metrics & Build Report
-  const checkpointPlan = [...new Set(allEvents
-    .filter(event => event.task_checkpoint !== null)
-    .sort((a, b) => a.elapsed_ms - b.elapsed_ms)
-    .map(event => event.task_checkpoint as string))];
+  const checkpointPlan = configuration.checkpoint_plan ?? [];
   const metrics = computeRunMetrics({
     run_id: runId,
     sessions,
@@ -166,10 +161,14 @@ export async function handler(input: FinalizerInput) {
     events: allEvents,
     generated_at: new Date().toISOString(),
     personas,
-    actual_cost_cents: hasActualCost ? actualCostCents : null,
+    actual_cost_cents: null,
   });
 
   const ttl = Math.floor(Date.now() / 1000) + 7 * 86400;
+
+  const reportKey = `reports/${runId}.json`;
+  await s3Client.send(new PutObjectCommand({ Bucket: artifactBucket, Key: reportKey,
+    Body: JSON.stringify(report), ContentType: 'application/json' }));
 
   // 5. Store in DynamoDB
   await docClient.send(new PutCommand({
@@ -202,33 +201,28 @@ export async function handler(input: FinalizerInput) {
       pk: `RUN#${runId}`,
       sk: 'REPORT',
       run_id: runId,
+      artifact_key: reportKey,
+      evidence_schema_version: 2,
       report,
       created_at: new Date().toISOString(),
       ttl,
     },
   }));
 
-  // 6. Store Report JSON in S3
+  let runStatus = runMeta.status === 'CANCELLED' || input.detail?.status === 'ABORTED' ? 'CANCELLED'
+    : interrupted || sessions.some(session => session.status === 'FAILED') ? 'FAILED' : 'COMPLETED';
+  // Terminal run outcomes cannot be overwritten by a delayed/repeated finalizer.
+  if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(runMeta.status as string)) runStatus = runMeta.status as string;
   try {
-    await s3Client.send(new PutObjectCommand({
-      Bucket: artifactBucket,
-      Key: `reports/${runId}.json`,
-      Body: JSON.stringify(report, null, 2),
-      ContentType: 'application/json',
-    }));
-    console.log(`[Finalizer] Saved report to s3://${artifactBucket}/reports/${runId}.json`);
-  } catch (s3Err) {
-    console.warn(`[Finalizer] S3 write warning: ${s3Err}`);
-  }
-
-  // 7. Update Run Status to COMPLETED
   await docClient.send(new UpdateCommand({
     TableName: stateTable,
     Key: { pk: `RUN#${runId}`, sk: 'META' },
     UpdateExpression: 'SET #st = :st, completed_at = :now, total_sessions = :sc, metrics_summary = :ms, actual_cost_cents = :cost',
+    ConditionExpression: '#st = :previous',
     ExpressionAttributeNames: { '#st': 'status' },
     ExpressionAttributeValues: {
-      ':st': 'COMPLETED',
+      ':st': runStatus,
+      ':previous': runMeta.status,
       ':now': new Date().toISOString(),
       ':sc': sessions.length,
       ':ms': {
@@ -236,16 +230,31 @@ export async function handler(input: FinalizerInput) {
         abandonment_rate: metrics.abandonment.percentage,
         findings_count: report.findings.length,
       },
-      ':cost': hasActualCost ? actualCostCents : null,
+      ':cost': null,
     },
   }));
+  } catch (cause) {
+    if (!(cause instanceof Error) || cause.name !== 'ConditionalCheckFailedException') throw cause;
+    const latest = await docClient.send(new GetCommand({ TableName: stateTable,
+      Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
+    if (!['COMPLETED', 'FAILED', 'CANCELLED'].includes(latest.Item?.status as string)) throw cause;
+    // Report evidence remains useful after cancellation; preserve the newer outcome.
+    runStatus = latest.Item!.status as string;
+  }
 
   console.log(`[Finalizer] Run ${runId} finalized successfully.`);
   return {
-    success: true,
+    success: runStatus === 'COMPLETED',
+    status: runStatus,
     runId,
     sessionCount: sessions.length,
     completionPercentage: metrics.completion.percentage,
     findingsCount: report.findings.length,
   };
 }
+
+}
+export const handler = createFinalizer({
+  docClient: DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallOptions: { removeUndefinedValues: true } }),
+  s3Client: new S3Client({}), sfnClient: new SFNClient({}),
+});

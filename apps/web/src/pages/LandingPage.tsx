@@ -1,3 +1,4 @@
+import { OperatorSignIn } from '../components/OperatorSignIn';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Brand, Icon } from '@synthetic-beta/ui';
 import { PRODUCT_INTELLIGENCE_KEY, productApi, type RunSummary } from '../lib/api';
@@ -55,14 +56,14 @@ export function LandingPage() {
 
   return <div className="vision-landing">
     <header className="vision-landing-nav">
-      <Brand />
+      <Brand /><OperatorSignIn />
       {runs.length > 0 ? <a href="#recent-runs">View runs</a> : null}
     </header>
 
     <main id="main">
       <section className="vision-landing-hero" aria-labelledby="landing-title">
         <div className="vision-landing-copy">
-          <span className="vision-product-name">SYNTHETIC BETA</span>
+          <span className="vision-product-name">CENTOPUS</span>
           <h1 id="landing-title">Test before your users do.</h1>
           <p>See how autonomous synthetic users navigate,<br />struggle, and succeed in your real product.</p>
         </div>
@@ -125,7 +126,7 @@ export function LandingPage() {
     </main>
 
     <footer className="vision-landing-footer">
-      <span>Synthetic Beta</span>
+      <span>Centopus</span>
       <span>Observe real behavior. Measure what happened.</span>
     </footer>
   </div>;

@@ -21,5 +21,5 @@ export const initialConfiguration: RunConfiguration = {
   batch_size: GUARDRAILS.DEFAULT_BATCH_SIZE,
   max_session_seconds: GUARDRAILS.DEFAULT_SESSION_SECONDS,
   run_hard_cap_usd: GUARDRAILS.DEFAULT_RUN_HARD_CAP_USD,
-  authorization_acknowledged: true,
+  authorization_acknowledged: false,
 };

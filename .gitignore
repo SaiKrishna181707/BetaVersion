@@ -154,3 +154,6 @@ dist_worker
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Generated CDK assemblies (never deployment source)
+**/cdk.out/

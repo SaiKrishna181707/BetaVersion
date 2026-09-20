@@ -1,22 +1,9 @@
-# infra/cdk
+# Centopus CDK
 
-Planned home of the CDK application. Not created yet: see `../README.md` for why the AWS surface is deferred
-until it can be verified against current documentation.
+stacks.ts contains authoritative definitions; config.ts validates inputs; bin/app.ts selects real configuration or explicit offline fixtures. Use root npm ci, not a separate installation here.
 
-Intended layout once it lands:
+- npm run infra:synth: offline fixtures, no deployment.
+- npm run infra:diff: actual configured resource comparison; credentials required.
+- npm run infra:deploy: explicit deployment after reviewing configuration and diff.
 
-```
-infra/cdk/
-  bin/app.ts            stack wiring and environment selection
-  lib/network-stack.ts  (not required: API Gateway and Lambda are regional)
-  lib/data-stack.ts     DynamoDB tables, the evidence bucket, retention rules
-  lib/api-stack.ts      API Gateway routes and the control-plane Lambda
-  lib/execution-stack.ts Step Functions state machine and the session worker
-  lib/observability.ts  log groups, metrics, alarms, budget
-  cdk.json
-  package.json          aws-cdk-lib, constructs, cdk CLI
-```
-
-`infra/cdk` will be its own package and will not be part of the root TypeScript project, so the front end and
-service builds stay independent of the CDK toolchain and its install size. Least-privilege roles are defined
-beside the resources they apply to, and the checks in `../policies/README.md` apply to every grant.
+See [scope and prerequisites](../README.md). Generated assemblies are not source. Historical foundation CDK targets a different storage/runtime contract and must not be mixed into these stacks.

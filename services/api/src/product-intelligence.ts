@@ -1,23 +1,62 @@
 import type { ProductIntelligence, ProductIntelligenceRequest } from '@synthetic-beta/contracts';
 import { lookup } from 'node:dns/promises';
+import { get } from 'node:https';
+import { isIP } from 'node:net';
 
 const PRIVATE_HOST = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|\[?::1\]?)/i;
 const MAX_PAGE_BYTES = 250_000;
 
-function isPrivateAddress(address: string): boolean {
-  if (address === '::1' || address.startsWith('fe80:') || address.startsWith('fc') || address.startsWith('fd')) return true;
+export function isPrivateAddress(address: string): boolean {
+  if (isIP(address) === 6) {
+    // Only native global unicast; reject mapped IPv4, local, multicast and documentation space.
+    return !/^[23][0-9a-f]{3}:/i.test(address) || /^2001:(db8|0):/i.test(address);
+  }
+  if (isIP(address) !== 4) return true;
   const parts = address.split('.').map(Number);
   if (parts.length !== 4 || parts.some(part => !Number.isInteger(part))) return false;
-  return parts[0] === 10 || parts[0] === 127 || parts[0] === 0 || parts[0] === 169 && parts[1] === 254
-    || parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && (parts[1] ?? 0) >= 16 && (parts[1] ?? 0) <= 31;
+  return parts[0] === 10 || parts[0] === 127 || parts[0] === 0 || parts[0]! >= 224
+    || parts[0] === 169 && parts[1] === 254 || parts[0] === 100 && parts[1]! >= 64 && parts[1]! <= 127
+    || parts[0] === 192 && [0, 168].includes(parts[1]!)
+    || parts[0] === 198 && [18, 19, 51].includes(parts[1]!)
+    || parts[0] === 203 && parts[1] === 0 && parts[2] === 113
+    || parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31;
 }
 
 export async function assertPublicNetworkTarget(urlValue: string): Promise<void> {
   const url = new URL(urlValue);
+  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('A public HTTPS target is required.');
   const resolved = await lookup(url.hostname, { all: true });
   if (resolved.length === 0 || resolved.some(entry => isPrivateAddress(entry.address))) {
     throw new Error('Website resolved to a private or unavailable network address.');
   }
+}
+
+/** Pin the connection to a checked address and bound bytes while streaming, before allocation. */
+async function readPublicPage(urlValue: string): Promise<string> {
+  const url = new URL(urlValue);
+  const addresses = await lookup(url.hostname, { all: true });
+  if (!addresses.length || addresses.some(entry => isPrivateAddress(entry.address))) throw new Error('Website resolved to a private network.');
+  const address = addresses[0]!;
+  return new Promise((resolve, reject) => {
+    const request = get(url, { family: address.family, lookup: (_host, _options, callback) => callback(null, address.address, address.family),
+      headers: { 'User-Agent': 'CentopusProductResearch/1.0' } }, response => {
+      if ((response.statusCode ?? 500) < 200 || (response.statusCode ?? 500) >= 300) {
+        response.resume(); reject(new Error(`Website retrieval failed with HTTP ${response.statusCode}.`)); return;
+      }
+      let size = 0;
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > MAX_PAGE_BYTES) { request.destroy(new Error('Website response is too large to analyze safely.')); return; }
+        chunks.push(chunk);
+      });
+      response.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      response.on('error', reject);
+    });
+    const timer = setTimeout(() => request.destroy(new Error('Website retrieval timed out.')), 10000);
+    request.on('close', () => clearTimeout(timer));
+    request.on('error', reject);
+  });
 }
 
 export function validateProductIntelligenceRequest(input: unknown): ProductIntelligenceRequest {
@@ -96,23 +135,15 @@ export async function buildProductIntelligence(
 
   await assertPublicNetworkTarget(request.website_url);
 
-  const pageResponse = await fetch(request.website_url, {
-    headers: { 'User-Agent': 'SyntheticBetaProductResearch/1.0' },
-    redirect: 'error',
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!pageResponse.ok) throw new Error(`Website retrieval failed with HTTP ${pageResponse.status}.`);
-  const length = Number(pageResponse.headers.get('content-length') || 0);
-  if (length > MAX_PAGE_BYTES) throw new Error('Website response is too large to analyze safely.');
-  const page = stripHtml((await pageResponse.text()).slice(0, MAX_PAGE_BYTES));
+  const page = stripHtml(await readPublicPage(request.website_url));
   if (page.text.length < 80) throw new Error('The public page did not contain enough readable product information.');
 
   const prompt = `Analyze this first-party public product page for a synthetic usability test. Return only JSON with keys product_name, category, summary, target_audience, suggested_objectives (3 concise observable tasks), and value_propositions (up to 5). Do not invent capabilities absent from the page.\nCompany: ${request.company_name}\nURL: ${request.website_url}\nPage title: ${page.title}\nPage text: ${page.text}`;
   const geminiResponse = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },

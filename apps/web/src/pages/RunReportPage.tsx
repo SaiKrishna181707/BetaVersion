@@ -28,6 +28,7 @@ export function RunReportPage({ runId }: { runId: string }) {
   const [downloadUrl, setDownloadUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [evidenceWarning, setEvidenceWarning] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -45,6 +46,7 @@ export function RunReportPage({ runId }: { runId: string }) {
         setDownloadUrl(reportResult.download_url || '');
       }
       setRun(runResult);
+      setEvidenceWarning(reportResult?.evidence_warning || runResult.evidence_warning || '');
       setSessions(sessionResult);
       setPersonas(new Map(personaResult.map(persona => [persona.persona_id, persona])));
       setLoading(false);
@@ -91,11 +93,12 @@ export function RunReportPage({ runId }: { runId: string }) {
       </div>
       <div className="vision-heading-actions">
         {downloadUrl ? <a href={downloadUrl} target="_blank" rel="noreferrer" className="button button-secondary"><Icon name="file" size={14} /> Download JSON</a> : null}
-        <Badge tone="accent">EVIDENCE GROUNDED</Badge>
+        <Badge tone={evidenceWarning ? 'warning' : 'accent'}>{evidenceWarning ? 'HISTORICAL / UNVERIFIED' : 'RECORDED EVIDENCE'}</Badge>
       </div>
     </div>
 
     {error ? <p className="vision-error" role="alert">{error}</p> : null}
+    {evidenceWarning ? <p className="vision-error" role="status">{evidenceWarning}</p> : null}
 
     {report && metrics ? <>
       <section className="vision-report-kpis">
@@ -105,7 +108,7 @@ export function RunReportPage({ runId }: { runId: string }) {
         <article><span>Timeout Rate</span><strong>{rate(metrics.timeout.percentage)}</strong><small>{metrics.timeout.numerator} sessions</small></article>
         <article><span>Median Time to Goal</span><strong>{duration(metrics.median_time_to_value_ms)}</strong><small>{metrics.time_to_value_sample_size} samples</small></article>
         <article><span>Total Actions</span><strong>{totalActions ?? '—'}</strong><small>{metrics.computed_from.behavior_events} behavior events</small></article>
-        <article><span>Run Cost</span><strong>{typeof actualCost === 'number' ? `$${(actualCost / 100).toFixed(2)}` : '—'}</strong><small>Actual recorded cost only</small></article>
+        <article><span>Actual Cost</span><strong>{typeof actualCost === 'number' ? `$${(actualCost / 100).toFixed(2)}` : '—'}</strong><small>AWS billing evidence is not connected</small></article>
       </section>
 
       {metrics.funnel.length ? <section className="vision-report-section">

@@ -27,7 +27,7 @@ export function Icon({ name, size = 18, ...props }: SVGProps<SVGSVGElement> & { 
 }
 
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <a className="brand" href="#/" aria-label="Synthetic Beta home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>{!compact && <span>Synthetic<span className="brand-light">Beta</span></span>}</a>;
+  return <a className="brand" href="#/" aria-label="Centopus home"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>{!compact && <span>Centopus</span>}</a>;
 }
 
 export function Button({ variant = 'primary', className = '', children, type = 'button', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' }) {

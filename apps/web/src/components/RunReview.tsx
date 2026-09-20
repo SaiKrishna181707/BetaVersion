@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatUsd, type CostEstimate, type RunConfiguration } from '@synthetic-beta/contracts';
 import { Badge, Button, Icon } from '@synthetic-beta/ui';
+import { productApi } from '../lib/api';
 
 export function RunReview({
   configuration,
@@ -44,29 +45,9 @@ export function RunReview({
     setLaunching(true);
     setError('');
     try {
-      // 1. Create run
-      const createRes = await fetch(`${apiBase}/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ configuration }),
-      });
-      if (!createRes.ok) {
-        const errJson = await createRes.json().catch(() => ({}));
-        throw new Error(errJson.message || `Failed creating run: HTTP ${createRes.status}`);
-      }
-      const createData = await createRes.json();
+      const createData = await productApi.createRun(configuration);
       const runId = createData.run_id;
-
-      // 2. Start run orchestration
-      const startRes = await fetch(`${apiBase}/runs/${runId}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!startRes.ok) {
-        throw new Error(`Failed starting execution: HTTP ${startRes.status}`);
-      }
-
-      // 3. Navigate to live run page
+      await productApi.startRun(runId, configuration.batch_size);
       window.location.hash = `#/runs/${runId}/live`;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed launching AWS run.');
@@ -106,7 +87,7 @@ export function RunReview({
         </div>
         <div><dt>Session timeout</dt><dd>{configuration.max_session_seconds} seconds</dd></div>
         <div><dt>Planning estimate</dt><dd className="mono">{formatUsd(estimate.total_cents)}</dd></div>
-        <div><dt>Hard budget cap</dt><dd className="mono">{formatUsd(configuration.run_hard_cap_usd * 100)}</dd></div>
+        <div><dt>Run estimate allowance</dt><dd className="mono">{formatUsd(configuration.run_hard_cap_usd * 100)}</dd></div>
       </dl>
 
       <div className="review-disclosure">
@@ -114,7 +95,7 @@ export function RunReview({
         <p>
           {apiBase ? (
             <>
-              <strong>AWS Cloud Backend Connected.</strong> Launching will trigger the Step Functions orchestrator and Bedrock AgentCore sessions in <span className="mono">us-east-1</span>.
+              <strong>Cloud API configured.</strong> Launch requests execution from the configured backend. Operator sign-in and available execution resources are required.
             </>
           ) : (
             <>

@@ -46,7 +46,8 @@ function readPopulationSpec(value: unknown): PopulationSpec | null {
 }
 
 /**
- * Transport skeleton for API Gateway and Lambda. It performs deterministic computation
+ * Legacy deterministic test transport. Never deploy this module.
+ * Production API Gateway entry point: services/api/src/lambda.ts. It performs deterministic computation
  * only: configuration validation, cost estimation, and population sampling. It never
  * opens a browser and never calls AWS.
  */

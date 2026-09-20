@@ -1,3 +1,4 @@
+import { accessToken, authConfigured } from './auth';
 import type {
   BehaviorEvent,
   PopulationSpec,
@@ -36,6 +37,7 @@ export interface RichPersona extends SyntheticPersona {
 }
 
 export interface RunSummary {
+  evidence_warning?: string;
   run_id: string;
   status: string;
   created_at?: string;
@@ -52,6 +54,7 @@ export interface RunSummary {
 }
 
 export interface SessionItem {
+  evidence_warning?: string;
   session_id: string;
   persona_id: string;
   status: SessionStatus;
@@ -62,7 +65,7 @@ export interface SessionItem {
   stop_reason?: string;
   current_action?: string;
   agentcore_session_id?: string;
-  live_view_url?: string;
+  live_view_url?: string | null;
   trajectory_ref?: string;
   persona?: RichPersona;
 }
@@ -86,9 +89,11 @@ async function request<T>(
   init?: RequestInit,
   options: { allow404?: boolean } = {},
 ): Promise<T | null> {
+  const token = accessToken();
+  if (authConfigured && path !== '/health' && !token) throw new Error('Sign in as an operator to continue.');
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
   });
   if (response.status === 404 && options.allow404) return null;
   const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
@@ -118,7 +123,7 @@ export const productApi = {
     return request<{ runs: RunSummary[] }>('/runs').then(result => result?.runs ?? []);
   },
 
-  createRun(configuration: RunConfiguration, population: PopulationSpec) {
+  createRun(configuration: RunConfiguration, population?: PopulationSpec) {
     return request<{ run_id: string; personas: RichPersona[] }>('/runs', {
       method: 'POST',
       body: JSON.stringify({ configuration, population }),
@@ -178,7 +183,7 @@ export const productApi = {
   },
 
   getReport(runId: string) {
-    return request<{ report: SyntheticBetaReport; download_url?: string }>(
+    return request<{ report: SyntheticBetaReport; download_url?: string; evidence_warning?: string }>(
       `/runs/${encodeURIComponent(runId)}/report`,
       undefined,
       { allow404: true },

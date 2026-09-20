@@ -1,74 +1,34 @@
-# Nova Act + AgentCore Browser worker
+# Centopus Nova worker
 
-This directory is the **real AWS execution milestone** for Synthetic Beta. It is separate from the local
-Playwright adapter so the project can test deterministic analytics locally without cloud spend while still
-having a production-shaped AWS browser path.
+lambda_handler.py:handler is the agent-account Lambda entry point. worker.py validates the plan and owns the AgentCore lifecycle. evidence.py adapts foundation's custom Nova actuator to main's RawNovaStep[] response.
 
-## What it does
+Use Python 3.12 and requirements.txt on Linux, matching the container runtime. Direct SDKs and their resolved transitive versions are pinned. Windows ARM may lack native dependency wheels; use Linux for full SDK/dependency checks. The Lambda image targets x86_64; the local Linux SDK check on ARM is not a container-build test.
 
-One JSON session plan is validated before any cloud call. The worker then:
-
-1. authenticates through AWS IAM using a Nova Act workflow,
-2. opens an isolated Amazon Bedrock AgentCore Browser session,
-3. connects Nova Act to the managed browser over CDP,
-4. gives the agent the persona, objective and safety boundaries,
-5. lets Nova Act decide how to use the product,
-6. prints an explicit JSON result or an explicit failure.
-
-No API key is used by this worker.
-
-## Prerequisites
-
-- Python 3.10+
-- AWS credentials available to the process
-- Nova Act access in the AWS account
-- AgentCore Browser permissions
-- a Nova Act workflow definition the caller is permitted to use
-- an **authorized public HTTPS staging/demo target**
-
-Nova Act currently documents US East (N. Virginia) as its supported region, so this worker defaults to
-`us-east-1`. Override `AWS_REGION` only when the service documentation for your account supports it.
-
-## Install
+From this directory:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r services/nova-worker/requirements.txt
+python -m pip install -r requirements.txt
+python -m pip check
+python verify_sdk.py
+python -m unittest discover -s . -p 'test_*.py'
+python worker.py --plan-file plan.example.json --validate-only
 ```
 
-## Validate locally without AWS spend
-
-Edit a copy of `plan.example.json`, then:
+`requirements.in` lists the intentional SDK pins. Regenerate `requirements.txt`
+from the repository root on Linux/Python 3.12 with `pip-tools==7.6.1`:
 
 ```bash
-python services/nova-worker/worker.py \
-  --plan-file services/nova-worker/plan.example.json \
-  --validate-only
+python -m piptools compile --no-emit-index-url --no-emit-trusted-host --output-file services/nova-worker/requirements.txt services/nova-worker/requirements.in
 ```
 
-Validation rejects non-HTTPS targets, credential-bearing URLs and hosts outside the explicit allowlist.
+After installing the lock, run `python -m pip check`, the SDK/test commands above,
+and `python -m pip_audit --local` (CI pins pip-audit 2.10.1). The audit covers the
+entire installed environment and fails on known vulnerabilities. Package versions
+are locked; the upstream Lambda base-image tag is not digest-pinned, so deployment
+must still build and validate the actual image.
 
-## Run one real AWS synthetic user
+Contract tests and plan validation do not need AWS credentials. Real execution requires an authorized HTTPS target, IAM credentials, AgentCore access and a Nova workflow. Do not repeatedly retry unavailable authentication.
 
-```bash
-export AWS_REGION=us-east-1
-export NOVA_ACT_WORKFLOW_NAME=synthetic-beta-browser-session
-export NOVA_ACT_MODEL_ID=nova-act-latest
+The recorder captures executed browser methods, timing, observations and failures. It does not publish typed values or final model responses as evidence. Only a configured DOM checkpoint proves completion; absent instrumentation means completion stays unverified. Partial action traces can survive runtime failures. Cloud screenshots and Live View URLs are not produced.
 
-python services/nova-worker/worker.py \
-  --plan-file /path/to/authorized-session-plan.json
-```
-
-While it runs, the AgentCore Browser console can show the active browser through Live View. For the hackathon
-demo, show that live browser next to the Synthetic Beta run/session UI.
-
-## Deliberate current boundary
-
-This milestone proves the real autonomous browser execution path. It does **not** yet convert Nova Act trace
-steps into the TypeScript `BehaviorEvent[]` schema. Until that telemetry adapter lands, the worker returns the
-Nova Act result envelope and the AWS console is the source of truth for the browser trace. The local L1 path
-continues to prove the deterministic event/analytics pipeline.
-
-Do not fabricate TypeScript events from the final Nova response. The next adapter must derive them from actual
-Nova/AgentCore trace data.
+The managed browser identifier defaults to aws.browser.v1. CDK supplies the workflow name. Root .env.example documents runtime settings. Direct CLI execution uses the same Python executor but does not reserve a control-plane budget; use the production API for aggregate admission reservations.

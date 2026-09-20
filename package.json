@@ -21,7 +21,14 @@
     "preview": "npm run preview --workspace @synthetic-beta/web",
     "dev:demo": "node demo-target/serve.mjs",
     "l1:run": "tsx services/agent-worker/src/l1-run.ts",
-    "nova:validate": "python services/nova-worker/worker.py --plan-file services/nova-worker/plan.example.json --validate-only"
+    "nova:validate": "python services/nova-worker/worker.py --plan-file services/nova-worker/plan.example.json --validate-only",
+    "build:lambdas": "node scripts/build-lambdas.mjs",
+    "pretest": "npm run build:lambdas",
+    "infra:synth": "npm run build:lambdas && cdk synth --app \"npx tsx infra/cdk/bin/app.ts\" --output .artifacts/cdk-validation -c validation=true --quiet",
+    "infra:diff": "npm run build:lambdas && cdk diff --app \"npx tsx infra/cdk/bin/app.ts\" --output .artifacts/cdk-deploy",
+    "infra:deploy": "npm run build:lambdas && cdk deploy --all --app \"npx tsx infra/cdk/bin/app.ts\" --output .artifacts/cdk-deploy --require-approval broadening",
+    "test:python": "python -m unittest discover -s services/nova-worker -p \"test_*.py\"",
+    "test:browser": "tsx --test tests/browser/*.test.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-agentcore": "^3.1136.0",
@@ -35,6 +42,10 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "aws-cdk": "2.1142.0",
+    "aws-cdk-lib": "2.270.0",
+    "constructs": "10.5.0",
+    "esbuild": "0.25.12",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^6.1.1",
     "globals": "^15.15.0",

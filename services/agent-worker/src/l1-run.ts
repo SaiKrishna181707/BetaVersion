@@ -1,3 +1,4 @@
+import { GUARDRAILS } from '@synthetic-beta/contracts';
 import { join } from 'node:path';
 import { computeRunMetrics } from '@synthetic-beta/analytics';
 import { buildCohort } from '@synthetic-beta/population';
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
     user_count: 1,
     batch_size: 1,
     max_session_seconds: config.maxSessionSeconds,
-    run_hard_cap_usd: 45,
+    run_hard_cap_usd: GUARDRAILS.DEFAULT_RUN_HARD_CAP_USD,
     authorization_acknowledged: true,
   };
 
@@ -107,7 +108,7 @@ async function main(): Promise<void> {
     account_ref: 'sandbox-1',
   };
 
-  console.log('Synthetic Beta - L1 local session');
+  console.log('Centopus - L1 local session');
   console.log(`  run        ${run_id}`);
   console.log(`  persona    ${persona.persona_id}  (${persona.technical_ability} technical, ${persona.product_familiarity} familiarity, ${persona.patience} patience, ${persona.reading_style} reading)`);
   console.log(`  objective  ${plan.objective}`);

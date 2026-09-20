@@ -169,9 +169,12 @@ class WorkerContractTests(unittest.TestCase):
         self.assertNotIn("click the", prompt.lower())
 
 
-    def test_parse_nova_html_log_handles_missing_file(self):
-        from worker import parse_nova_html_log
-        self.assertEqual(parse_nova_html_log("non_existent_file.html"), [])
+    def test_rejects_unbounded_or_duplicate_checkpoints(self):
+        for checkpoints in [['goal', 'goal'], ['a'] * 21, [None], ['<script>']]:
+            raw = plan()
+            raw['checkpoint_plan'] = checkpoints
+            with self.assertRaises(PlanError):
+                validate_plan(raw)
 
 
 if __name__ == "__main__":

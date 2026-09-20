@@ -1,4 +1,4 @@
-"""Lambda entry point for Synthetic Beta Nova Act worker."""
+"""Lambda entry point for Centopus Nova Act worker."""
 import json
 import os
 import sys

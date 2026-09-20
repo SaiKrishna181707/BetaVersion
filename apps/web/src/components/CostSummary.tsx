@@ -39,7 +39,7 @@ export function CostSummary({ configuration, estimate, budgetError, onBudgetChan
         <div><dt>Concurrent sessions, up to</dt><dd className="mono">{concurrent ?? '—'}</dd></div>
       </dl>
       <div className="budget-field">
-        <Field id="run_hard_cap_usd" label="Hard budget cap" hint="The future executor must stop launching sessions at this cap." error={budgetError}>
+        <Field id="run_hard_cap_usd" label="Run estimate allowance" hint="The backend reserves the planning estimate before execution. This is not an AWS billing cap." error={budgetError}>
           <div className="money-input">
             <span>$</span>
             <input
@@ -86,7 +86,7 @@ export function CostSummary({ configuration, estimate, budgetError, onBudgetChan
     </section>
     <div className="execution-offline">
       <span className="offline-dot" />
-      <div><strong>Browser execution is offline</strong><p>Review and save your configuration now. Agent execution comes next.</p></div>
+      <div><strong>Review before execution</strong><p>Execution requires a configured backend and operator sign-in.</p></div>
     </div>
   </aside>;
 }

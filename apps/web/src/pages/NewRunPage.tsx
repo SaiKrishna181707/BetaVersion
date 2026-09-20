@@ -41,10 +41,11 @@ export function NewRunPage() {
     objective: intelligence?.suggested_objectives?.[0] || '',
     user_count: 10,
     batch_size: Math.min(5, GUARDRAILS.MAX_BATCH_SIZE),
-    authorization_acknowledged: true,
+    authorization_acknowledged: false,
   }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [checkpointText, setCheckpointText] = useState('');
 
   let estimate: CostEstimate | null = null;
   try {
@@ -71,10 +72,11 @@ export function NewRunPage() {
     }
     if (configuration.product_description.trim().length < 10) return 'Describe what the product does.';
     if (configuration.target_audience.trim().length < 10) return 'Describe the target audience.';
-    if (configuration.objective.trim().length < 5) return 'Choose or enter one clear objective.';
+    if (configuration.objective.trim().length < 10) return 'Choose or enter one clear objective.';
     if (!Number.isInteger(configuration.user_count) || configuration.user_count < 1 || configuration.user_count > 100) {
       return 'Synthetic users must be between 1 and 100.';
     }
+    if (!configuration.authorization_acknowledged) return 'Confirm that you own or are authorized to test this target.';
     if (!estimate) return 'Complete the run limits before building the population.';
     if (estimate.exceeds_run_cap || estimate.exceeds_global_ceiling) return 'The estimated run exceeds the configured budget limit.';
     return null;
@@ -170,6 +172,14 @@ export function NewRunPage() {
           </div>
         </section>
 
+        <section className="vision-form-section">
+          <label><span>Evidence checkpoints (optional)</span><input type="text" value={checkpointText}
+            onChange={event => { setCheckpointText(event.target.value); update('checkpoint_plan', event.target.value.split(',').map(value => value.trim()).filter(Boolean)); }}
+            placeholder="OPEN_APP, CREATE_PROJECT, INVITE_TEAMMATE" /></label>
+          <p>For an instrumented target, enter its DOM checkpoint names in order. Only an observed final checkpoint verifies task completion. Other runs still record actions and friction.</p>
+          <label><input type="checkbox" checked={configuration.authorization_acknowledged}
+            onChange={event => update('authorization_acknowledged', event.target.checked)} /> I own this target or have permission to test it.</label>
+        </section>
         {error ? <p className="vision-error" role="alert">{error}</p> : null}
         <div className="vision-primary-action">
           <div><strong>Next: meet the population</strong><span>You can inspect, search, filter and edit every agent before execution.</span></div>
@@ -186,8 +196,8 @@ export function NewRunPage() {
           <div><dt>Session limit</dt><dd>{configuration.max_session_seconds}s</dd></div>
           <div><dt>Batch size</dt><dd>{configuration.batch_size}</dd></div>
         </dl>
-        <label><span>Run hard cap</span><div className="vision-money-input"><span>$</span><input type="number" min={0.01} max={GUARDRAILS.GLOBAL_SPEND_CEILING_USD} step={0.01} value={configuration.run_hard_cap_usd} onChange={event => update('run_hard_cap_usd', event.target.valueAsNumber)} /></div></label>
-        <p>The backend still enforces URL, action, time, concurrency and budget safety limits.</p>
+        <label><span>Run estimate allowance</span><div className="vision-money-input"><span>$</span><input type="number" min={0.01} max={GUARDRAILS.GLOBAL_SPEND_CEILING_USD} step={0.01} value={configuration.run_hard_cap_usd} onChange={event => update('run_hard_cap_usd', event.target.valueAsNumber)} /></div></label>
+        <p>Execution reserves the planning estimate before launch. This allowance does not measure or cap your AWS bill.</p>
       </aside>
     </form>
   </WorkspaceShell>;

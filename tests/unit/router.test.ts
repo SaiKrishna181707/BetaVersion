@@ -35,7 +35,7 @@ test('registers future surfaces as planned', () => {
 });
 
 test('uses the product title only for ready surfaces', () => {
-  assert.equal(titleFor(parseRoute('#/new')), 'New run — Synthetic Beta');
+  assert.equal(titleFor(parseRoute('#/new')), 'New run — Centopus');
   assert.equal(titleFor(parseRoute('#/settings')), FALLBACK_TITLE);
   assert.equal(titleFor(parseRoute('#/nope')), FALLBACK_TITLE);
 });

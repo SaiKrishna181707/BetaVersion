@@ -11,6 +11,7 @@ test('adapts raw Nova steps to valid BehaviorEvent array without hallucinated ev
   const trajectory: RawNovaTrajectory = {
     steps: [
       {
+        timestamp: '2026-09-20T00:00:01.000Z',
         step_id: 1,
         sequence: 1,
         action: { type: 'navigate', url: 'https://staging.example.com/demo-target/' },
@@ -24,6 +25,7 @@ test('adapts raw Nova steps to valid BehaviorEvent array without hallucinated ev
         elapsed_ms: 1000,
       },
       {
+        timestamp: '2026-09-20T00:00:01.000Z',
         step_id: 2,
         sequence: 2,
         action: { type: 'click', selector: '#members-tab', details: 'Team Members button' },
@@ -37,6 +39,7 @@ test('adapts raw Nova steps to valid BehaviorEvent array without hallucinated ev
         elapsed_ms: 3500,
       },
       {
+        timestamp: '2026-09-20T00:00:01.000Z',
         step_id: 3,
         sequence: 3,
         action: { type: 'type', selector: '#email-input', value: 'colleague@example.com' },
@@ -72,11 +75,11 @@ test('adapts raw Nova steps to valid BehaviorEvent array without hallucinated ev
 
   assert.equal(events[1]!.action_type, 'click');
   assert.equal(events[1]!.target_descriptor, '#members-tab');
-  assert.equal(events[1]!.agent_reason_code, 'GOAL_PROGRESS');
+  assert.equal(events[1]!.agent_reason_code, 'EXPLORING');
 
   assert.equal(events[2]!.action_type, 'type');
   assert.equal(events[2]!.target_descriptor, '#email-input');
-  assert.equal(events[2]!.agent_reason_code, 'OBJECTIVE_COMPLETE');
+  assert.equal(events[2]!.agent_reason_code, 'EXPLORING');
 });
 
 test('refuses to fabricate events when trajectory has empty steps', () => {
@@ -101,6 +104,7 @@ test('detects friction, console errors, and retrying signals correctly', () => {
   const trajectoryWithFriction: RawNovaTrajectory = {
     steps: [
       {
+        timestamp: '2026-09-20T00:00:01.000Z',
         step_id: 1,
         action: { type: 'click', selector: '#broken-button' },
         observation: {
@@ -109,6 +113,7 @@ test('detects friction, console errors, and retrying signals correctly', () => {
           console_errors: ['Uncaught TypeError: Cannot read properties of undefined'],
         },
         thought: 'Button did not respond, retrying click on member invite',
+        agent_reason_code: 'RETRYING',
         status: 'ERROR',
         elapsed_ms: 2000,
       },
@@ -134,16 +139,20 @@ test('adapts raw Nova trajectory to complete SessionResult', () => {
   const trajectory: RawNovaTrajectory = {
     steps: [
       {
+        timestamp: '2026-09-20T00:00:01.000Z',
         step_id: 1,
         action: { type: 'navigate' },
-        observation: { url: 'https://staging.example.com/start' },
+        elapsed_ms: 100,
+        observation: { url: 'https://staging.example.com/start', checkpoints: ['start'] },
         thought: 'Starting exploration',
         status: 'SUCCESS',
       },
       {
+        timestamp: '2026-09-20T00:00:01.000Z',
         step_id: 2,
         action: { type: 'submit' },
-        observation: { url: 'https://staging.example.com/done' },
+        elapsed_ms: 500,
+        observation: { url: 'https://staging.example.com/done', checkpoints: ['done'] },
         thought: 'Objective completed successfully',
         status: 'SUCCESS',
       },
@@ -169,4 +178,19 @@ test('adapts raw Nova trajectory to complete SessionResult', () => {
   assert.equal(result.status, 'COMPLETED');
   assert.equal(result.finish_reason, 'OBJECTIVE_COMPLETE');
   assert.equal(result.events.length, 2);
+});
+
+
+test('rejects missing actions, timing and outcomes instead of inventing evidence', () => {
+  const plan = { run_id: 'r', session_id: 's', persona_id: 'p', target_url: 'https://example.com', checkpoint_plan: ['done'] };
+  const recorded = { timestamp: '2026-09-20T00:00:00Z', elapsed_ms: 0, action: { type: 'click' }, status: 'SUCCESS', observation: { url: 'https://example.com/done' } };
+  assert.equal(adaptNovaTraceToBehaviorEvents({ steps: [recorded] }, plan).length, 1);
+  for (const key of ['timestamp', 'elapsed_ms', 'action', 'status', 'observation'] as const) {
+    const incomplete = { ...recorded, [key]: undefined };
+    assert.deepEqual(adaptNovaTraceToBehaviorEvents({ steps: [incomplete] }, plan), []);
+  }
+  const event = adaptNovaTraceToBehaviorEvents({ steps: [{ ...recorded, thought: 'Successfully completed!', screenshot_ref: 'screenshot-step-1' }] }, plan)[0]!;
+  assert.equal(event.task_checkpoint, null);
+  assert.equal(event.agent_reason_code, 'EXPLORING');
+  assert.equal(event.screenshot_ref, null);
 });

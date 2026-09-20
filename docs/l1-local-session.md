@@ -18,7 +18,7 @@ Requires Node 22.12 or newer and an installed Chromium-based browser (Chrome is 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `L1_TARGET_URL` | `http://localhost:4174` | target under test; its host must be in the plan's origin allowlist |
-| `L1_SEED` | `l1-demo` | population seed; the same seed always produces the same persona and the same run |
+| `L1_SEED` | `l1-demo` | population seed; reproduces the persona, not browser timing or outcomes |
 | `L1_HEADLESS` | `1` | set to `0` to watch the session in a visible window |
 | `L1_SESSION_SECONDS` | `180` | session deadline handed to the loop |
 | `L1_BROWSER_CHANNEL` | auto | pin one channel, for example `msedge` |
@@ -38,7 +38,7 @@ Four pieces, each with a single responsibility:
 - **Judgment** - `createLocalAgentPolicy` implements `AgentPolicyPort`. It receives the observation, the
   persona, the objective, and the session history, and returns one action with a reason code. It never receives
   a click path, is seeded, and behaves differently per persona (technical ability, familiarity, patience,
-  reading style). A Nova Act policy implements the same port later.
+  reading style). The production Nova worker uses a separate instrumented actuator.
 - **Determinism** - `runSessionLoop` owns everything that must not be a judgment call: the session deadline,
   the action budget, the remaining-budget guard, duplicate-state detection, the origin allowlist, cancellation,
   checkpoint capture, and the mapping from stop reason to session status. Per the handoff, timers, limits,
@@ -61,8 +61,7 @@ rather than a user who hit a technical fault.
   screenshots/      checkpoint-<NAME>.png and final-<n>.png
 ```
 
-`.artifacts/` is git-ignored. The same writer is what a future S3 upload will reuse; only the destination
-changes. `writeSessionArtifacts` refuses to write a log that contains any value it was told to protect, which is
+`.artifacts/` is git-ignored. The production worker persists its raw trajectories separately in S3. `writeSessionArtifacts` refuses to write a log that contains any value it was told to protect, which is
 covered by a test, so a typed password cannot reach disk unnoticed.
 
 `events.json` is the evidence the report will read. Two properties matter:
@@ -90,7 +89,7 @@ denominator prints `n/a`, never `0%`.
 - It is not a replacement for real beta users, and it does not measure demand.
 - It is not AWS, Step Functions, DynamoDB, S3, Nova, or AgentCore Browser. `createUnconfiguredSessionExecutor()`
   still reports `available: false` for those environments.
-- One session is not a metric. L1 proves the pipeline; population-level findings need L2 and beyond.
+- One session is not a metric. L1 exercises the local pipeline; population-level findings need L2 and beyond.
 - The local policy is a heuristic, not a model. It exists so the loop, guardrails, telemetry, and artefacts can
   be tested without a model in the path, and so a model can be dropped into `AgentPolicyPort` without moving
   anything else.
