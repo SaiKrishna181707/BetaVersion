@@ -24,7 +24,7 @@
   height: 100%;
   transform-origin: bottom;
   transform: scaleY(var(--bar-scale));
-  background: linear-gradient(to top, #1d4ed8 0%, rgba(29, 78, 216, .88) 24%, rgba(72, 58, 210, .38) 53%, transparent 82%);
+  background: linear-gradient(to top, #1d4ed8 0%, rgba(29, 78, 216, .92) 28%, rgba(86, 56, 216, .56) 68%, rgba(124, 92, 255, .16) 90%, transparent 97%);
   animation: centopus-bar-float 3s ease-in-out infinite;
   will-change: transform, opacity;
 }
@@ -64,7 +64,7 @@
 .centopus-previous-button {
   position: absolute;
   top: 28px;
-  left: 34px;
+  right: 34px;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
@@ -93,36 +93,9 @@
   line-height: 1;
 }
 
-.centopus-auth-button {
-  position: absolute;
-  top: 28px;
-  right: 34px;
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 8px 16px;
-  border: 1px solid rgba(155, 130, 255, .25);
-  border-radius: 10px;
-  background: rgba(5, 3, 10, .52);
-  color: #cfc7e4;
-  font-size: 12px;
-  font-weight: 600;
-  backdrop-filter: blur(14px);
-  cursor: pointer;
-  transition: color .18s ease, border-color .18s ease, background .18s ease;
-}
-
-.centopus-auth-button:hover {
-  color: #fff;
-  border-color: rgba(155, 130, 255, .58);
-  background: rgba(19, 12, 32, .76);
-}
-
 .centopus-centered-brand {
   position: absolute;
-  top: 24px;
+  top: 20px;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: auto;
@@ -135,15 +108,14 @@
 }
 
 .centopus-centered-brand img {
-  width: 58px;
-  height: 58px;
+  width: 78px;
+  height: 78px;
   display: block;
-  border-radius: 15px;
-  box-shadow: 0 0 28px rgba(124, 92, 255, .28);
+  filter: drop-shadow(0 0 20px rgba(124, 92, 255, .42));
 }
 
 .centopus-centered-brand span {
-  font-size: 21px;
+  font-size: 23px;
   line-height: 1;
   font-weight: 700;
   letter-spacing: -.035em;
@@ -283,7 +255,7 @@
 
 .centopus-previous-panel {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: 0 0 0 auto;
   z-index: 10;
   width: min(430px, 92vw);
   height: 100dvh;
@@ -292,13 +264,13 @@
   background:
     radial-gradient(circle at 0 0, rgba(124, 92, 255, .15), transparent 22rem),
     #08050e;
-  border-right: 1px solid rgba(155, 130, 255, .28);
-  box-shadow: 28px 0 80px rgba(0, 0, 0, .48);
+  border-left: 1px solid rgba(155, 130, 255, .28);
+  box-shadow: -28px 0 80px rgba(0, 0, 0, .48);
   animation: centopus-panel-in .2s ease-out both;
 }
 
 @keyframes centopus-panel-in {
-  from { transform: translateX(-18px); opacity: 0; }
+  from { transform: translateX(18px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
 
@@ -423,7 +395,7 @@
 
   .centopus-previous-button {
     top: 20px;
-    left: 18px;
+    right: 18px;
     min-height: 36px;
     padding: 7px 10px;
   }
@@ -433,13 +405,12 @@
   }
 
   .centopus-centered-brand img {
-    width: 50px;
-    height: 50px;
-    border-radius: 13px;
+    width: 68px;
+    height: 68px;
   }
 
   .centopus-centered-brand span {
-    font-size: 19px;
+    font-size: 20px;
   }
 
   .centopus-landing-main {
