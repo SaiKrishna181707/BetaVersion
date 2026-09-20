@@ -191,7 +191,7 @@ function pagePriority(pathname: string): number {
 export function discoverFirstPartyUrls(html: string, baseUrl: string, limit = MAX_PAGES - 1): string[] {
   const base = new URL(baseUrl);
   const candidates = new Map<string, number>();
-  const hrefPattern = /<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["'][^>]*>/gi;
+  const hrefPattern = /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/gi;
   let match: RegExpExecArray | null;
   while ((match = hrefPattern.exec(html)) !== null) {
     try {
