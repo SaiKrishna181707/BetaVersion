@@ -1,0 +1,63 @@
+name: Deploy production frontend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: amplify-production-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build production frontend
+        env:
+          VITE_API_BASE_URL: https://fkvvrndb17.execute-api.us-east-1.amazonaws.com
+        run: npm run build
+
+      - name: Package frontend
+        run: cd apps/web/dist && zip -qr "$GITHUB_WORKSPACE/amplify.zip" .
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::643700104680:role/CentopusAmplifyGitHubDeployRole
+          aws-region: us-east-1
+
+      - name: Deploy to Amplify
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployment="$(aws amplify create-deployment --app-id d1s2dm4wj8xxb --branch-name main)"
+          job_id="$(jq -r '.jobId' <<<"$deployment")"
+          upload_url="$(jq -r '.zipUploadUrl' <<<"$deployment")"
+          curl --fail --silent --show-error --request PUT --upload-file amplify.zip "$upload_url"
+          aws amplify start-deployment --app-id d1s2dm4wj8xxb --branch-name main --job-id "$job_id" >/dev/null
+
+          for attempt in {1..60}; do
+            status="$(aws amplify get-job --app-id d1s2dm4wj8xxb --branch-name main --job-id "$job_id" --query 'job.summary.status' --output text)"
+            case "$status" in
+              SUCCEED) exit 0 ;;
+              FAILED|CANCELLED) echo "Amplify deployment ended with $status" >&2; exit 1 ;;
+            esac
+            sleep 5
+          done
+
+          echo "Amplify deployment did not finish within five minutes." >&2
+          exit 1
