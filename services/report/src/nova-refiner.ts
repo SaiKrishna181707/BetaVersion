@@ -116,5 +116,68 @@ Drafts:\n${JSON.stringify(feedbackChunk.map(item => ({
       improvement_suggestion: uniqueText(bounded(edit.improvement_suggestion, 700)) || item.improvement_suggestion,
     };
   });
-  return { ...report, agent_feedback };
+
+  let aggregate_feedback = report.aggregate_feedback;
+  try {
+    const aggregate = await model<{ aggregate_feedback?: Record<string, unknown> }>({
+      modelId,
+      system: 'You are an evidence-grounded UX research synthesizer. Return valid JSON only. Summarize patterns across all supplied synthetic agents without inventing facts, screens, actions, or human opinions.',
+      prompt: `Aggregate the synthetic-user feedback across the entire run into one concise product summary.
+
+Rules:
+- Use only the supplied per-agent feedback, immutable outcomes, findings, and metrics.
+- Do not claim these are human users or survey respondents.
+- Distinguish positive, mixed, and negative recurring signals.
+- Do not invent a theme if it is not supported by multiple agents or a recorded finding.
+- Give one concise evidence-grounded recommendation.
+- Do not mention infrastructure or internal implementation.
+
+Return {"aggregate_feedback":{"summary":string,"positive_themes":[string],"mixed_themes":[string],"negative_themes":[string],"recommendation":string|null}}.
+
+Run:\n${JSON.stringify({
+        objective: report.configuration.objective,
+        metrics: {
+          completion: report.metrics.completion,
+          abandonment: report.metrics.abandonment,
+          technical_failure: report.metrics.technical_failure,
+          timeout: report.metrics.timeout,
+        },
+        findings: report.findings.map(item => ({
+          kind: item.kind,
+          title: item.title,
+          detail: bounded(item.detail, 500),
+        })),
+        agents: agent_feedback.map(item => ({
+          session_id: item.session_id,
+          feeling: item.overall_feeling,
+          direct_feedback: bounded(item.direct_feedback, 500),
+          journey_summary: bounded(item.journey_summary, 400),
+          improvement_suggestion: bounded(item.improvement_suggestion, 300),
+          continuation_or_abandonment: bounded(item.continuation_or_abandonment, 250),
+        })),
+      })}`,
+      maxTokens: 1800,
+      temperature: 0.35,
+    });
+    const raw = aggregate.aggregate_feedback;
+    const summary = bounded(raw?.summary, 2400);
+    if (raw && summary) {
+      aggregate_feedback = {
+        source: 'AMAZON_NOVA',
+        summary,
+        positive_themes: boundedList(raw.positive_themes, 5, 500) || [],
+        mixed_themes: boundedList(raw.mixed_themes, 5, 500) || [],
+        negative_themes: boundedList(raw.negative_themes, 5, 500) || [],
+        recommendation: bounded(raw.recommendation, 900) || null,
+      };
+    }
+  } catch (cause) {
+    console.warn('[Report] Aggregate Nova synthesis unavailable; preserving individual evidence-grounded feedback.', cause);
+  }
+
+  return {
+    ...report,
+    agent_feedback,
+    ...(aggregate_feedback ? { aggregate_feedback } : {}),
+  };
 }

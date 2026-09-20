@@ -92,7 +92,9 @@ test('browser: Centopus product -> population -> execution -> evidence/report us
     await createFinalizer({ docClient: db.client, s3Client: sink, environment, model: reportModel })({ runId: dispatched.runId });
     await page.getByRole('link', { name: 'View Results' }).click({ timeout: 10000 });
     await page.waitForURL('**/report');
-    await page.getByText('AWS billing evidence is not connected').waitFor();
+    await page.getByRole('heading', { name: 'Agent Results' }).waitFor();
+    await page.getByRole('button', { name: 'Agents', exact: true }).waitFor();
+    await page.getByLabel('Filter feedback').waitFor();
     assert.doesNotMatch(await page.locator('body').innerText(), /Synthetic Beta|BetaVersion|synthetic-beta/i);
     await page.screenshot({ path: '.artifacts/centopus-fixture-report.png', fullPage: true });
     await page.goto(`${origin}/#/runs/${dispatched.runId}/sessions/${dispatched.sessions[0]!.session_id}`);

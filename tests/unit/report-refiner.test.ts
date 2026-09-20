@@ -18,6 +18,15 @@ test('Nova refinement receives browser evidence and persists distinct UI-specifi
   });
 
   const model = async <T>(request: JsonModelRequest): Promise<T> => {
+    if (request.prompt.includes('Aggregate the synthetic-user feedback')) {
+      return { aggregate_feedback: {
+        summary: 'Across the agents, completion was uneven and the project creation step produced the clearest friction.',
+        positive_themes: ['Recorded local interactions worked for some agents.'],
+        mixed_themes: ['Agent outcomes varied across the same task.'],
+        negative_themes: ['Project creation remained a repeated friction point.'],
+        recommendation: 'Review the recorded project creation friction first.',
+      } } as T;
+    }
     assert.match(request.prompt, /browser_evidence/);
     assert.match(request.prompt, /CREATE_PROJECT|INVITE_TEAMMATE/);
     const drafts = JSON.parse(request.prompt.match(/Drafts:\n(.+)$/s)?.[1] || '[]') as Array<{ session_id: string }>;
@@ -39,6 +48,8 @@ test('Nova refinement receives browser evidence and persists distinct UI-specifi
   assert.ok(refined.agent_feedback.every(item => item.journey_summary));
   assert.deepEqual(refined.agent_results, report.agent_results);
   assert.deepEqual(refined.metrics, report.metrics);
+  assert.equal(refined.aggregate_feedback?.source, 'AMAZON_NOVA');
+  assert.match(refined.aggregate_feedback?.summary || '', /Across the agents/);
 });
 
 test('duplicate model sentences are rejected across agents', async () => {
@@ -47,6 +58,9 @@ test('duplicate model sentences are rejected across agents', async () => {
   const report = await buildCentopusReport({ configuration: validConfiguration, metrics, sessions, events, personas, generated_at: '2026-09-20T00:00:00.000Z' });
   const repeated = 'The same unsupported generic sentence.';
   const model = async <T>(request: JsonModelRequest): Promise<T> => {
+    if (request.prompt.includes('Aggregate the synthetic-user feedback')) {
+      return { aggregate_feedback: { summary: 'A compact aggregate summary.', positive_themes: [], mixed_themes: [], negative_themes: [], recommendation: null } } as T;
+    }
     const drafts = JSON.parse(request.prompt.match(/Drafts:\n(.+)$/s)?.[1] || '[]') as Array<{ session_id: string }>;
     return { feedback: drafts.map(draft => ({ session_id: draft.session_id, direct_feedback: repeated })) } as T;
   };

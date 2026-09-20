@@ -50,6 +50,14 @@ export interface CentopusReport {
     recommendation: string;
     supporting_session_ids: string[];
   }>;
+  aggregate_feedback?: {
+    source: 'AMAZON_NOVA';
+    summary: string;
+    positive_themes: string[];
+    mixed_themes: string[];
+    negative_themes: string[];
+    recommendation: string | null;
+  };
   agent_feedback: Array<{
     session_id: string;
     persona_id: string;
