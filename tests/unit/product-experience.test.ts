@@ -31,7 +31,7 @@ test('turns Gemini JSON into bounded product intelligence', () => {
 test('extracts a bounded useful sample from oversized first-party HTML', () => {
   const page = stripHtml(`<title>Apple</title><main>${'Products and services. '.repeat(20_000)}</main>`);
   assert.equal(page.title, 'Apple');
-  assert.equal(page.text.length, 24_000);
+  assert.equal(page.text.length, 16_000);
   assert.match(page.text, /Products and services/);
 });
 
