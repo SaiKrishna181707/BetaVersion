@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { Icon } from '@centopus/ui';
 import { AgentCard } from '../components/AgentCard';
 import { PersonaEditor } from '../components/PersonaEditor';
@@ -144,6 +144,13 @@ export function PopulationPage({ runId }: { runId: string }) {
     setActiveIndex(nextIndex);
   };
 
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const rail = railRef.current;
+    if (!rail || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    rail.scrollLeft += event.deltaY;
+  };
+
   const updateActiveFromScroll = () => {
     const rail = railRef.current;
     if (!rail) return;
@@ -266,7 +273,17 @@ export function PopulationPage({ runId }: { runId: string }) {
         <Icon name="chevron" size={20} />
       </button>
 
-      <div className="centopus-carousel-track" ref={railRef} onScroll={updateActiveFromScroll}>
+      <div
+        className="centopus-carousel-track"
+        ref={railRef}
+        onScroll={updateActiveFromScroll}
+        onWheel={handleWheel}
+        tabIndex={0}
+        onKeyDown={event => {
+          if (event.key === 'ArrowLeft') scrollToIndex(activeIndex - 1);
+          if (event.key === 'ArrowRight') scrollToIndex(activeIndex + 1);
+        }}
+      >
         {visible.map((persona, index) => {
           const offset = index - activeIndex;
           const distance = Math.abs(offset);
@@ -308,6 +325,18 @@ export function PopulationPage({ runId }: { runId: string }) {
       </button>
     </section>
 
+    <div className="centopus-population-runbar">
+      <button
+        type="button"
+        className="centopus-run-simulation-button"
+        disabled={starting || personas.length === 0}
+        onClick={() => void start()}
+      >
+        {starting ? 'Starting Simulation…' : 'Run Simulation'}
+        {!starting ? <Icon name="arrow" size={16} /> : null}
+      </button>
+    </div>
+
     {selected ? <div className="vision-drawer-backdrop" role="presentation" onMouseDown={event => {
       if (event.currentTarget === event.target) setSelectedId('');
     }}>
@@ -315,8 +344,6 @@ export function PopulationPage({ runId }: { runId: string }) {
         <PersonaEditor
           persona={selected}
           saving={saving}
-          running={starting}
-          onRun={() => void start()}
           onClose={() => setSelectedId('')}
           onSave={savePersona}
         />

@@ -51,41 +51,54 @@ export function LiveRunPage({ runId }: { runId: string }) {
     return () => window.clearTimeout(timer);
   }, [reportReady, runId]);
 
-  return <main id="main" className="centopus-run-wait">
-    <div className="centopus-run-wait-glow" aria-hidden="true" />
-    <section className="centopus-run-wait-card">
-      <img src="/centopus-mark.svg" alt="" className="centopus-run-wait-mark" />
-      <div className="centopus-run-wait-loader" aria-hidden="true">
-        <span /><span /><span />
-      </div>
+  const dots = Math.min(Math.max(expected, 1), 20);
 
-      <h1>{reportReady ? 'Testing complete.' : 'Your agents are working.'}</h1>
-      <p className="centopus-run-wait-task">
-        {run?.configuration?.objective || 'Preparing the task for your agents…'}
-      </p>
-
-      <div className="centopus-run-wait-progress" aria-label={`${progress}% complete`}>
-        <span style={{ width: `${progress}%` }} />
-      </div>
-
-      <div className="centopus-run-wait-status">
-        <strong>{reportReady ? 'Preparing results…' : active > 0 ? `${active} agent${active === 1 ? '' : 's'} testing now` : 'Starting agent sessions…'}</strong>
-        <span>{terminal} of {expected} finished</span>
-      </div>
-
-      <div className="centopus-run-wait-agents" aria-label="Agent execution progress">
-        {Array.from({ length: Math.min(expected, 20) }, (_, index) => {
+  return <main id="main" className="centopus-reaction-wait">
+    <section className="centopus-reaction-center">
+      <div className="centopus-reaction-grid" aria-hidden="true">
+        {Array.from({ length: dots }, (_, index) => {
           const session = sessions[index];
           const state = session?.status?.toLowerCase() || 'queued';
-          return <span key={session?.session_id || index} className={`centopus-run-dot ${state}`} />;
+          return <span key={session?.session_id || index} className={state} />;
         })}
       </div>
 
-      {error ? <p className="centopus-run-wait-error" role="alert">{error}</p> : null}
+      <div className="centopus-reaction-timeline" aria-hidden="true">
+        <span className="done" />
+        <i />
+        <span className="active" />
+        <i />
+        <span />
+        <i />
+        <span />
+      </div>
+
+      <h1>{reportReady ? 'Preparing Results' : 'Simulating Individual Reactions'}</h1>
+      <p className="centopus-reaction-copy">
+        Each persona independently evaluates your task based on their goals, habits, and pain points — just like a real focus group participant.
+      </p>
+
+      <div className="centopus-reaction-pill">
+        {reportReady
+          ? 'Phase 4/4: Preparing your results…'
+          : active > 0
+            ? `Phase 2/4: Simulating ${expected} individual reaction${expected === 1 ? '' : 's'}…`
+            : 'Phase 1/4: Preparing agent sessions…'}
+      </div>
+
+      <div className="centopus-reaction-progress" aria-label={`${progress}% complete`}>
+        <span style={{ width: `${Math.max(progress, active > 0 ? 12 : 4)}%` }} />
+      </div>
+
+      <p className="centopus-reaction-note">
+        {terminal} of {expected} finished · This usually takes 60–90 seconds. Do not close this window.
+      </p>
+
+      {error ? <p className="centopus-reaction-error" role="alert">{error}</p> : null}
 
       {reportReady
-        ? <a className="centopus-run-results-link" href={`#/runs/${runId}/report`}>View Results →</a>
-        : <p className="centopus-run-wait-note">Please wait. This page updates automatically while the agents test the product.</p>}
+        ? <a className="centopus-reaction-results" href={`#/runs/${runId}/report`}>View Results →</a>
+        : null}
     </section>
   </main>;
 }
