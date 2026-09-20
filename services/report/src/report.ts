@@ -373,10 +373,16 @@ export async function buildCentopusReport(input: BuildReportInput): Promise<Cent
     }
 
     const personaExpectation = persona?.product_expectations?.trim();
+    let normalizedExpectation = personaExpectation?.replace(/^expects?\s+/i, '').replace(/\.$/, '') || '';
+    const productPrefix = `${productName.toLowerCase()} to `;
+    if (normalizedExpectation.toLowerCase().startsWith(productPrefix)) {
+      normalizedExpectation = normalizedExpectation.slice(productPrefix.length);
+    }
+    normalizedExpectation = normalizedExpectation.replace(/^to\s+/i, '');
     const expectationGap = personaExpectation
       ? completed
-        ? `I expected ${productName} to ${personaExpectation.replace(/^expects?\s+/i, '').replace(/\.$/, '')}; this run ultimately validated the objective after ${events.length} recorded events.`
-        : `I expected ${productName} to ${personaExpectation.replace(/^expects?\s+/i, '').replace(/\.$/, '')}; however, this run ended ${session.status.toLowerCase()} without validated objective completion.`
+        ? `I expected ${productName} to ${normalizedExpectation}; this run ultimately validated the objective after ${events.length} recorded events.`
+        : `I expected ${productName} to ${normalizedExpectation}; however, this run ended ${session.status.toLowerCase()} without validated objective completion.`
       : `My configured goal was "${persona?.goal_context || input.configuration.objective}". ${completed ? 'The recorded journey validated it.' : 'The recorded journey did not validate it.'}`;
 
     let taskConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
