@@ -42,11 +42,10 @@ h1, h2, h3 { font-weight: 600; }
 svg { flex-shrink: 0; }
 .mono { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; letter-spacing: -.7px; font-weight: 650; white-space: nowrap; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 20px; letter-spacing: -1px; font-weight: 750; white-space: nowrap; }
 .brand-light { color: var(--muted); font-weight: 450; margin-left: 3px; }
-.brand-mark { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; width: 29px; height: 29px; padding: 5px; background: #1e4438; border-radius: 5px; }
-.brand-mark i { background: #e0eddf; border-radius: 1px; }
-.brand-mark i:last-child { opacity: .5; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; }
+.brand-mark svg { display: block; width: 100%; height: 100%; }
 .button { display: inline-flex; justify-content: center; align-items: center; gap: 10px; min-height: 42px; padding: 10px 16px; border: 1px solid transparent; border-radius: var(--radius); font-size: 13px; font-weight: 550; line-height: 20px; transition: background 150ms, border-color 150ms; white-space: nowrap; }
 .button-primary { color: #fff; background: var(--accent); border-color: var(--accent); box-shadow: 0 1px 2px #15372a12; }
 .button-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
