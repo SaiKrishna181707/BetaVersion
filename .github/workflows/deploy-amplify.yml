@@ -29,14 +29,15 @@ jobs:
       - name: Build production frontend
         env:
           VITE_API_BASE_URL: https://fkvvrndb17.execute-api.us-east-1.amazonaws.com
-          VITE_COGNITO_DOMAIN: ${{ vars.CENTOPUS_COGNITO_DOMAIN }}
-          VITE_COGNITO_CLIENT_ID: ${{ vars.CENTOPUS_COGNITO_CLIENT_ID }}
-          VITE_COGNITO_REDIRECT_URI: ${{ vars.CENTOPUS_COGNITO_REDIRECT_URI }}
+          VITE_COGNITO_DOMAIN: https://centopus-643700104680.auth.us-east-1.amazoncognito.com
+          VITE_COGNITO_CLIENT_ID: 55sm8alrprsvtunj0ir337r9m0
+          VITE_COGNITO_REDIRECT_URI: https://main.d1s2dm4wj8xxb.amplifyapp.com/
         run: |
           set -euo pipefail
+          # Cognito domain/client ID/redirect URI are public OAuth client metadata, not secrets.
           for name in VITE_COGNITO_DOMAIN VITE_COGNITO_CLIENT_ID VITE_COGNITO_REDIRECT_URI; do
             if [ -z "${!name:-}" ]; then
-              echo "::error::Missing GitHub repository variable for $name. Configure CENTOPUS_COGNITO_DOMAIN, CENTOPUS_COGNITO_CLIENT_ID and CENTOPUS_COGNITO_REDIRECT_URI before deploying the production frontend."
+              echo "::error::Missing required public Cognito build setting: $name"
               exit 1
             fi
           done
