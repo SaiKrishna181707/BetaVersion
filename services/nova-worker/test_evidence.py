@@ -12,10 +12,11 @@ class Page:
 
     def __init__(self):
         self.checkpoints = []
+        self.text = 'Observed page'
         self.context = SimpleNamespace(route=lambda *args: None, on=lambda *args: None)
 
     def evaluate(self, script, args=None):
-        return {} if args else {'url': self.url, 'title': 'Observed title', 'text': 'Observed page', 'checkpoints': self.checkpoints}
+        return {} if args else {'url': self.url, 'title': 'Observed title', 'text': self.text, 'checkpoints': self.checkpoints}
 
     def set_default_timeout(self, *args): pass
     def set_default_navigation_timeout(self, *args): pass
@@ -54,6 +55,23 @@ class EvidenceTests(unittest.TestCase):
         evidence.page.checkpoints = ['goal']
         evidence.action('agent_click', lambda: None, (), {})
         self.assertEqual(evidence.reason, 'OBJECTIVE_COMPLETE')
+
+    def test_read_only_objective_requires_browser_visible_evidence_not_model_prose(self):
+        validated = replace(
+            validate_plan(plan()),
+            objective='Find pricing plans',
+            checkpoint_plan=(),
+        )
+        evidence = BrowserEvidence(validated)
+        page = Page()
+        page.text = 'Compare pricing plans for teams'
+        evidence.attach(page)
+
+        evidence.action('agent_scroll', lambda: None, (), {})
+        self.assertIsNone(evidence.reason)
+        evidence.action('agent_click', lambda: None, (), {})
+        self.assertEqual(evidence.reason, 'OBJECTIVE_COMPLETE')
+        self.assertIn('pricing', evidence.steps[-1]['observation']['objective_matches'])
 
     def test_limits_and_unauthorized_navigation_stop_before_action(self):
         evidence = self.recorder()
