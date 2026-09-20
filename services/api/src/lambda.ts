@@ -60,6 +60,16 @@ function response(statusCode: number, data: unknown, origin = ''): ApiResponse {
   };
 }
 
+
+function operatorSubject(event: ApiGatewayEvent): string | null {
+  const subject = event.requestContext?.authorizer?.jwt?.claims?.sub;
+  return typeof subject === 'string' && subject.trim() ? subject.trim() : null;
+}
+
+function ownsRecord(item: Record<string, unknown> | undefined, subject: string | null): boolean {
+  return Boolean(subject && item && item.owner_sub === subject);
+}
+
 function parseJson(body: string | undefined): unknown {
   if (!body) return null;
   try {
@@ -122,6 +132,7 @@ export function createProductionApi(dependencies: {
     if (env.REQUIRE_AUTH === 'true' && !event.requestContext?.authorizer?.jwt?.claims?.sub) {
       return response(401, { error: 'Operator sign-in is required.' }, allowedOrigin);
     }
+    const operatorSub = operatorSubject(event);
 
     if (method === 'POST' && path === '/product-intelligence') {
       const payload = parseJson(body);
@@ -147,8 +158,9 @@ export function createProductionApi(dependencies: {
       const items = await scanAll(docClient, {
         TableName: stateTable,
         FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix)',
-        ExpressionAttributeValues: { ':meta': 'META', ':runPrefix': 'RUN#' },
-        ProjectionExpression: 'run_id, #st, configuration, persona_count, created_at, updated_at, started_at, finished_at',
+        ExpressionAttributeValues: { ':meta': 'META', ':runPrefix': 'RUN#', ':owner': operatorSub },
+        FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix) AND owner_sub = :owner',
+        ProjectionExpression: 'run_id, #st, configuration, persona_count, created_at, updated_at, started_at, finished_at, owner_sub',
         ExpressionAttributeNames: { '#st': 'status' },
       });
       const runs = items
@@ -213,6 +225,7 @@ export function createProductionApi(dependencies: {
         persona_count: personas.length,
         profile,
         evidence_schema_version: 2,
+        owner_sub: operatorSub,
         created_at: createdAt,
         updated_at: createdAt,
         ttl: Math.floor(Date.now() / 1000) + 7 * 86400,
@@ -231,6 +244,7 @@ export function createProductionApi(dependencies: {
             sk: `PERSONA#${persona.persona_id}`,
             run_id: runId,
             persona,
+            owner_sub: operatorSub,
             ttl: Math.floor(Date.now() / 1000) + 7 * 86400,
           },
         }));
@@ -262,7 +276,7 @@ export function createProductionApi(dependencies: {
         Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true,
       }));
 
-      if (!runGet.Item) {
+      if (!runGet.Item || !ownsRecord(runGet.Item as Record<string, unknown>, operatorSub)) {
         return response(404, { error: `Run ${runId} not found` }, allowedOrigin);
       }
 
@@ -307,6 +321,7 @@ export function createProductionApi(dependencies: {
             session_id: session.session_id,
             persona_id: session.persona.persona_id,
             persona: session.persona,
+            owner_sub: operatorSub,
             status: 'QUEUED',
             evidence_schema_version: 2,
             created_at: new Date().toISOString(),
@@ -323,6 +338,7 @@ export function createProductionApi(dependencies: {
             session_id: session.session_id,
             persona: session.persona,
             persona_id: session.persona.persona_id,
+            owner_sub: operatorSub,
             status: 'QUEUED',
             evidence_schema_version: 2,
             created_at: new Date().toISOString(),
@@ -392,7 +408,7 @@ export function createProductionApi(dependencies: {
         Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true,
       }));
 
-      if (!runGet.Item) {
+      if (!runGet.Item || !ownsRecord(runGet.Item as Record<string, unknown>, operatorSub)) {
         return response(404, { error: `Run ${runId} not found` }, allowedOrigin);
       }
 
@@ -438,7 +454,7 @@ export function createProductionApi(dependencies: {
         TableName: stateTable,
         Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true,
       }));
-      if (!res.Item) return response(404, { error: 'Run not found' }, allowedOrigin);
+      if (!res.Item || !ownsRecord(res.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
       return response(200, { ...res.Item, ...evidenceMetadata(res.Item), actual_cost_cents: null }, allowedOrigin);
     }
 
@@ -446,6 +462,8 @@ export function createProductionApi(dependencies: {
     const personasMatch = path.match(/^\/runs\/([^/]+)\/personas$/);
     if (method === 'GET' && personasMatch) {
       const runId = personasMatch[1];
+      const run = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
+      if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
       const items = await queryAll(docClient, {
         TableName: stateTable,
         KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
@@ -461,7 +479,7 @@ export function createProductionApi(dependencies: {
         TableName: stateTable,
         Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true,
       }));
-      if (!run.Item) return response(404, { error: 'Run not found' }, allowedOrigin);
+      if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
       if (run.Item.status !== 'QUEUED') {
         return response(409, { error: 'Personas can only be edited before execution starts.' }, allowedOrigin);
       }
@@ -489,6 +507,8 @@ export function createProductionApi(dependencies: {
     const sessionsMatch = path.match(/^\/runs\/([^/]+)\/sessions$/);
     if (method === 'GET' && sessionsMatch) {
       const runId = sessionsMatch[1];
+      const run = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
+      if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
       const items = await queryAll(docClient, {
         TableName: stateTable,
         KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
@@ -505,7 +525,7 @@ export function createProductionApi(dependencies: {
         TableName: stateTable,
         Key: { pk: `SESSION#${sessionId}`, sk: 'META' },
       }));
-      if (!res.Item) return response(404, { error: 'Session not found' }, allowedOrigin);
+      if (!res.Item || !ownsRecord(res.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Session not found' }, allowedOrigin);
       return response(200, { ...res.Item, ...evidenceMetadata(res.Item), actual_cost_cents: null, live_view_url: null }, allowedOrigin);
     }
 
@@ -513,6 +533,8 @@ export function createProductionApi(dependencies: {
     const eventsMatch = path.match(/^\/sessions\/([^/]+)\/events$/);
     if (method === 'GET' && eventsMatch) {
       const sessionId = eventsMatch[1];
+      const session = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `SESSION#${sessionId}`, sk: 'META' }, ConsistentRead: true }));
+      if (!session.Item || !ownsRecord(session.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Session not found' }, allowedOrigin);
       const items = await queryAll(docClient, {
         TableName: stateTable,
         KeyConditionExpression: 'pk = :pk AND begins_with(sk, :prefix)',
@@ -542,6 +564,8 @@ export function createProductionApi(dependencies: {
         Key: { pk: `RUN#${runId}`, sk: 'FINDINGS' },
       }));
       if (!res.Item) return response(404, { error: 'Findings not ready yet' }, allowedOrigin);
+      const run = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
+      if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
       return response(200, res.Item.findings, allowedOrigin);
     }
 
@@ -554,6 +578,8 @@ export function createProductionApi(dependencies: {
         Key: { pk: `RUN#${runId}`, sk: 'REPORT' },
       }));
       if (!res.Item) return response(404, { error: 'Report not ready yet' }, allowedOrigin);
+      const run = await docClient.send(new GetCommand({ TableName: stateTable, Key: { pk: `RUN#${runId}`, sk: 'META' }, ConsistentRead: true }));
+      if (!run.Item || !ownsRecord(run.Item as Record<string, unknown>, operatorSub)) return response(404, { error: 'Run not found' }, allowedOrigin);
 
       let downloadUrl = '';
       try {
