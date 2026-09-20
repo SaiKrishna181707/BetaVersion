@@ -14,6 +14,7 @@ These are the only supporting documents a reviewer should need after the main RE
 
 Useful for implementation review and maintenance, but not required reading for judges:
 
+- [Supporting browser evidence](evidence/)
 - [Integration audit](integration-audit.md)
 - [Final deployment / verification report](final-deployment-report.md)
 - [Local session notes](l1-local-session.md)
