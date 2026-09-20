@@ -1,7 +1,7 @@
 # Centopus
 
 <p align="center">
-  <img src="apps/web/public/centopus-header.svg" alt="Centopus" width="560" />
+  <img src="apps/web/public/centopus-mark.svg" alt="Centopus mark" width="96" />
 </p>
 
 <h3 align="center">Automated beta testing with up to 100 independent browser agents.</h3>
@@ -107,37 +107,40 @@ Amazon Nova helps with product understanding, persona language, and final feedba
 
 AWS is not just where Centopus is hosted. It is the execution engine.
 
-The diagram below is rendered directly by GitHub.
-
 ```mermaid
-flowchart LR
-    USER["Product team"] --> WEB["React + Vite UI"]
+flowchart TB
+    USER["Product Team"]
+    WEB["Centopus Web App<br/>React + Vite"]
+    API["Amazon API Gateway<br/>+ AWS Lambda"]
+    ORCH["AWS Step Functions<br/>Population Orchestration"]
+    WORKER["Session Worker<br/>AWS Lambda"]
+    AUTH["AWS IAM + STS<br/>Cross-account execution"]
+    NOVA["Amazon Nova Act<br/>Python Worker"]
+    BROWSER["Amazon Bedrock<br/>AgentCore Browser"]
+    EVIDENCE["Browser Evidence Recorder<br/>actions · checkpoints · timing · failures"]
+    STORE["Amazon DynamoDB + Amazon S3<br/>events · session state · raw trajectories"]
+    FINAL["Report Finalizer<br/>AWS Lambda"]
+    SYNTH["Amazon Bedrock / Amazon Nova<br/>evidence-grounded synthesis"]
+    RESULT["Centopus Results<br/>population signal + individual evidence"]
+    OPS["CloudWatch · EventBridge · SNS · Budgets<br/>monitoring · reconciliation · spend guardrails"]
 
-    subgraph CONTROL["AWS control plane"]
-      WEB --> API["Amazon API Gateway"]
-      API --> APIL["AWS Lambda API"]
-      APIL --> SFN["AWS Step Functions"]
-      APIL --> DDB["Amazon DynamoDB"]
-      SFN --> WORKER["Session Worker Lambda"]
-      EVB["Amazon EventBridge"] --> FINAL["Report Finalizer Lambda"]
-      CW["Amazon CloudWatch / SNS / Budgets"]
-    end
+    USER --> WEB
+    WEB --> API
+    API --> ORCH
+    ORCH --> WORKER
+    WORKER --> AUTH
+    AUTH --> NOVA
+    NOVA --> BROWSER
+    BROWSER --> EVIDENCE
+    EVIDENCE --> STORE
+    STORE --> FINAL
+    FINAL --> SYNTH
+    SYNTH --> RESULT
+    RESULT --> WEB
 
-    subgraph AGENT["AWS agent execution plane"]
-      WORKER --> STS["AWS STS / IAM"]
-      STS --> NOVAL["Python Nova Worker"]
-      NOVAL --> ACT["Amazon Nova Act"]
-      ACT --> BROWSER["Amazon Bedrock AgentCore Browser"]
-      BROWSER --> EVIDENCE["Instrumented browser evidence"]
-    end
-
-    EVIDENCE --> S3["Amazon S3 raw trajectories"]
-    EVIDENCE --> DDB
-    S3 --> FINAL
-    DDB --> FINAL
-    FINAL --> BEDROCK["Amazon Bedrock / Amazon Nova"]
-    FINAL --> DDB
-    DDB --> WEB
+    OPS -. protects .-> ORCH
+    OPS -. monitors .-> WORKER
+    OPS -. reconciles .-> FINAL
 ```
 
 ### AWS services in the product
