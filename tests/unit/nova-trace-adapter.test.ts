@@ -239,7 +239,7 @@ test('cleanses raw bounding box descriptors into human-readable element names', 
   const events = adaptNovaTraceToBehaviorEvents(trajectory, plan);
   assert.equal(events.length, 3);
   assert.equal(events[0]!.target_descriptor, 'Support link');
-  assert.equal(events[1]!.target_descriptor, 'Page content');
+  assert.equal(events[1]!.target_descriptor, 'MacBook Air section');
   assert.equal(events[2]!.target_descriptor, '#valid-css-id');
 });
 
