@@ -1041,7 +1041,7 @@
   line-height: 1.6;
 }
 .vision-result-agent {
-  flex: 0 0 255px;
+  flex: 0 0 330px;
   scroll-snap-align: start;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1072,6 +1072,18 @@
 }
 .vision-result-agent dt { color: var(--muted); }
 .vision-result-agent dd { margin: 0; }
+.vision-result-agent-feedback {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 15px;
+}
+.vision-result-agent-feedback small {
+  display: block;
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+.vision-result-agent-feedback strong { color: var(--ink); }
 .vision-result-agent > span:last-child {
   color: var(--accent);
   font-size: 9px;
