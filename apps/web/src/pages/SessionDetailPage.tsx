@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BehaviorEvent, CentopusReport } from '@centopus/contracts';
 import { Badge, Icon } from '@centopus/ui';
-import { WorkspaceShell } from '../components/WorkspaceShell';
 import {
   productApi,
   type RichPersona,
@@ -80,11 +79,11 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
   );
   const hasDetailedReflection = measuredFeedback?.reflection_basis === 'EVIDENCE_DERIVED_SYNTHETIC_REFLECTION';
 
-  if (loading) return <WorkspaceShell><div className="vision-loading-page"><span className="vision-loader" /><strong>Loading this agent’s experience…</strong><span>Retrieving the persisted persona, trajectory and evidence.</span></div></WorkspaceShell>;
+  if (loading) return <main className="centopus-results-page centopus-session-detail-page"><div className="vision-loading-page"><span className="vision-loader" /><strong>Loading this agent’s experience…</strong><span>Retrieving the persisted persona, trajectory and evidence.</span></div></main>;
 
   const persona = session?.persona as RichPersona | undefined;
 
-  return <WorkspaceShell>
+  return <main id="main" className="centopus-results-page centopus-session-detail-page">
     <div className="vision-page-heading">
       <div>
         <span className="eyebrow">INDIVIDUAL AGENT EXPERIENCE</span>
@@ -195,5 +194,5 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
 
       {session.trajectory_ref ? <section className="vision-trajectory"><span>TRAJECTORY REFERENCE</span><code>{session.trajectory_ref}</code></section> : null}
     </> : null}
-  </WorkspaceShell>;
+  </main>;
 }
