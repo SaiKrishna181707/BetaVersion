@@ -6,7 +6,7 @@ import { createStacks } from '../../infra/cdk/stacks';
 import { loadDeploymentConfig, validationConfig } from '../../infra/cdk/config';
 import { GUARDRAILS } from '@centopus/contracts';
 
-test('CDK defines main storage schema, public judge API, cross-account worker and shared limits', () => {
+test('CDK defines main storage schema, authenticated operator API, cross-account worker and shared limits', () => {
   const app = new App();
   const stacks = createStacks(app, validationConfig);
   const control = Template.fromStack(stacks.control);
@@ -17,8 +17,9 @@ test('CDK defines main storage schema, public judge API, cross-account worker an
   });
   control.hasResourceProperties('AWS::Budgets::Budget', { Budget: Match.objectLike({ BudgetLimit: { Amount: GUARDRAILS.GLOBAL_SPEND_CEILING_USD, Unit: 'USD' } }) });
   control.hasResourceProperties('AWS::Lambda::Function', { Handler: 'index.handler', Runtime: 'nodejs22.x', ReservedConcurrentExecutions: GUARDRAILS.MAX_BATCH_SIZE });
-  control.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'ANY /{proxy+}', AuthorizationType: 'NONE' });
-  control.resourceCountIs('AWS::Cognito::UserPool', 0);
+  control.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'ANY /{proxy+}', AuthorizationType: 'JWT' });
+  control.hasResourceProperties('AWS::ApiGatewayV2::Authorizer', { AuthorizerType: 'JWT' });
+  control.resourceCountIs('AWS::Cognito::UserPool', 1);
   agent.hasResourceProperties('AWS::Lambda::Function', { PackageType: 'Image', Timeout: 360, ReservedConcurrentExecutions: GUARDRAILS.MAX_BATCH_SIZE });
   agent.hasResourceProperties('AWS::IAM::Role', { RoleName: `${validationConfig.prefix}-agent-execution`, AssumeRolePolicyDocument: Match.objectLike({ Statement: Match.arrayWith([Match.objectLike({ Condition: {
     StringEquals: { 'sts:ExternalId': validationConfig.externalId }, ArnEquals: { 'aws:PrincipalArn': `arn:aws:iam::${validationConfig.controlAccount}:role/${validationConfig.prefix}-session-worker` },
