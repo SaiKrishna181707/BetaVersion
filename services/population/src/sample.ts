@@ -16,8 +16,57 @@ const DEVICE_CLASS: readonly DeviceClass[] = ['DESKTOP', 'TABLET', 'MOBILE_WEB']
 const SENSITIVITY: readonly ('LOW' | 'MEDIUM' | 'HIGH')[] = ['LOW', 'MEDIUM', 'HIGH'];
 const AGE_BANDS = ['18-24', '25-34', '35-44', '45-54', '55+'] as const;
 const LOCATION_BANDS = ['Large city', 'Mid-size city', 'Small city', 'Suburban', 'Rural'] as const;
-const OCCUPATIONS = ['Founder', 'Product manager', 'Operations lead', 'Designer', 'Independent professional', 'Team lead'] as const;
+const OCCUPATIONS = [
+  'Founder & CEO', 'Product Manager', 'Operations Lead', 'UX Designer',
+  'Independent Consultant', 'Engineering Team Lead', 'Marketing Specialist',
+  'Data Analyst', 'Customer Success Director', 'Small Business Owner',
+] as const;
 const INCOME_BANDS = ['LOW', 'MIDDLE', 'HIGH'] as const;
+
+const FIRST_NAMES = [
+  'Elena', 'Marcus', 'Priya', 'David', 'Aisha', 'Lucas', 'Maya', 'Mateo',
+  'Sofia', 'Julian', 'Amara', 'Liam', 'Ananya', 'Chen', 'Gabriel', 'Zoe',
+  'Fatima', 'Kai', 'Nadia', 'Leo', 'Tara', 'Arjun', 'Clara', 'Omar',
+] as const;
+
+const LAST_NAMES = [
+  'Rostova', 'Vance', 'Sharma', 'Kim', 'Al-Mansoor', 'Silva', 'Lindqvist', 'Morales',
+  'Patel', 'Mercer', 'Okonkwo', 'Bergstrom', 'Deshmukh', 'Wei', 'Costa', 'Hayashi',
+  'Kabbah', 'Tanaka', 'Benali', 'Novak', 'Gupta', 'Castillo', 'Larsson', 'Farooq',
+] as const;
+
+const LOCATIONS = [
+  'San Francisco, CA', 'Austin, TX', 'New York, NY', 'Chicago, IL', 'Seattle, WA',
+  'London, UK', 'Toronto, Canada', 'Berlin, Germany', 'Denver, CO', 'Boston, MA',
+  'Atlanta, GA', 'Raleigh, NC', 'Dublin, Ireland', 'Amsterdam, Netherlands',
+] as const;
+
+const EDUCATIONS = [
+  "Bachelor's in Computer Science", "Bachelor's in Business Administration",
+  "Master's in Design", 'Self-taught practitioner', "Master's in Economics",
+  "Associate Degree", "Bachelor's in Communications",
+] as const;
+
+const BUYING_BEHAVIORS = [
+  'Values fast evaluation, seeks proof-of-concept before recommending.',
+  'Thorough evaluator comparing alternative platforms on value and reliability.',
+  'Price-sensitive buyer looking for transparent tiered pricing and ROI metrics.',
+  'Early adopter eager to trial innovative solutions that streamline daily workflows.',
+] as const;
+
+const DECISION_STYLES = [
+  'Data-driven and analytical, prefers quantifiable features and clear documentation.',
+  'Intuitive and experience-driven, values clean design, speed, and low friction.',
+  'Consensus-oriented, ensures tools fit smoothly into cross-functional team workflows.',
+  'Cautious and security-conscious, verifies permissions and data safety first.',
+] as const;
+
+const ONLINE_BEHAVIORS = [
+  'Multitasks across numerous browser tabs, expects instant feedback and responsive UI.',
+  'Systematic and focused, reads onboarding steps attentively before clicking.',
+  'Mobile-first explorer who quickly scans menus and headings to find key tools.',
+  'Power user accustomed to keyboard shortcuts, clear navigation breadcrumbs, and deep links.',
+] as const;
 
 /** FNV-1a. Turns a run or draft seed into a stable 32-bit starting point. */
 function hashSeed(seed: string): number {
@@ -92,6 +141,29 @@ export function buildCohort(spec: PopulationSpec): SyntheticPersona[] {
     const occupation = pick(OCCUPATIONS, random);
     const audience = spec.target_audience?.trim() || cohort;
     const product = spec.product_name?.trim() || 'the product';
+    const firstName = pick(FIRST_NAMES, random);
+    const lastName = pick(LAST_NAMES, random);
+    const displayName = `${firstName} ${lastName}`;
+    const ageBand = pick(AGE_BANDS, random);
+    const age = ageBand === '18-24' ? 19 + Math.floor(random() * 6)
+      : ageBand === '25-34' ? 25 + Math.floor(random() * 10)
+      : ageBand === '35-44' ? 35 + Math.floor(random() * 10)
+      : ageBand === '45-54' ? 45 + Math.floor(random() * 10)
+      : 55 + Math.floor(random() * 15);
+    const incomeBand = pick(INCOME_BANDS, random);
+    const incomeAnnual = incomeBand === 'LOW' ? 35000 + Math.floor(random() * 25000)
+      : incomeBand === 'MIDDLE' ? 65000 + Math.floor(random() * 55000)
+      : 125000 + Math.floor(random() * 120000);
+    const incomeRange = `$${Math.round(incomeAnnual / 1000)}k/year`;
+    const location = pick(LOCATIONS, random);
+    const education = pick(EDUCATIONS, random);
+    const buyingBehavior = pick(BUYING_BEHAVIORS, random);
+    const decisionStyle = pick(DECISION_STYLES, random);
+    const onlineBehavior = pick(ONLINE_BEHAVIORS, random);
+
+    const biography = `${displayName} is a ${occupation} based in ${location}. As part of the ${audience} cohort, they are testing ${product} with ${technicalAbility.toLowerCase()} technical ability and ${patience.toLowerCase()} patience.`;
+    const backstory = `${displayName} has worked for several years as a ${occupation}. In their day-to-day workflow, they prioritize ${technicalAbility === 'HIGH' ? 'speed, extensibility, and precision' : 'clarity, immediate feedback, and straightforward navigation'}. Approaching ${product}, their primary objective is: "${goal_context}".`;
+
     return {
       persona_id: `${seed}-${label(index)}`,
       population_seed: seed,
@@ -102,17 +174,34 @@ export function buildCohort(spec: PopulationSpec): SyntheticPersona[] {
       reading_style: pick(READING_STYLE, random),
       device_class: pick(DEVICE_CLASS, random, spec.device_class_mix),
       goal_context,
-      display_name: `Agent ${label(index)}`,
-      age_band: pick(AGE_BANDS, random),
+      display_name: displayName,
+      age,
+      age_band: ageBand,
+      gender: ['Female', 'Male', 'Non-binary'][Math.floor(random() * 3)],
+      location,
       location_band: pick(LOCATION_BANDS, random),
-      income_band: pick(INCOME_BANDS, random),
+      education,
+      income_annual: incomeAnnual,
+      income_range: incomeRange,
+      income_band: incomeBand,
+      household_context: ['Single', 'Partnered', 'Family with children', 'Roommates'][Math.floor(random() * 4)],
       customer_loyalty: pick(SENSITIVITY, random),
       occupation,
-      biography: `${occupation} from the ${audience} audience, approaching ${product} with ${technicalAbility.toLowerCase()} technical confidence.`,
+      biography,
+      backstory,
       primary_motivation: goal_context,
+      motivations: `Achieve "${goal_context}" efficiently with minimal overhead.`,
+      pain_points: patience === 'LOW' ? 'Cryptic error messages, sluggish UI transitions, hidden pricing or checkout steps.' : 'Lack of clear confirmation status, unexpected page reloads.',
+      goals: `Successfully navigate ${product} to fulfill the stated goal.`,
+      buying_behavior: buyingBehavior,
+      decision_style: decisionStyle,
+      online_behavior: onlineBehavior,
+      product_expectations: `Expects ${product} to offer an intuitive user experience aligned with contemporary web standards.`,
+      loyalty_likelihood: patience === 'HIGH' ? 'High if initial onboarding is smooth and reliable.' : 'Moderate, easily lost if friction or confusion occurs early.',
+      abandonment_triggers: patience === 'LOW' ? 'Unresponsive buttons, ambiguous calls to action, or repeated form errors.' : 'Unrecoverable validation errors or missing navigation paths.',
       frustration_triggers: patience === 'LOW'
-        ? ['Unclear next steps', 'Slow or repetitive flows']
-        : ['Missing feedback after an action'],
+        ? ['Unclear next steps', 'Slow or repetitive flows', 'Missing progress indicators']
+        : ['Missing feedback after an action', 'Confusing terminology'],
       accessibility_needs: [],
       price_sensitivity: pick(SENSITIVITY, random),
       privacy_sensitivity: pick(SENSITIVITY, random),

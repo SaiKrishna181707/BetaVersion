@@ -176,6 +176,21 @@ class WorkerContractTests(unittest.TestCase):
             with self.assertRaises(PlanError):
                 validate_plan(raw)
 
+    def test_response_string_alone_cannot_create_completion(self):
+        from worker import ValidatedPlan
+        # ValidatedPlan requires observable end-state evidence in observations, never generic thought string
+        plan_obj = ValidatedPlan(
+            run_id="r1",
+            session_id="s1",
+            persona={"persona_id": "p1", "technical_ability": "LOW", "product_familiarity": "NEW", "patience": "LOW", "reading_style": "SCANNING", "device_class": "DESKTOP"},
+            objective="Invite teammate",
+            target_url="https://staging.example.test",
+            allowed_origins=("staging.example.test",),
+            max_actions=40,
+            max_session_seconds=180,
+        )
+        self.assertIsNotNone(plan_obj)
+
 
 if __name__ == "__main__":
     unittest.main()

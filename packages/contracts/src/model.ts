@@ -1,6 +1,6 @@
 export const GUARDRAILS = {
   GLOBAL_SPEND_CEILING_USD: 80,
-  DEFAULT_RUN_HARD_CAP_USD: 45,
+  DEFAULT_RUN_HARD_CAP_USD: 40,
   DEFAULT_SESSION_SECONDS: 180,
   MAX_SESSION_SECONDS: 300,
   DEFAULT_BATCH_SIZE: 5,
@@ -48,15 +48,32 @@ export interface SyntheticPersona {
   device_class: 'DESKTOP' | 'TABLET' | 'MOBILE_WEB';
   goal_context: string;
   display_name?: string;
+  age?: number;
   age_band?: string;
+  gender?: string;
+  location?: string;
   location_band?: string;
+  education?: string;
+  income_annual?: number;
+  income_range?: string;
   income_band?: 'LOW' | 'MIDDLE' | 'HIGH';
+  household_context?: string;
   customer_loyalty?: 'LOW' | 'MEDIUM' | 'HIGH';
   price_sensitivity?: 'LOW' | 'MEDIUM' | 'HIGH';
   privacy_sensitivity?: 'LOW' | 'MEDIUM' | 'HIGH';
   occupation?: string;
   biography?: string;
+  backstory?: string;
   primary_motivation?: string;
+  motivations?: string;
+  pain_points?: string;
+  goals?: string;
+  buying_behavior?: string;
+  decision_style?: string;
+  online_behavior?: string;
+  product_expectations?: string;
+  loyalty_likelihood?: string;
+  abandonment_triggers?: string;
   frustration_triggers?: string[];
   accessibility_needs?: string[];
 }
@@ -72,6 +89,9 @@ export interface ProductIntelligence {
   value_propositions: string[];
   source_title: string;
   analyzed_at: string;
+  what_product_does?: string;
+  key_features?: string[];
+  pages_crawled?: string[];
 }
 
 export interface ProductIntelligenceRequest {
@@ -81,13 +101,30 @@ export interface ProductIntelligenceRequest {
 
 export type EditablePersonaFields = Pick<SyntheticPersona,
   | 'display_name'
+  | 'age'
   | 'age_band'
+  | 'gender'
+  | 'location'
   | 'location_band'
+  | 'education'
+  | 'income_annual'
+  | 'income_range'
   | 'income_band'
+  | 'household_context'
   | 'customer_loyalty'
   | 'occupation'
   | 'biography'
+  | 'backstory'
   | 'primary_motivation'
+  | 'motivations'
+  | 'pain_points'
+  | 'goals'
+  | 'buying_behavior'
+  | 'decision_style'
+  | 'online_behavior'
+  | 'product_expectations'
+  | 'loyalty_likelihood'
+  | 'abandonment_triggers'
   | 'goal_context'
   | 'technical_ability'
   | 'product_familiarity'
