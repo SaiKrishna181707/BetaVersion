@@ -12,10 +12,11 @@ export interface SessionWorkerInput {
   allowed_origins?: string[]; checkpoint_plan?: string[]; max_session_seconds?: number; max_actions?: number;
 }
 
-export function validateNovaResponse(parsed: Record<string, unknown>, input: SessionWorkerInput) {
+export function validateNovaResponse(parsed: Record<string, unknown>, input: SessionWorkerInput, allowLegacy = false) {
   if (!Array.isArray(parsed.steps)) throw new Error('Nova worker returned no trace array.');
   if (Number(parsed.statusCode) >= 400) return parsed;
-  if (parsed.schema_version !== 2 || parsed.run_id !== input.run_id
+  const isAllowedVersion = parsed.schema_version === 2 || (allowLegacy && parsed.schema_version === 1);
+  if (!isAllowedVersion || parsed.run_id !== input.run_id
     || parsed.session_id !== input.session_id || parsed.persona_id !== input.persona.persona_id) {
     throw new Error('Nova evidence version or identity does not match the dispatched session.');
   }
@@ -26,18 +27,22 @@ async function invokeNova(input: SessionWorkerInput, env: NodeJS.ProcessEnv) {
   const roleArn = env.AGENT_EXECUTION_ROLE_ARN || env.VIVEK_EXECUTION_ROLE_ARN;
   const functionArn = env.NOVA_WORKER_FUNCTION_ARN || env.VIVEK_NOVA_LAMBDA_ARN;
   if (!roleArn || !functionArn || !env.CROSS_ACCOUNT_EXTERNAL_ID) throw new Error('Cross-account execution is not configured.');
+  console.log('[invokeNova] Assuming configured execution role for session:', input.session_id);
   const assumed = await new STSClient({}).send(new AssumeRoleCommand({
     RoleArn: roleArn, RoleSessionName: ('centopus-' + input.session_id).slice(0, 64),
     DurationSeconds: 900, ExternalId: env.CROSS_ACCOUNT_EXTERNAL_ID,
   }));
   const credentials = assumed.Credentials;
   if (!credentials?.AccessKeyId || !credentials.SecretAccessKey || !credentials.SessionToken) throw new Error('Missing assumed credentials.');
-  const client = new LambdaClient({ region: env.AGENT_REGION || env.AWS_REGION, maxAttempts: 1,
+  console.log('[invokeNova] Assumed role successfully, invoking function:', functionArn);
+  const client = new LambdaClient({ region: env.AGENT_REGION || env.AWS_REGION || 'us-east-1', maxAttempts: 1,
     credentials: { accessKeyId: credentials.AccessKeyId, secretAccessKey: credentials.SecretAccessKey, sessionToken: credentials.SessionToken } });
   const result = await client.send(new InvokeCommand({ FunctionName: functionArn, Payload: Buffer.from(JSON.stringify(input)) }));
-  if (result.FunctionError || !result.Payload) throw new Error('Nova worker invocation failed.');
-  const parsed = JSON.parse(Buffer.from(result.Payload).toString('utf8')) as Record<string, unknown>;
-  return validateNovaResponse(parsed, input);
+  const payloadStr = result.Payload ? Buffer.from(result.Payload).toString('utf8') : '';
+  console.log('[invokeNova] Response StatusCode:', result.StatusCode, 'FunctionError:', result.FunctionError || 'none');
+  if (result.FunctionError || !result.Payload) throw new Error(`Nova worker invocation failed (${result.FunctionError}): ${payloadStr}`);
+  const parsed = JSON.parse(payloadStr) as Record<string, unknown>;
+  return validateNovaResponse(parsed, input, true);
 }
 
 export function createSessionWorker(deps: {
@@ -62,8 +67,8 @@ export function createSessionWorker(deps: {
     const startedMs = Date.now();
     await deps.docClient.send(new TransactWriteCommand({ TransactItems: [
       ...(mayExecute ? [{ ConditionCheck: { TableName: table, Key: { pk: `RUN#${run_id}`, sk: 'META' },
-        ConditionExpression: '#st = :observed', ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: { ':observed': run.Item!.status } } }] : []),
+        ConditionExpression: '#st = :active OR #st = :provisioning', ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeValues: { ':active': 'ACTIVE', ':provisioning': 'PROVISIONING' } } }] : []),
       { Update: { TableName: table, Key: { pk: `SESSION#${session_id}`, sk: 'META' },
         UpdateExpression: 'SET #st = :active, started_at = :now', ConditionExpression: '#st = :queued',
         ExpressionAttributeNames: { '#st': 'status' }, ExpressionAttributeValues: { ':active': 'ACTIVE', ':queued': 'QUEUED', ':now': started } } },
@@ -77,16 +82,48 @@ export function createSessionWorker(deps: {
       remaining_budget_cents: Number(run.Item?.reserved_cost_cents) || 0, account_ref: null };
     let result: Record<string, unknown> = {};
     let error: string | null = null;
-    if (mayExecute) {
-      try { result = await (deps.invoke ?? (value => invokeNova(value, env)))({ ...plan, allowed_origins: [...plan.allowed_origins], checkpoint_plan: [...plan.checkpoint_plan] }); }
-      catch (cause) { error = cause instanceof Error ? cause.name : 'ExecutionError'; }
-    }
-    const trajectory: RawNovaTrajectory = {
+    let trajectory: RawNovaTrajectory = {
       run_id, session_id, persona_id: persona.persona_id, target_url: input.target_url,
-      checkpoint_plan: [...plan.checkpoint_plan], steps: Array.isArray(result.steps) ? result.steps : [],
-      finish_reason: !mayExecute ? 'CANCELLED' : error || Number(result.statusCode) >= 400 ? 'TECHNICAL_ERROR' : String(result.finish_reason ?? 'ABANDONED'),
+      checkpoint_plan: [...plan.checkpoint_plan], steps: [],
+      finish_reason: !mayExecute ? 'CANCELLED' : 'TECHNICAL_ERROR',
     };
-    const session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
+    let session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
+
+    if (mayExecute) {
+      const maxAttempts = 2;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          result = await (deps.invoke ?? (value => invokeNova(value, env)))({
+            ...plan,
+            allowed_origins: [...plan.allowed_origins],
+            checkpoint_plan: [...plan.checkpoint_plan],
+          });
+          console.log(`[createSessionWorker] invoke attempt ${attempt} returned:`, JSON.stringify(result).slice(0, 500));
+          error = null;
+        } catch (cause) {
+          console.error(`[createSessionWorker] invoke attempt ${attempt} failed:`, cause);
+          error = cause instanceof Error ? `${cause.name}: ${cause.message}` : 'ExecutionError';
+        }
+
+        trajectory = {
+          run_id, session_id, persona_id: persona.persona_id, target_url: input.target_url,
+          checkpoint_plan: [...plan.checkpoint_plan], steps: Array.isArray(result.steps) ? result.steps : [],
+          finish_reason: error || Number(result.statusCode) >= 400 ? 'TECHNICAL_ERROR' : String(result.finish_reason ?? 'ABANDONED'),
+        };
+        session = adaptNovaTrajectoryToSessionResult(trajectory, plan);
+
+        const hasTechnicalFailure = error !== null
+          || Number(result.statusCode) >= 500
+          || (session.status === 'FAILED' && session.finish_reason === 'TECHNICAL_ERROR')
+          || session.events.length === 0;
+
+        if (!hasTechnicalFailure || attempt === maxAttempts) {
+          break;
+        }
+        console.warn(`[createSessionWorker] Session ${session_id} hit technical failure on attempt ${attempt}. Rerunning session...`);
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
     let trajectoryRef: string | null = null;
     let persistedEvents = 0;
     try {
@@ -109,7 +146,7 @@ export function createSessionWorker(deps: {
       status: session.status, stop_reason: session.finish_reason, started_at: started,
       completed_at: new Date().toISOString(), duration_ms: Date.now() - startedMs,
       actions_taken: persistedEvents, agentcore_session_id: result.browser_session_id ?? null,
-      live_view_url: null, agentcore_diagnostic: error, trajectory_ref: trajectoryRef,
+      live_view_url: null, agentcore_diagnostic: error ?? (typeof result.execution_error === 'string' ? result.execution_error : null), trajectory_ref: trajectoryRef,
       evidence_schema_version: 2, actual_cost_cents: null, cost_basis: 'UNAVAILABLE', ttl: Math.floor(Date.now() / 1000) + 7 * 86400,
     };
     await deps.docClient.send(new TransactWriteCommand({ TransactItems: [

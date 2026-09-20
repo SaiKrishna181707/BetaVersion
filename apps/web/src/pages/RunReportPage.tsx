@@ -32,30 +32,43 @@ export function RunReportPage({ runId }: { runId: string }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      productApi.getReport(runId),
-      productApi.getRun(runId),
-      productApi.getSessions(runId),
-      productApi.getPersonas(runId),
-    ]).then(([reportResult, runResult, sessionResult, personaResult]) => {
-      if (!active) return;
-      if (!reportResult?.report) {
-        setError('The report is not ready yet. Recorded sessions are still being finalized.');
-      } else {
-        setReport(reportResult.report);
-        setDownloadUrl(reportResult.download_url || '');
+    const refresh = async () => {
+      try {
+        const [reportResult, runResult, sessionResult, personaResult] = await Promise.all([
+          productApi.getReport(runId),
+          productApi.getRun(runId),
+          productApi.getSessions(runId),
+          productApi.getPersonas(runId),
+        ]);
+        if (!active) return;
+
+        setRun(runResult);
+        setSessions(sessionResult);
+        setPersonas(new Map(personaResult.map(persona => [persona.persona_id, persona])));
+        setEvidenceWarning(reportResult?.evidence_warning || runResult.evidence_warning || '');
+
+        if (reportResult?.report) {
+          setReport(reportResult.report);
+          setDownloadUrl(reportResult.download_url || '');
+          setError('');
+          window.clearInterval(timer);
+        } else {
+          setError('The report is not ready yet. Recorded sessions are still being finalized.');
+        }
+        setLoading(false);
+      } catch (cause) {
+        if (!active) return;
+        setError(cause instanceof Error ? cause.message : 'Could not load the run report.');
+        setLoading(false);
       }
-      setRun(runResult);
-      setEvidenceWarning(reportResult?.evidence_warning || runResult.evidence_warning || '');
-      setSessions(sessionResult);
-      setPersonas(new Map(personaResult.map(persona => [persona.persona_id, persona])));
-      setLoading(false);
-    }).catch(cause => {
-      if (!active) return;
-      setError(cause instanceof Error ? cause.message : 'Could not load the run report.');
-      setLoading(false);
-    });
-    return () => { active = false; };
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [runId]);
 
   const abandonmentReasons = useMemo(() => {
@@ -172,7 +185,12 @@ export function RunReportPage({ runId }: { runId: string }) {
               <h3>{persona?.display_name || result.persona_id}</h3>
               <p>{[persona?.patience ? `${persona.patience.toLowerCase()} patience` : '', persona?.technical_ability ? `${persona.technical_ability.toLowerCase()} tech` : ''].filter(Boolean).join(' · ')}</p>
               <dl><div><dt>Actions</dt><dd>{result.action_count}</dd></div><div><dt>Duration</dt><dd>{duration(result.elapsed_ms)}</dd></div><div><dt>Outcome</dt><dd>{result.stop_reason?.replaceAll('_', ' ') || result.status}</dd></div></dl>
-              {feedback?.what_confused_them.length ? <small>{feedback.what_confused_them[0]}</small> : null}
+              {feedback ? <div className="vision-result-agent-feedback">
+                <small><strong>Worked:</strong> {feedback.what_worked[0] || 'No successful behavior established.'}</small>
+                <small><strong>Friction:</strong> {feedback.what_confused_them[0] || 'No explicit friction signal recorded.'}</small>
+                <small><strong>Outcome:</strong> {feedback.continuation_or_abandonment}</small>
+                <small><strong>Improvement:</strong> {feedback.improvement_suggestion || 'No evidence-grounded recommendation.'}</small>
+              </div> : <small>No session-specific feedback was persisted.</small>}
               <span>View Experience <Icon name="arrow" size={13} /></span>
             </button>;
           })}

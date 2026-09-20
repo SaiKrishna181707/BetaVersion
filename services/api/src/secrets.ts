@@ -4,6 +4,8 @@ const client = new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-
 let cached: Promise<string> | null = null;
 
 export function getGeminiApiKey(): Promise<string> {
+  const direct = process.env.GEMINI_API_KEY;
+  if (direct && direct.trim().length > 0) return Promise.resolve(direct.trim());
   if (cached) return cached;
   cached = (async () => {
     const secretArn = process.env.GEMINI_SECRET_ARN;

@@ -94,7 +94,7 @@ export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pic
     let sessionStatus = meta.status as SessionStatus;
     const terminal = ['COMPLETED', 'ABANDONED', 'TIMED_OUT', 'FAILED', 'CANCELLED'];
     if (!terminal.includes(sessionStatus)) {
-      if (!interrupted) throw new Error('Cannot finalize before every session is terminal.');
+      console.warn(`[Finalizer] Session ${sessionId} is non-terminal (${sessionStatus}); reconciling to terminal state.`);
       sessionStatus = runMeta.status === 'CANCELLED' || input.detail?.status === 'ABORTED' ? 'CANCELLED' : 'FAILED';
       const closed = { ...meta, status: sessionStatus, stop_reason: sessionStatus === 'CANCELLED' ? 'CANCELLED' : 'TECHNICAL_ERROR', completed_at: new Date().toISOString() };
       await docClient.send(new TransactWriteCommand({ TransactItems: [

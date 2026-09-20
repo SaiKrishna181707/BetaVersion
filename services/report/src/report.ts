@@ -217,7 +217,7 @@ function completionFinding(
         + 'that recorded it. Each pointer below is the first action recorded at the final checkpoint in a session.',
     metric_refs: ['completion', 'median_time_to_value_ms'],
     evidence: goalCheckpoint === null
-      ? []
+      ? lastEventEvidence(metrics.completion.supporting_session_ids, bySession, limit)
       : firstMatchingEvidence(
         metrics.completion.supporting_session_ids,
         bySession,
@@ -253,35 +253,92 @@ export async function buildCentopusReport(input: BuildReportInput): Promise<Cent
   }
 
   const personaById = new Map((input.personas ?? []).map(persona => [persona.persona_id, persona]));
-  const sessionById = new Map(input.sessions.map(session => [session.session_id, session]));
-  const agentFeedback = [...bySession.entries()].map(([sessionId, events]) => {
-    const session = sessionById.get(sessionId);
-    const persona = session ? personaById.get(session.persona_id) : undefined;
+  const describeEvent = (event: BehaviorEvent): string =>
+    event.target_descriptor || event.page_title || event.route || event.url;
+
+  const unique = (values: string[]): string[] => [...new Set(values)];
+
+  // Every expected session receives a feedback record, including sessions with no
+  // usable events. Missing evidence stays explicit instead of being backfilled with
+  // plausible product-specific prose.
+  const agentFeedback = input.sessions.map(session => {
+    const events = bySession.get(session.session_id) ?? [];
+    const persona = personaById.get(session.persona_id);
+    const successful = events.filter(event => event.result === 'SUCCESS' && event.action_type !== 'wait');
     const friction = events.filter(event => event.agent_reason_code === 'CONFUSED'
-      || event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING'
-      || event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE');
-    const worked = events.filter(event => event.result === 'SUCCESS' && (event.task_checkpoint || event.target_descriptor))
-      .map(event => event.task_checkpoint ? `Reached ${event.task_checkpoint}.` : `Completed ${event.action_type} on ${event.target_descriptor}.`)
-      .slice(0, 5);
-    const labels = friction.map(event => `${event.action_type} on ${event.target_descriptor || event.route || event.url} recorded ${event.agent_reason_code}/${event.result}.`).slice(0, 5);
+      || event.agent_reason_code === 'RETRYING'
+      || event.agent_reason_code === 'BACKTRACKING'
+      || event.result === 'NO_CHANGE'
+      || event.result === 'VALIDATION_FAILURE'
+      || event.result === 'BLOCKED'
+      || event.result === 'ERROR');
+
+    const whatWorked = unique(successful.map(event =>
+      `Recorded successful ${event.action_type} on "${describeEvent(event)}" at ${event.route || '/'}.`,
+    )).slice(0, 4);
+
+    const whatConfused = unique(friction.map(event =>
+      `Recorded ${event.agent_reason_code.replaceAll('_', ' ').toLowerCase()} / ${event.result.toLowerCase()} during ${event.action_type} on "${describeEvent(event)}".`,
+    )).slice(0, 4);
+
+    const slowdownSignals: string[] = [];
+    const retryCount = events.filter(event =>
+      event.agent_reason_code === 'RETRYING' || event.agent_reason_code === 'BACKTRACKING',
+    ).length;
+    const waitCount = events.filter(event => event.action_type === 'wait').length;
+    const noChangeCount = events.filter(event =>
+      event.result === 'NO_CHANGE' || event.result === 'VALIDATION_FAILURE',
+    ).length;
+    if (retryCount > 0) slowdownSignals.push(`${retryCount} retry/backtracking signal${retryCount === 1 ? '' : 's'} were recorded.`);
+    if (waitCount > 0) slowdownSignals.push(`${waitCount} explicit wait action${waitCount === 1 ? '' : 's'} were recorded.`);
+    if (noChangeCount > 0) slowdownSignals.push(`${noChangeCount} no-change/validation signal${noChangeCount === 1 ? '' : 's'} were recorded.`);
+
     const last = events.at(-1);
-    const continuation = session?.status === 'ABANDONED'
-      ? `Abandoned with persisted reason ${session.stop_reason || 'ABANDONED'}${last ? ` after ${last.action_type} on ${last.target_descriptor || last.route || last.url}` : ''}.`
-      : `Persisted outcome: ${session?.status || 'UNKNOWN'}${session?.stop_reason ? ` (${session.stop_reason})` : ''}.`;
+    let continuation: string;
+    if (events.length === 0) {
+      continuation = `No recorded journey is available. Final session status: ${session.status}${session.stop_reason ? `; stop reason: ${session.stop_reason}` : ''}.`;
+    } else if (session.status === 'COMPLETED') {
+      continuation = `Validated objective completion was recorded after ${events.length} BehaviorEvents. Last observed state: ${last ? describeEvent(last) : 'unknown'}.`;
+    } else if (session.status === 'ABANDONED') {
+      continuation = `The agent stopped without validated objective completion after ${events.length} BehaviorEvents${session.stop_reason ? `; stop reason: ${session.stop_reason}` : ''}.`;
+    } else if (session.status === 'TIMED_OUT') {
+      continuation = `The configured execution/action limit was reached after ${events.length} BehaviorEvents.`;
+    } else if (session.status === 'FAILED') {
+      continuation = `The session ended in a technical/safety failure after ${events.length} recorded BehaviorEvents${session.stop_reason ? `; stop reason: ${session.stop_reason}` : ''}.`;
+    } else if (session.status === 'CANCELLED') {
+      continuation = `The session was cancelled after ${events.length} recorded BehaviorEvents.`;
+    } else {
+      continuation = `Final session status: ${session.status}; ${events.length} BehaviorEvents were recorded.`;
+    }
+
+    const expectation = persona?.product_expectations?.trim()
+      ? `Persisted persona expectation: ${persona.product_expectations.trim()}`
+      : `Not established by recorded behavior. Configured objective: ${persona?.goal_context || input.configuration.objective}`;
+
+    const firstFriction = friction[0];
+    const improvement = firstFriction
+      ? `Review the experience around "${describeEvent(firstFriction)}", where this session recorded ${firstFriction.result.toLowerCase()} / ${firstFriction.agent_reason_code.replaceAll('_', ' ').toLowerCase()}.`
+      : null;
+
     return {
-      session_id: sessionId,
-      persona_id: session?.persona_id || events[0]?.persona_id || '',
-      expected: persona?.goal_context || input.configuration.objective,
-      what_worked: worked,
-      what_confused_them: labels,
-      what_slowed_them_down: friction.filter(event => event.elapsed_ms > 0)
-        .map(event => `${event.agent_reason_code} at +${event.elapsed_ms}ms on ${event.target_descriptor || event.route || event.url}.`).slice(0, 5),
+      session_id: session.session_id,
+      persona_id: session.persona_id,
+      expected: expectation,
+      what_worked: whatWorked,
+      what_confused_them: whatConfused,
+      what_slowed_them_down: slowdownSignals,
       continuation_or_abandonment: continuation,
-      improvement_suggestion: friction[0]
-        ? `Review ${friction[0].target_descriptor || friction[0].route || friction[0].url}; the recorded event was ${friction[0].agent_reason_code}/${friction[0].result}.`
-        : null,
+      improvement_suggestion: improvement,
     };
   });
+
+  const quickImprovements = findings.filter(finding => finding.kind !== 'STRENGTH' && finding.evidence.length > 0)
+    .map(finding => ({
+      finding_id: finding.finding_id,
+      recommendation: `Review and simplify the experience around "${finding.title}" using the cited sessions before the next run.`,
+      supporting_session_ids: [...new Set(finding.evidence.map(pointer => pointer.session_id))],
+    }));
+
 
   return {
     schema_version: 1,
@@ -299,12 +356,7 @@ export async function buildCentopusReport(input: BuildReportInput): Promise<Cent
       elapsed_ms: session.elapsed_ms,
       ...(session.stop_reason ? { stop_reason: session.stop_reason } : {}),
     })),
-    quick_improvements: findings.filter(finding => finding.kind !== 'STRENGTH' && finding.evidence.length > 0)
-      .map(finding => ({
-        finding_id: finding.finding_id,
-        recommendation: `Review and simplify the experience around "${finding.title}" using the cited sessions before the next run.`,
-        supporting_session_ids: [...new Set(finding.evidence.map(pointer => pointer.session_id))],
-      })),
+    quick_improvements: quickImprovements,
     agent_feedback: agentFeedback,
     limitations: [...REPORT_LIMITATIONS],
   };

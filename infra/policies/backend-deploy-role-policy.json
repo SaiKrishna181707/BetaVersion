@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LambdaDeployAccess",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:lambda:us-east-1:643700104680:function:centopus-api",
+        "arn:aws:lambda:us-east-1:643700104680:function:centopus-session-worker",
+        "arn:aws:lambda:us-east-1:643700104680:function:centopus-finalizer"
+      ]
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { ReportNarratorPort, CentopusReport } from '@centopus/contracts';
 import { computeRunMetrics } from '@centopus/analytics';
 import { buildCentopusReport } from '@centopus/report';
-import { CHECKPOINT_PLAN, runFixture, validConfiguration } from '../fixtures/run-fixtures';
+import { CHECKPOINT_PLAN, runFixture, validConfiguration, sessionFixture } from '../fixtures/run-fixtures';
 
 const { personas, sessions, events } = runFixture();
 const metrics = computeRunMetrics({ run_id: 'run-1', sessions, events, personas, checkpoint_plan: CHECKPOINT_PLAN });
@@ -92,3 +92,65 @@ test('retry finding cites each retrying session once', async () => {
   assert.equal(finding.evidence[0]?.session_id, 's2');
   assert.equal(finding.evidence[0]?.sequence, 1);
 });
+
+test('agent feedback is session-specific and never requires invented prose', async () => {
+  const report = await build();
+  assert.equal(report.agent_feedback.length, sessions.length);
+  for (const fb of report.agent_feedback) {
+    assert.ok(typeof fb.continuation_or_abandonment === 'string' && fb.continuation_or_abandonment.length > 0);
+    assert.ok(Array.isArray(fb.what_worked));
+    assert.ok(Array.isArray(fb.what_confused_them));
+    assert.ok(Array.isArray(fb.what_slowed_them_down));
+    if (fb.improvement_suggestion) {
+      assert.match(fb.improvement_suggestion, /recorded|Review the experience/i);
+    }
+  }
+  assert.ok(report.quick_improvements.every(item => item.supporting_session_ids.length > 0));
+});
+
+test('report contains no target-specific fallback recommendations or fabricated catalog claims', async () => {
+  const report = await build();
+  const serialized = JSON.stringify(report);
+  assert.doesNotMatch(serialized, /iPhone|MacBook|Apple Watch|48MP|carrier financing|sticky sub-navigation|device pricing/i);
+});
+
+test('empty, failed, and uninstrumented sessions produce generic evidence-only feedback without device claims', async () => {
+  const customSessions = [
+    sessionFixture('s-empty', personas[0]!.persona_id, {
+      run_id: 'run-empty',
+      status: 'FAILED',
+      action_count: 0,
+      elapsed_ms: 0,
+      stop_reason: 'TECHNICAL_ERROR',
+    }),
+    sessionFixture('s-timeout', personas[1]!.persona_id, {
+      run_id: 'run-empty',
+      status: 'TIMED_OUT',
+      action_count: 5,
+      elapsed_ms: 60000,
+      stop_reason: 'LIMIT_REACHED',
+    }),
+  ];
+  const customMetrics = computeRunMetrics({
+    run_id: 'run-empty',
+    sessions: customSessions,
+    events: [],
+    personas: personas.slice(0, 2),
+    checkpoint_plan: CHECKPOINT_PLAN,
+  });
+  const emptyReport = await buildCentopusReport({
+    configuration: validConfiguration,
+    metrics: customMetrics,
+    sessions: customSessions,
+    events: [],
+    generated_at: '2026-09-18T00:10:00.000Z',
+  });
+  const serialized = JSON.stringify(emptyReport);
+  assert.doesNotMatch(serialized, /iPhone|MacBook|Apple Watch|48MP|carrier financing|sticky sub-navigation|device pricing/i);
+  for (const fb of emptyReport.agent_feedback) {
+    assert.ok(fb.continuation_or_abandonment.includes('FAILED') || fb.continuation_or_abandonment.includes('TIMED_OUT'));
+    assert.equal(fb.what_worked.length, 0);
+  }
+});
+
+

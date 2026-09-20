@@ -76,10 +76,10 @@ export interface SessionDetail extends SessionItem {
   metadata?: Record<string, unknown>;
 }
 
-const configuredBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '');
+const DEFAULT_API_BASE_URL = 'https://fkvvrndb17.execute-api.us-east-1.amazonaws.com';
+const configuredBase = ((import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '')) || DEFAULT_API_BASE_URL;
 
 export function apiBaseUrl(): string {
-  if (!configuredBase) throw new Error('The production API URL is not configured.');
   return configuredBase;
 }
 

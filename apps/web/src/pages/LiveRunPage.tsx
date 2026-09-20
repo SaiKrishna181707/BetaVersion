@@ -64,6 +64,8 @@ export function LiveRunPage({ runId }: { runId: string }) {
     completed: sessions.filter(session => session.status === 'COMPLETED').length,
     abandoned: sessions.filter(session => session.status === 'ABANDONED').length,
     failed: sessions.filter(session => session.status === 'FAILED').length,
+    timedOut: sessions.filter(session => session.status === 'TIMED_OUT').length,
+    cancelled: sessions.filter(session => session.status === 'CANCELLED').length,
     remaining: sessions.filter(session => !terminalStatuses.has(session.status)).length,
     terminal: sessions.filter(session => terminalStatuses.has(session.status)).length,
   }), [sessions]);
@@ -71,7 +73,17 @@ export function LiveRunPage({ runId }: { runId: string }) {
   const expected = run?.persona_count || run?.configuration?.user_count || sessions.length;
   const denominator = Math.max(expected || 0, sessions.length);
   const progress = denominator ? Math.round((counts.terminal / denominator) * 100) : 0;
-  const complete = run?.status === 'COMPLETED' || (denominator > 0 && counts.terminal >= denominator);
+  const allSessionsTerminal = denominator > 0 && counts.terminal >= denominator;
+  const reportReady = run?.status === 'COMPLETED';
+
+  useEffect(() => {
+    if (reportReady) {
+      const timer = window.setTimeout(() => {
+        window.location.hash = `#/runs/${runId}/report`;
+      }, 1200);
+      return () => window.clearTimeout(timer);
+    }
+  }, [reportReady, runId]);
 
   const cancel = async () => {
     setCancelling(true);
@@ -93,8 +105,8 @@ export function LiveRunPage({ runId }: { runId: string }) {
         <h1>Your synthetic users are testing the product.</h1>
         <p>{run?.configuration?.objective || 'Waiting for the run objective…'}</p>
       </div>
-      <Badge tone={complete ? 'accent' : run?.status === 'FAILED' ? 'warning' : 'neutral'}>
-        <span className={complete ? 'dot' : 'live-pulse'} /> {run?.status || 'CONNECTING'}
+      <Badge tone={reportReady ? 'accent' : ['FAILED', 'CANCELLED'].includes(run?.status || '') ? 'warning' : 'neutral'}>
+        <span className={reportReady ? 'dot' : 'live-pulse'} /> {run?.status || 'CONNECTING'}
       </Badge>
     </div>
 
@@ -129,6 +141,8 @@ export function LiveRunPage({ runId }: { runId: string }) {
       <div><span>Completed</span><strong>{counts.completed}</strong></div>
       <div><span>Abandoned</span><strong>{counts.abandoned}</strong></div>
       <div><span>Failed</span><strong>{counts.failed}</strong></div>
+      <div><span>Timed out</span><strong>{counts.timedOut}</strong></div>
+      <div><span>Cancelled</span><strong>{counts.cancelled}</strong></div>
       <div><span>Remaining</span><strong>{counts.remaining}</strong></div>
       <div><span>Actual cost</span><strong>{typeof run?.actual_cost_cents === 'number' ? `$${(run.actual_cost_cents / 100).toFixed(2)}` : '—'}</strong></div>
     </section>
@@ -168,12 +182,12 @@ export function LiveRunPage({ runId }: { runId: string }) {
 
     <section className="vision-live-footer">
       <div>
-        <strong>{complete ? 'Analysis can begin.' : 'The run is still in progress.'}</strong>
-        <span>{complete ? 'All known sessions reached terminal states.' : 'This page refreshes from persisted backend state.'}</span>
+        <strong>{reportReady ? 'Analysis is ready.' : allSessionsTerminal ? 'Finalizing recorded evidence…' : 'The run is still in progress.'}</strong>
+        <span>{reportReady ? 'The final report has been persisted.' : allSessionsTerminal ? 'All sessions are terminal; results will unlock only after report finalization.' : 'This page refreshes from persisted backend state.'}</span>
       </div>
       <div>
-        {!complete && run?.status !== 'CANCELLED' ? <button className="button button-secondary" disabled={cancelling} onClick={() => void cancel()}>{cancelling ? 'Cancelling…' : 'Cancel run'}</button> : null}
-        {complete ? <a className="button button-primary" href={`#/runs/${runId}/report`}>View Results <Icon name="arrow" size={15} /></a> : null}
+        {!allSessionsTerminal && run?.status !== 'CANCELLED' ? <button className="button button-secondary" disabled={cancelling} onClick={() => void cancel()}>{cancelling ? 'Cancelling…' : 'Cancel run'}</button> : null}
+        {reportReady ? <a className="button button-primary" href={`#/runs/${runId}/report`}>View Results <Icon name="arrow" size={15} /></a> : null}
       </div>
     </section>
   </WorkspaceShell>;

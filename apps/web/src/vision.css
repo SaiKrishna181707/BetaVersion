@@ -1079,6 +1079,25 @@
   gap: 4px;
   align-items: center;
 }
+.vision-result-agent-feedback {
+  margin: 0 0 14px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  border-radius: 8px;
+  background: #f6f7f4;
+  border: 1px solid var(--line);
+}
+.vision-result-agent-feedback small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.vision-result-agent-feedback strong {
+  color: var(--ink);
+  font-weight: 650;
+}
 .vision-limitations {
   padding: 22px;
   border: 1px solid var(--line);

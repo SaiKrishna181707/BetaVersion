@@ -137,6 +137,7 @@ test('detects friction, console errors, and retrying signals correctly', () => {
 
 test('adapts raw Nova trajectory to complete SessionResult', () => {
   const trajectory: RawNovaTrajectory = {
+    finish_reason: 'OBJECTIVE_COMPLETE',
     steps: [
       {
         timestamp: '2026-09-20T00:00:01.000Z',
@@ -193,4 +194,152 @@ test('rejects missing actions, timing and outcomes instead of inventing evidence
   assert.equal(event.task_checkpoint, null);
   assert.equal(event.agent_reason_code, 'EXPLORING');
   assert.equal(event.screenshot_ref, null);
+});
+
+test('cleanses raw bounding box descriptors into human-readable element names', () => {
+  const trajectory: RawNovaTrajectory = {
+    steps: [
+      {
+        timestamp: '2026-09-20T00:00:01.000Z',
+        sequence: 1,
+        action: { type: 'click', selector: '<box>13,1067,28,1114</box>' },
+        observation: { url: 'https://www.apple.com/', title: 'Apple' },
+        thought: 'I should now click the Support link in the navigation menu to navigate to the Support page.',
+        status: 'SUCCESS',
+        elapsed_ms: 1000,
+      },
+      {
+        timestamp: '2026-09-20T00:00:02.000Z',
+        sequence: 2,
+        action: { type: 'scroll', selector: '<box>0,0,732,1456</box>' },
+        observation: { url: 'https://www.apple.com/', title: 'Apple' },
+        thought: 'The page has scrolled down. I can see the MacBook Air section.',
+        status: 'SUCCESS',
+        elapsed_ms: 2000,
+      },
+      {
+        timestamp: '2026-09-20T00:00:03.000Z',
+        sequence: 3,
+        action: { type: 'click', selector: '#valid-css-id' },
+        observation: { url: 'https://www.apple.com/shop', title: 'Shop' },
+        thought: 'Clicking shop',
+        status: 'SUCCESS',
+        elapsed_ms: 3000,
+      },
+    ],
+  };
+
+  const plan = {
+    run_id: 'r-cleanse',
+    session_id: 's-cleanse',
+    persona_id: 'p-cleanse',
+    target_url: 'https://www.apple.com/',
+    checkpoint_plan: [],
+  };
+
+  const events = adaptNovaTraceToBehaviorEvents(trajectory, plan);
+  assert.equal(events.length, 3);
+  assert.equal(events[0]!.target_descriptor, 'Support link');
+  assert.equal(events[1]!.target_descriptor, 'MacBook Air section');
+  assert.equal(events[2]!.target_descriptor, '#valid-css-id');
+});
+
+test('accepts uninstrumented read-only completion only when recorder supplies browser objective evidence', () => {
+  const trajectory: RawNovaTrajectory = {
+    finish_reason: 'OBJECTIVE_COMPLETE',
+    steps: [
+      {
+        timestamp: '2026-09-20T00:00:01.000Z',
+        sequence: 1,
+        action: { type: 'scroll' },
+        observation: { url: 'https://www.example.com/', title: 'Example catalog' },
+        status: 'SUCCESS',
+        elapsed_ms: 1000,
+      },
+      {
+        timestamp: '2026-09-20T00:00:02.000Z',
+        sequence: 2,
+        action: { type: 'click', selector: 'Plans' },
+        observation: {
+          url: 'https://www.example.com/plans',
+          title: 'Plans',
+          objective_matches: ['plans'],
+        },
+        agent_reason_code: 'OBJECTIVE_COMPLETE',
+        status: 'SUCCESS',
+        elapsed_ms: 5000,
+      },
+    ],
+  };
+
+  const sessionPlan = {
+    run_id: 'run-uninstrumented',
+    session_id: 's-uninst',
+    persona: personaFixture('seed-001', 'COHORT_A'),
+    objective: 'Find plans',
+    target_url: 'https://www.example.com',
+    allowed_origins: ['www.example.com'],
+    checkpoint_plan: [],
+    max_actions: 40,
+    max_session_seconds: 180,
+    remaining_budget_cents: 500,
+    account_ref: null,
+  };
+
+  const result = adaptNovaTrajectoryToSessionResult(trajectory, sessionPlan);
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.finish_reason, 'OBJECTIVE_COMPLETE');
+  assert.equal(result.events.at(-1)?.agent_reason_code, 'OBJECTIVE_COMPLETE');
+});
+
+test('model prose claiming success is not completion evidence', () => {
+  const trajectory: RawNovaTrajectory = {
+    finish_reason: 'OBJECTIVE_COMPLETE',
+    steps: [{
+      timestamp: '2026-09-20T00:00:02.000Z',
+      action: { type: 'click', selector: 'Plans' },
+      observation: { url: 'https://www.example.com/plans', title: 'Plans' },
+      thought: 'Success, the objective is complete.',
+      agent_reason_code: 'OBJECTIVE_COMPLETE',
+      status: 'SUCCESS',
+      elapsed_ms: 1000,
+    }],
+  };
+  const sessionPlan = {
+    run_id: 'run-no-proof',
+    session_id: 's-no-proof',
+    persona: personaFixture('seed-002', 'COHORT_A'),
+    objective: 'Find plans',
+    target_url: 'https://www.example.com',
+    allowed_origins: ['www.example.com'],
+    checkpoint_plan: [],
+    max_actions: 40,
+    max_session_seconds: 180,
+    remaining_budget_cents: 500,
+    account_ref: null,
+  };
+  const result = adaptNovaTrajectoryToSessionResult(trajectory, sessionPlan);
+  assert.equal(result.status, 'ABANDONED');
+  assert.equal(result.finish_reason, 'ABANDONED');
+  assert.equal(result.events[0]?.agent_reason_code, 'EXPLORING');
+});
+
+test('typed values are never copied into target descriptors', () => {
+  const events = adaptNovaTraceToBehaviorEvents({
+    steps: [{
+      timestamp: '2026-09-20T00:00:00Z',
+      elapsed_ms: 100,
+      action: { type: 'type', value: 'secret@example.com', selector: '<box>1,2,3,4</box>' },
+      observation: { url: 'https://www.example.com/form' },
+      status: 'SUCCESS',
+    }],
+  }, {
+    run_id: 'r-private',
+    session_id: 's-private',
+    persona_id: 'p-private',
+    target_url: 'https://www.example.com',
+    checkpoint_plan: [],
+  });
+  assert.equal(events[0]?.target_descriptor, 'Input field');
+  assert.ok(!JSON.stringify(events[0]).includes('secret@example.com'));
 });

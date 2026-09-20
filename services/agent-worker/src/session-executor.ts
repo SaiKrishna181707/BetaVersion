@@ -75,8 +75,8 @@ export function reviewSessionPlan(plan: SessionPlan): string[] {
   if (plan.allowed_origins.some(origin => !SAFE_HOST.test(origin))) {
     reasons.push('Authorized origins must be hostname-only ASCII values without schemes, paths, ports, or wildcards.');
   }
-  if (plan.checkpoint_plan.length === 0 || plan.checkpoint_plan.length > MAX_CHECKPOINTS) {
-    reasons.push(`A checkpoint plan must contain 1–${MAX_CHECKPOINTS} ordered milestones.`);
+  if (plan.checkpoint_plan.length > MAX_CHECKPOINTS) {
+    reasons.push(`A checkpoint plan may contain at most ${MAX_CHECKPOINTS} ordered milestones.`);
   } else {
     if (plan.checkpoint_plan.some(checkpoint => !SAFE_CHECKPOINT.test(checkpoint))) {
       reasons.push('Checkpoint names must use 1–64 ASCII letters, numbers, underscores, or hyphens.');

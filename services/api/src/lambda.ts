@@ -12,7 +12,7 @@ import {
   type SyntheticPersona,
 } from '@centopus/contracts';
 import { buildCohort, profileCohort } from '@centopus/population';
-import { assertPublicNetworkTarget, buildProductIntelligence } from './product-intelligence';
+import { assertPublicNetworkTarget, buildProductIntelligence, ProductIntelligenceServiceError } from './product-intelligence';
 import { applyPersonaPatch } from './persona';
 import { getGeminiApiKey } from './secrets';
 import { queryAll, scanAll, type DocumentClient } from './aws-store';
@@ -107,7 +107,15 @@ export function createProductionApi(dependencies: {
 
   try {
     if (method === 'GET' && path === '/health') {
-      return response(200, { status: 'ok', region, execution_available: Boolean(stateTable && artifactBucket && stateMachineArn), mode: 'AWS', live_view_available: false }, allowedOrigin);
+      const releaseSha = env.RELEASE_SHA || env.APP_COMMIT_SHA || env.BUILD_SHA;
+      return response(200, {
+        status: 'ok',
+        region,
+        execution_available: Boolean(stateTable && artifactBucket && stateMachineArn),
+        mode: 'AWS',
+        live_view_available: false,
+        ...(releaseSha ? { release_sha: releaseSha } : {}),
+      }, allowedOrigin);
     }
 
     if (!stateTable || !artifactBucket) return response(503, { error: 'Storage is not configured.' }, allowedOrigin);
@@ -128,7 +136,9 @@ export function createProductionApi(dependencies: {
         return response(200, { intelligence }, allowedOrigin);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Product analysis failed.';
-        const unavailable = message.includes('GEMINI_SECRET_ARN') || message.includes('Gemini secret');
+        const unavailable = cause instanceof ProductIntelligenceServiceError
+          || message.includes('GEMINI_SECRET_ARN')
+          || message.includes('Gemini secret');
         return response(unavailable ? 503 : 400, { error: message }, allowedOrigin);
       }
     }

@@ -151,6 +151,7 @@ export function SessionDetailPage({ runId, sessionId }: { runId: string; session
             <div className="vision-timeline-body">
               <div><strong>{event.action_type.replaceAll('_', ' ')}</strong><Badge tone={event.result === 'SUCCESS' ? 'accent' : 'warning'}>{event.result}</Badge></div>
               <p>{event.target_descriptor || event.page_title || event.route || event.url}</p>
+              {event.thought ? <p style={{ fontSize: '0.82rem', color: 'var(--muted, #8b949e)', fontStyle: 'italic', margin: '4px 0' }}>"{event.thought}"</p> : null}
               <small>{event.agent_reason_code.replaceAll('_', ' ')} · +{event.elapsed_ms}ms</small>
               {event.task_checkpoint ? <span className="vision-checkpoint">Checkpoint · {event.task_checkpoint}</span> : null}
               {event.console_error ? <pre>{event.console_error}</pre> : null}
