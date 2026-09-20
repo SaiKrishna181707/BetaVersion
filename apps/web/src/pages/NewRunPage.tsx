@@ -41,7 +41,7 @@ export function NewRunPage() {
     objective: intelligence?.suggested_objectives?.[0] || '',
     user_count: 10,
     batch_size: Math.min(5, GUARDRAILS.MAX_BATCH_SIZE),
-    authorization_acknowledged: true,
+    authorization_acknowledged: false,
   }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -73,6 +73,7 @@ export function NewRunPage() {
     if (configuration.product_description.trim().length < 10) return 'Describe what the product does.';
     if (configuration.target_audience.trim().length < 10) return 'Describe the target audience.';
     if (configuration.objective.trim().length < 10) return 'Choose or enter one clear objective.';
+    if (!configuration.authorization_acknowledged) return 'Confirm that you own or are authorized to test this target.';
     if (!Number.isInteger(configuration.user_count) || configuration.user_count < 1 || configuration.user_count > 100) {
       return 'Synthetic users must be between 1 and 100.';
     }
@@ -169,6 +170,18 @@ export function NewRunPage() {
             <label><span>Batch size</span><input type="number" min={1} max={GUARDRAILS.MAX_BATCH_SIZE} value={configuration.batch_size} onChange={event => update('batch_size', event.target.valueAsNumber)} /></label>
             <label><span>Session limit</span><select value={configuration.max_session_seconds} onChange={event => update('max_session_seconds', Number(event.target.value))}><option value={60}>60 sec</option><option value={120}>120 sec</option><option value={180}>180 sec</option><option value={240}>240 sec</option><option value={300}>300 sec</option></select></label>
           </div>
+        </section>
+
+        <section className="vision-form-section">
+          <label className="vision-consent">
+            <input
+              type="checkbox"
+              checked={configuration.authorization_acknowledged}
+              onChange={event => update('authorization_acknowledged', event.target.checked)}
+            />
+            <span>I confirm that I own this product or have explicit authorization to test the target website.</span>
+          </label>
+          <p>Centopus only runs browser sessions against targets you are authorized to test.</p>
         </section>
 
         <section className="vision-form-section">
