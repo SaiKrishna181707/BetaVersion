@@ -32,8 +32,6 @@ export function RunReportPage({ runId }: { runId: string }) {
 
   useEffect(() => {
     let active = true;
-    let timer: number | undefined;
-
     const refresh = async () => {
       try {
         const [reportResult, runResult, sessionResult, personaResult] = await Promise.all([
@@ -53,7 +51,7 @@ export function RunReportPage({ runId }: { runId: string }) {
           setReport(reportResult.report);
           setDownloadUrl(reportResult.download_url || '');
           setError('');
-          if (timer !== undefined) window.clearInterval(timer);
+          window.clearInterval(timer);
         } else {
           setError('The report is not ready yet. Recorded sessions are still being finalized.');
         }
@@ -66,10 +64,10 @@ export function RunReportPage({ runId }: { runId: string }) {
     };
 
     void refresh();
-    timer = window.setInterval(() => void refresh(), 2500);
+    const timer = window.setInterval(() => void refresh(), 2500);
     return () => {
       active = false;
-      if (timer !== undefined) window.clearInterval(timer);
+      window.clearInterval(timer);
     };
   }, [runId]);
 
