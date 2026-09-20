@@ -9,6 +9,7 @@ The application and top-level DynamoDB schema are based on main at `ddcaa6a4feb4
 - Production HTTP entry point: `services/api/src/lambda.ts`.
 - Execution: Step Functions -> TypeScript session worker -> cross-account role -> Python Nova Act worker -> AgentCore Browser.
 - Evidence: observed browser actions -> raw trajectory in S3 -> BehaviorEvent[] in DynamoDB -> deterministic analytics and report.
+- Intelligence: first-party public pages -> Bedrock Nova Micro structured extraction; Nova Lite creates editable, distinct persona stories; Nova Micro refines evidence-derived report language.
 - Backend deployment source: `infra/cdk/`. Amplify hosting uses `amplify.yml` and separately configured hosting settings.
 - Live View is **not integrated**. The interface polls status; action evidence appears after each session.
 - Bounds: 100 users per run, five concurrent workers, 40 actions, 300 seconds maximum per browser session. These are configured limits, not live load-test results.

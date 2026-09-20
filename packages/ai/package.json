@@ -1,8 +1,8 @@
 {
-  "name": "@centopus/report",
+  "name": "@centopus/ai",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@centopus/ai": "*", "@centopus/contracts": "*" }
+  "dependencies": { "@aws-sdk/client-bedrock-runtime": "^3.1136.0" }
 }

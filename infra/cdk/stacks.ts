@@ -76,6 +76,8 @@ export function createStacks(app: App, config: DeploymentConfig) {
   bucket.grantPut(worker, 'nova-trajectories/*');
   const finalizer = makeFunction('Finalizer', 'finalizer', 180);
   bucket.grantPut(finalizer, 'reports/*');
+  finalizer.addEnvironment('NOVA_REPORT_MODEL_ID', 'amazon.nova-micro-v1:0');
+  finalizer.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:InvokeModel'], resources: ['arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0'] }));
 
   const sessionTask = new tasks.LambdaInvoke(control, 'ExecuteSession', { lambdaFunction: worker,
     payloadResponseOnly: true, retryOnServiceExceptions: false, taskTimeout: sfn.Timeout.duration(Duration.seconds(450)) });
@@ -112,10 +114,12 @@ export function createStacks(app: App, config: DeploymentConfig) {
   apiFunction.addEnvironment('RUN_STATE_MACHINE_ARN', machine.stateMachineArn);
   apiFunction.addEnvironment('AMPLIFY_ORIGIN', config.webOrigin);
   apiFunction.addEnvironment('REQUIRE_AUTH', 'true');
-  if (config.geminiSecretArn) {
-    apiFunction.addEnvironment('GEMINI_SECRET_ARN', config.geminiSecretArn);
-    apiFunction.addToRolePolicy(new iam.PolicyStatement({ actions: ['secretsmanager:GetSecretValue'], resources: [config.geminiSecretArn] }));
-  }
+  apiFunction.addEnvironment('NOVA_INTELLIGENCE_MODEL_ID', 'amazon.nova-micro-v1:0');
+  apiFunction.addEnvironment('NOVA_PERSONA_MODEL_ID', 'amazon.nova-lite-v1:0');
+  apiFunction.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock:InvokeModel'], resources: [
+    'arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0',
+    'arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0',
+  ] }));
   machine.grantStartExecution(apiFunction); machine.grantExecution(apiFunction, 'states:StopExecution');
   bucket.grantRead(apiFunction, 'reports/*'); bucket.grantRead(apiFunction, 'nova-trajectories/*');
   const operatorPool = new cognito.UserPool(control, 'Operators', {

@@ -2,7 +2,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { computeRunMetrics } from '@centopus/analytics';
-import { buildCentopusReport } from '@centopus/report';
+import { buildCentopusReport, refineReportWithNova } from '@centopus/report';
+import type { JsonModel } from '@centopus/ai';
 import type {
   BehaviorEvent,
   SyntheticPersona,
@@ -22,7 +23,7 @@ interface FinalizerInput {
 }
 
 export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pick<S3Client, 'send'>;
-  sfnClient?: Pick<SFNClient, 'send'>; environment?: NodeJS.ProcessEnv }) {
+  sfnClient?: Pick<SFNClient, 'send'>; environment?: NodeJS.ProcessEnv; model?: JsonModel }) {
   const { docClient, s3Client } = deps;
   const env = deps.environment ?? process.env;
   const stateTable = env.STATE_TABLE || '';
@@ -154,7 +155,7 @@ export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pic
     checkpoint_plan: checkpointPlan,
   });
 
-  const report = await buildCentopusReport({
+  const evidenceReport = await buildCentopusReport({
     configuration,
     metrics,
     sessions,
@@ -163,6 +164,13 @@ export function createFinalizer(deps: { docClient: DocumentClient; s3Client: Pic
     personas,
     actual_cost_cents: null,
   });
+  let report = evidenceReport;
+  try {
+    report = await refineReportWithNova(evidenceReport, personas, deps.model);
+  } catch (cause) {
+    // Refinement is presentation-only. Deterministic evidence remains a complete safe report.
+    console.warn('[Finalizer] Nova report refinement unavailable; preserving evidence-derived report.', cause);
+  }
 
   const ttl = Math.floor(Date.now() / 1000) + 7 * 86400;
 

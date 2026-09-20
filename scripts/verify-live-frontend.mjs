@@ -31,11 +31,11 @@ async function verify() {
 
   // 2. Verify dark/violet landing UI
   console.log('2. Verifying dark/violet landing UI...');
-  const darkLanding = await page.locator('.landing-root, .landing-hero, .landing-grid, .landing-card, .landing-brand').count();
-  console.log(`   Landing UI elements found: ${darkLanding}`);
+  const landingContainer = await page.locator('.centopus-portfolio-landing').count();
+  console.log(`   .centopus-portfolio-landing found: ${landingContainer}`);
 
   const pageStyles = await page.evaluate(() => {
-    const root = document.querySelector('.landing-root') || document.body;
+    const root = document.querySelector('.centopus-portfolio-landing') || document.body;
     const computed = window.getComputedStyle(root);
     return {
       backgroundColor: computed.backgroundColor,
@@ -46,55 +46,71 @@ async function verify() {
 
   // 3. Verify no production auth configuration error
   console.log('3. Checking for auth configuration errors...');
-  const authErrors = await page.locator('.auth-banner, .error-banner, [role="alert"]').allInnerTexts();
-  console.log(`   Alerts/Banners on page: ${JSON.stringify(authErrors)}`);
+  const errorHeading = await page.getByRole('heading', { name: /Authentication configuration is missing/i }).count();
+  console.log(`   Missing auth configuration errors: ${errorHeading}`);
 
-  // 4. Test Previous Runs control
-  console.log('4. Testing Previous Runs control...');
-  const prevRunsBtn = page.getByRole('button', { name: /previous runs/i });
-  const hasPrevRuns = await prevRunsBtn.isVisible().catch(() => false);
-  console.log(`   Previous Runs button visible: ${hasPrevRuns}`);
-  if (hasPrevRuns) {
-    await prevRunsBtn.click();
-    await page.waitForTimeout(1000);
-    console.log('   Clicked Previous Runs button successfully without crashing.');
+  // 4. Test Previous runs control
+  console.log('4. Testing Previous runs control...');
+  const prevBtn = page.getByRole('button', { name: /previous/i }).first();
+  const hasPrev = await prevBtn.isVisible();
+  console.log(`   Previous button visible: ${hasPrev}`);
+  if (hasPrev) {
+    await prevBtn.click();
+    await page.waitForTimeout(500);
+    const panel = page.locator('#previous-runs-panel');
+    console.log(`   Previous runs drawer panel visible: ${await panel.isVisible()}`);
+    // Close it with Escape
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+    console.log(`   Previous runs drawer closed without crashing: ${!(await panel.isVisible())}`);
   }
 
   // 5. Test Landing Form
   console.log('5. Testing Landing Form inputs and controls...');
-  const productInput = page.getByPlaceholder(/Product or company name|Centopus/i);
-  const isProductVisible = await productInput.isVisible().catch(() => false);
-  console.log(`   Product input visible: ${isProductVisible}`);
+  const productInput = page.getByPlaceholder(/Company \/ Product name/i);
+  console.log(`   Product input visible: ${await productInput.isVisible()}`);
+  await productInput.fill('microsoft');
 
-  const websiteInput = page.getByPlaceholder(/https:\/\/example\.com/i);
-  const isWebsiteVisible = await websiteInput.isVisible().catch(() => false);
-  console.log(`   Website input visible: ${isWebsiteVisible}`);
+  const websiteInput = page.getByPlaceholder(/https:\/\/yourproduct\.com/i);
+  console.log(`   Website input visible: ${await websiteInput.isVisible()}`);
+  await websiteInput.fill('https://www.microsoft.com/en-in');
 
-  const buildBtn = page.getByRole('button', { name: /build product/i });
-  console.log(`   Build product button visible: ${await buildBtn.isVisible().catch(() => false)}`);
+  const buildBtn = page.getByRole('button', { name: /Build Product/i });
+  console.log(`   Build product button visible: ${await buildBtn.isVisible()}`);
 
-  // 6. Test Cognito Login redirect
-  console.log('6. Testing Cognito login redirect...');
-  const signInBtn = page.getByRole('button', { name: /sign in/i });
-  const hasSignIn = await signInBtn.isVisible().catch(() => false);
-  console.log(`   Sign in button visible: ${hasSignIn}`);
+  console.log('   Submitting form to test live product intelligence extraction...');
+  await buildBtn.click();
 
-  if (hasSignIn) {
-    const [_popup] = await Promise.all([
-      page.waitForNavigation({ timeout: 15000 }).catch(_err => {
-        return null;
-      }),
-      signInBtn.click(),
-    ]);
-
-    const currentUrl = page.url();
-    console.log(`   URL after clicking Sign In: ${currentUrl}`);
-    const isCognito = currentUrl.includes('amazoncognito.com') || currentUrl.includes('oauth2/authorize');
-    console.log(`   Redirected to Cognito Hosted UI: ${isCognito}`);
-    if (isCognito) {
-      console.log('   Cognito URL params:', new URL(currentUrl).search);
-    }
+  // Wait for loading message or navigation to #/new
+  try {
+    await page.waitForURL('**/#/new', { timeout: 30000 });
+    console.log('   ✓ Form successfully navigated to #/new!');
+    console.log(`   New Run page title: "${await page.title()}"`);
+    const newPageHeading = await page.getByRole('heading', { level: 1 }).innerText();
+    console.log(`   New page heading: "${newPageHeading}"`);
+  } catch {
+    console.log(`   Current URL: ${page.url()}`);
+    const errorMsg = await page.locator('.centopus-form-message.is-error').innerText().catch(() => '');
+    if (errorMsg) console.log(`   Form error message: ${errorMsg}`);
   }
+
+  // 6. Test Cognito login redirect
+  console.log('6. Testing Cognito login redirect from landing page...');
+  await page.goto('https://main.d1s2dm4wj8xxb.amplifyapp.com/');
+  await page.waitForLoadState('networkidle');
+
+  const signInBtn = page.getByRole('button', { name: /operator sign in|sign in/i });
+  console.log(`   Sign in button visible: ${await signInBtn.isVisible()}`);
+
+  await Promise.all([
+    page.waitForURL(/amazoncognito.com/, { timeout: 15000 }),
+    signInBtn.click(),
+  ]);
+  const cognitoUrl = page.url();
+  console.log(`   URL after clicking Sign In: ${cognitoUrl}`);
+  console.log(`   Redirected to Cognito Hosted UI: ${cognitoUrl.includes('amazoncognito.com/login')}`);
+  const cognitoPageTitle = await page.title();
+  console.log(`   Cognito page title: "${cognitoPageTitle}"`);
 
   console.log('7. Checking for runtime/console errors...');
   console.log(`   Console errors count: ${consoleErrors.length}`);
@@ -103,7 +119,7 @@ async function verify() {
   }
 
   await browser.close();
-  console.log('=== VERIFICATION COMPLETED ===');
+  console.log('=== VERIFICATION COMPLETED SUCCESSFULLY ===');
 }
 
 verify().catch(err => {

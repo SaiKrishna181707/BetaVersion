@@ -1,8 +1,8 @@
 const API = 'https://fkvvrndb17.execute-api.us-east-1.amazonaws.com';
 
 async function main() {
-  console.log('=== STEP 1: TEST GEMINI PRODUCT INTELLIGENCE ===');
-  console.log('Scraping and analyzing https://main.d1s2dm4wj8xxb.amplifyapp.com/ with Gemini...');
+  console.log('=== STEP 1: TEST BEDROCK NOVA PRODUCT INTELLIGENCE ===');
+  console.log('Scraping and analyzing https://main.d1s2dm4wj8xxb.amplifyapp.com/ with Nova...');
   const intelRes = await fetch(`${API}/product-intelligence`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -16,14 +16,14 @@ async function main() {
   }
   const intelData = await intelRes.json();
   const intel = intelData.intelligence;
-  console.log('✓ Gemini intelligence generated:');
+  console.log('✓ Nova intelligence generated:');
   console.log('  Company:', intel.company_name);
   console.log('  Product:', intel.product_name);
   console.log('  Category:', intel.category);
   console.log('  Target audience:', intel.target_audience);
   console.log('  Suggested objective:', intel.suggested_objectives?.[0]);
 
-  console.log('\n=== STEP 2: CREATE RUN & GENERATE AGENTS FROM GEMINI INTELLIGENCE ===');
+  console.log('\n=== STEP 2: CREATE RUN & GENERATE AGENTS FROM NOVA INTELLIGENCE ===');
   const agentCount = 2; // Test with 2 agents
   const runPayload = {
     configuration: {

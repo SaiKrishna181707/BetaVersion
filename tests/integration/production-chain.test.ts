@@ -8,9 +8,26 @@ import { createFinalizer } from '../../services/report/src/finalizer';
 import { reserveRunBudget } from '../../services/api/src/budget';
 import { memoryDynamo } from '../fixtures/memory-dynamo';
 import { validConfiguration } from '../fixtures/run-fixtures';
+import type { JsonModelRequest } from '@centopus/ai';
 
 const environment = { STATE_TABLE: 'test-state', ARTIFACT_BUCKET: 'test-artifacts', RUN_STATE_MACHINE_ARN: 'test-machine', AMPLIFY_ORIGIN: 'https://example.com' };
 const event = (method: string, path: string, body?: unknown) => ({ rawPath: path, requestContext: { http: { method, path } }, body: body === undefined ? undefined : JSON.stringify(body) });
+const fixtureModel = async <T>(request: JsonModelRequest): Promise<T> => {
+  if (request.prompt.includes('Skeletons:\n')) {
+    const skeletons = JSON.parse(request.prompt.match(/Skeletons:\n(.+)$/s)?.[1] || '[]') as Array<{ persona_id: string }>;
+    return { personas: skeletons.map((item, index) => ({ persona_id: item.persona_id,
+      display_name: `Test User ${index + 1}`, age: 28 + index, gender: 'Unspecified', location: 'Test City',
+      education: 'College', income_annual: 50000, household_context: 'Shared household', occupation: 'Tester',
+      biography: `Biography ${item.persona_id}`, backstory: `Unique backstory ${item.persona_id}`,
+      primary_motivation: 'Finish the task', motivations: 'Clarity', pain_points: 'Ambiguity', goals: 'Complete goal',
+      buying_behavior: 'Compares choices', decision_style: 'Practical', online_behavior: 'Daily web use',
+      product_expectations: 'Clear next steps', loyalty_likelihood: 'Conditional', abandonment_triggers: 'Repeated errors',
+      frustration_triggers: ['Unclear action'], accessibility_needs: [],
+    })) } as T;
+  }
+  const drafts = JSON.parse(request.prompt.match(/Drafts:\n(.+)$/s)?.[1] || '[]') as Array<{ session_id: string; draft: { direct_feedback?: string } }>;
+  return { feedback: drafts.map(item => ({ session_id: item.session_id, direct_feedback: item.draft.direct_feedback })) } as T;
+};
 
 function fixture() {
   const db = memoryDynamo();
@@ -20,7 +37,7 @@ function fixture() {
     return { executionArn: 'test-execution' };
   } } as unknown as Pick<SFNClient, 'send'>;
   const api = createProductionApi({ docClient: db.client, s3Client: new S3Client({ region: 'us-east-1' }), sfnClient: sfn,
-    environment, assertTarget: async () => undefined });
+    environment, assertTarget: async () => undefined, model: fixtureModel });
   return { db, api, sfn, dispatched: () => dispatched };
 }
 
@@ -55,7 +72,7 @@ test('main API -> reserved run -> worker -> persisted events -> deterministic re
   assert.equal(JSON.parse(detail.body).actual_cost_cents, null);
   const recorded = JSON.parse((await f.api(event('GET', `/sessions/${input.session_id}/events`))).body);
   assert.equal(recorded.events.length, 1);
-  const finalize = createFinalizer({ docClient: f.db.client, s3Client: s3, environment });
+  const finalize = createFinalizer({ docClient: f.db.client, s3Client: s3, environment, model: fixtureModel });
   assert.equal((await finalize({ runId: run_id })).status, 'COMPLETED');
   const report = f.db.get(`RUN#${run_id}`, 'REPORT')!.report as { actual_cost_cents: unknown; metrics: { completion: { percentage: number } } };
   assert.equal(report.actual_cost_cents, null);
@@ -130,7 +147,7 @@ test('the remote Nova boundary rejects legacy evidence and mismatched session id
 test('a fast finalizer cannot turn an accepted start into a failure or be reset to ACTIVE', async () => {
   const db = memoryDynamo();
   const api = createProductionApi({ docClient: db.client, s3Client: new S3Client({}), environment,
-    assertTarget: async () => undefined, sfnClient: { send: async (command: StartExecutionCommand) => {
+    assertTarget: async () => undefined, model: fixtureModel, sfnClient: { send: async (command: StartExecutionCommand) => {
       const { runId } = JSON.parse(command.input.input!);
       db.put({ ...db.get(`RUN#${runId}`, 'META'), status: 'COMPLETED' });
       return { executionArn: 'fast-execution' };
@@ -158,7 +175,7 @@ test('cancellation preserves in-flight observed evidence and closes queued sessi
       action: { type: 'click' }, status: 'SUCCESS', observation: { url: 'https://example.com', checkpoints: ['goal'] } }] };
   } });
   assert.equal((await worker(f.dispatched()!.sessions[0]!)).status, 'COMPLETED');
-  const finalized = await createFinalizer({ docClient: f.db.client, s3Client: s3, environment })({ runId, failed: true });
+  const finalized = await createFinalizer({ docClient: f.db.client, s3Client: s3, environment, model: fixtureModel })({ runId, failed: true });
   assert.equal(finalized.status, 'CANCELLED');
   const queued = f.db.get(`SESSION#${f.dispatched()!.sessions[1]!.session_id}`, 'META')!;
   assert.equal(queued.status, 'CANCELLED');
@@ -178,7 +195,7 @@ test('a cancellation during report persistence is never overwritten by finalizat
   const s3 = { send: async () => ({}) } as unknown as Pick<S3Client, 'send'>;
   await createSessionWorker({ docClient: f.db.client, s3Client: s3, environment,
     invoke: async () => ({ finish_reason: 'ABANDONED', steps: [] }) })(f.dispatched()!.sessions[0]!);
-  const finalize = createFinalizer({ docClient: f.db.client, environment,
+  const finalize = createFinalizer({ docClient: f.db.client, environment, model: fixtureModel,
     s3Client: { send: async () => {
       assert.equal((await f.api(event('POST', `/runs/${runId}/cancel`))).statusCode, 200);
       return {};

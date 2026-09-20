@@ -13,7 +13,7 @@ infra/cdk/stacks.ts defines the backend for main's application/storage contract.
 | Cross-account IAM | Principal ARN + external ID restriction, invoke-only bridge | Verify actual trust and SDK permissions |
 | AgentCore Browser | Code uses managed aws.browser.v1 | No custom browser resource is created; service availability is external |
 | Amplify | amplify.yml builds web workspace | Hosting app, branch connection, domain and environment remain manually configured |
-| Gemini | API uses a supplied Secrets Manager ARN | Secret/model access is external; no secret value is committed |
+| Bedrock Nova | API and finalizer use IAM-scoped InvokeModel grants | No provider API secret is required or committed |
 | Live View | Not implemented | No operational claim |
 
 ## Reproduce locally
@@ -34,7 +34,7 @@ Existing resources are not automatically migrated or adopted. Set STATE_TABLE an
 
 npm run infra:deploy is the explicit deployment command, with CDK approval for permission broadening. It was not run during cleanup. Deploy each stack using credentials authorized for that account. Stable configured role/function names avoid cross-account CloudFormation references.
 
-Configure the existing Amplify branch with VITE_API_BASE_URL from the control-stack output. Its origin must exactly match AMPLIFY_ORIGIN. Supply GEMINI_SECRET_ARN for product intelligence.
+Configure the existing Amplify branch with VITE_API_BASE_URL from the control-stack output. Its origin must exactly match AMPLIFY_ORIGIN. Ensure Amazon Nova Micro and Nova Lite are available in the deployment region.
 
 The admission ledger starts at zero on a new table. Reconcile prior usage and conservatively seed reservations before adopting an existing table; otherwise previous spend is outside the ledger. Failed/cancelled runs do not refund automatically. Budget notifications do not enforce billing limits.
 

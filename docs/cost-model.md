@@ -23,7 +23,7 @@ HANDOFF_COST_MODEL is handoff-2026-09-17-v1, basis HANDOFF_SNAPSHOT.
 | Run allowance | $0.10 |
 | Contingency | 20% |
 
-These are development inputs, not verified current AWS pricing. Maximum-duration arithmetic is conservative only within this model, not a guaranteed upper bound on an AWS bill. Gemini and other account usage are not comprehensively metered.
+These are development inputs, not verified current AWS pricing. Maximum-duration arithmetic is conservative only within this model, not a guaranteed upper bound on an AWS bill. Bedrock text-model and other account usage are not comprehensively metered.
 
 ```text
 browser_minutes = users * maximum_session_seconds / 60

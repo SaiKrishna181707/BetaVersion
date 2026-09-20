@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1136.0",
+    "@centopus/ai": "*",
     "@centopus/contracts": "*",
     "@centopus/population": "*"
   }

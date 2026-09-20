@@ -1,4 +1,5 @@
 import type { ProductIntelligence, ProductIntelligenceRequest } from '@centopus/contracts';
+import { invokeNovaJson, type JsonModel } from '@centopus/ai';
 import { lookup } from 'node:dns/promises';
 import { get } from 'node:https';
 import { isIP } from 'node:net';
@@ -205,7 +206,7 @@ export function discoverFirstPartyUrls(html: string, baseUrl: string, limit = MA
       const normalized = candidate.toString();
       candidates.set(normalized, Math.max(candidates.get(normalized) ?? 0, pagePriority(candidate.pathname)));
     } catch {
-      // Ignore malformed first-party links; they are not sent to Gemini.
+      // Ignore malformed first-party links; they are not sent to Bedrock.
     }
   }
   return [...candidates.entries()]
@@ -304,17 +305,17 @@ export function fallbackProductIntelligence(
 }
 
 function stringArray(value: unknown, field: string, maxItems = 6, allowEmpty = false): string[] {
-  if (!Array.isArray(value)) throw new Error(`Gemini response is missing ${field}.`);
+  if (!Array.isArray(value)) throw new Error(`Nova response is missing ${field}.`);
   const values = value
     .filter((entry): entry is string => typeof entry === 'string')
     .map(entry => entry.trim())
     .filter(Boolean)
     .slice(0, maxItems);
-  if (!allowEmpty && values.length === 0) throw new Error(`Gemini response is missing ${field}.`);
+  if (!allowEmpty && values.length === 0) throw new Error(`Nova response is missing ${field}.`);
   return values;
 }
 
-export function parseGeminiIntelligence(
+export function parseNovaIntelligence(
   request: ProductIntelligenceRequest,
   sourceTitle: string,
   raw: string,
@@ -325,7 +326,7 @@ export function parseGeminiIntelligence(
   const data = JSON.parse(cleaned) as Record<string, unknown>;
   const required = (field: string, max: number) => {
     const value = typeof data[field] === 'string' ? data[field].trim() : '';
-    if (!value || value.length > max) throw new Error(`Gemini response is missing ${field}.`);
+    if (!value || value.length > max) throw new Error(`Nova response is missing ${field}.`);
     return value;
   };
   return {
@@ -359,64 +360,12 @@ function promptCorpus(pages: PublicPage[]): string {
   return chunks.join('\n\n');
 }
 
-async function requestGemini(
-  apiKey: string,
-  model: string,
-  prompt: string,
-): Promise<string> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          maxOutputTokens: 2400,
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              product_name: { type: 'STRING' },
-              category: { type: 'STRING' },
-              summary: { type: 'STRING' },
-              what_product_does: { type: 'STRING' },
-              target_audience: { type: 'STRING' },
-              key_features: { type: 'ARRAY', items: { type: 'STRING' } },
-              value_propositions: { type: 'ARRAY', items: { type: 'STRING' } },
-              suggested_objectives: { type: 'ARRAY', items: { type: 'STRING' } },
-            },
-            required: [
-              'product_name',
-              'category',
-              'summary',
-              'what_product_does',
-              'target_audience',
-              'key_features',
-              'value_propositions',
-              'suggested_objectives',
-            ],
-          },
-        },
-      }),
-      signal: AbortSignal.timeout(25_000),
-    },
-  );
-  if (!response.ok) throw new Error(`Gemini analysis failed with HTTP ${response.status}.`);
-  const payload = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-  const raw = payload.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
-  if (!raw) throw new Error('Gemini returned no product intelligence.');
-  return raw;
-}
-
 export async function buildProductIntelligence(
   input: unknown,
-  apiKey: string | undefined,
-  model = 'gemini-2.5-flash-lite',
+  model: JsonModel = invokeNovaJson,
+  modelId = process.env.NOVA_INTELLIGENCE_MODEL_ID || 'amazon.nova-micro-v1:0',
 ): Promise<ProductIntelligence> {
   const request = validateProductIntelligenceRequest(input);
-  if (!apiKey) throw new ProductIntelligenceServiceError('GEMINI_API_KEY is not configured on the API Lambda.');
 
   await assertPublicNetworkTarget(request.website_url);
 
@@ -440,39 +389,28 @@ Canonical public URL: ${crawl.canonicalUrl}
 
 ${corpus}`;
 
-  const candidateModels = [
-    model,
-    'gemini-2.5-flash-lite',
-    'gemini-flash-latest',
-    'gemini-3.5-flash',
-  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
-
   let lastError: unknown;
-  for (const candidateModel of candidateModels) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const raw = await requestGemini(
-          apiKey,
-          candidateModel,
-          attempt === 0 ? prompt : `${prompt}\n\nVALIDATION RETRY: ensure every required JSON key is present and values are supported by the source text.`,
-        );
-        return parseGeminiIntelligence(
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await model<Record<string, unknown>>({
+        modelId,
+        system: 'You extract only source-supported public product facts. Return one valid JSON object and no markdown.',
+        prompt: `${attempt === 0 ? prompt : `${prompt}\n\nVALIDATION RETRY: include every required key.`}\n\nRequired JSON keys: product_name, category, summary, what_product_does, target_audience, key_features, value_propositions, suggested_objectives.`,
+        maxTokens: 2400,
+        temperature: 0.1,
+      });
+      return parseNovaIntelligence(
           canonicalRequest,
           crawl.pages[0]?.title || new URL(crawl.canonicalUrl).hostname,
-          raw,
+          JSON.stringify(result),
           new Date().toISOString(),
           pagesCrawled,
-        );
-      } catch (cause) {
-        lastError = cause;
-        const msg = cause instanceof Error ? cause.message : String(cause);
-        if (msg.includes('HTTP 429') || msg.includes('HTTP 503')) {
-          break;
-        }
-      }
+      );
+    } catch (cause) {
+      lastError = cause;
     }
   }
 
-  const detail = lastError instanceof Error ? lastError.message : 'Gemini analysis failed.';
+  const detail = lastError instanceof Error ? lastError.message : 'Nova analysis failed.';
   throw new ProductIntelligenceServiceError(`Product analysis service failed: ${detail}`);
 }
