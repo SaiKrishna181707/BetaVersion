@@ -157,9 +157,8 @@ export function createProductionApi(dependencies: {
     if (method === 'GET' && path === '/runs') {
       const items = await scanAll(docClient, {
         TableName: stateTable,
-        FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix)',
-        ExpressionAttributeValues: { ':meta': 'META', ':runPrefix': 'RUN#', ':owner': operatorSub },
         FilterExpression: 'sk = :meta AND begins_with(pk, :runPrefix) AND owner_sub = :owner',
+        ExpressionAttributeValues: { ':meta': 'META', ':runPrefix': 'RUN#', ':owner': operatorSub },
         ProjectionExpression: 'run_id, #st, configuration, persona_count, created_at, updated_at, started_at, finished_at, owner_sub',
         ExpressionAttributeNames: { '#st': 'status' },
       });
