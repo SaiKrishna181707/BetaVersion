@@ -425,58 +425,28 @@
 
 @media (max-width: 720px) {
   .centopus-landing-header {
-    height: 118px;
+    height: 130px;
   }
 
   .centopus-previous-button,
   .centopus-auth-button {
-    top: 18px;
-  }
-
-  .centopus-previous-button {
-    right: 16px;
-  }
-
-  .centopus-auth-button {
-    left: 16px;
-    padding-inline: 12px;
-  }
-
-  .centopus-centered-brand {
-    top: 18px;
-  }
-
-  .centopus-centered-brand img {
-    width: 58px;
-    height: 58px;
-  }
-
-  .centopus-centered-brand span {
-    font-size: 18px;
-  }
-
-
-  .centopus-landing-header {
-    height: 130px;
-  }
-
-  .centopus-previous-button {
     top: 20px;
-    right: 18px;
     min-height: 36px;
     padding: 7px 10px;
   }
 
-  .centopus-centered-brand {
-    top: 18px;
+  .centopus-previous-button {
+    right: 18px;
   }
 
   .centopus-auth-button {
-    top: 20px;
-    right: 18px;
-    min-height: 36px;
-    padding: 7px 10px;
+    left: 18px;
+    right: auto;
     font-size: 11px;
+  }
+
+  .centopus-centered-brand {
+    top: 18px;
   }
 
   .centopus-centered-brand img {
